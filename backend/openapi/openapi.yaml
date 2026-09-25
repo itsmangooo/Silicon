@@ -1,0 +1,525 @@
+openapi: 3.1.0
+info:
+  title: Silicon Control Plane API
+  version: 0.1.0
+  description: >-
+    Milestone 1 API for local authentication and organization-scoped platform
+    records. Deployment endpoints create history but do not execute workloads.
+servers:
+  - url: http://localhost:8080/api/v1
+tags:
+  - name: Authentication
+  - name: Organizations
+  - name: Projects
+  - name: Applications
+  - name: Deployments
+  - name: Servers
+  - name: Identity
+  - name: Audit
+paths:
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a local user and create a session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegisterInput'}
+      responses:
+        '201':
+          description: Registered
+          headers:
+            Set-Cookie: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthResult'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '409': {$ref: '#/components/responses/ConflictError'}
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Create a local session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginInput'}
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthResult'}
+        '401': {$ref: '#/components/responses/AuthenticationError'}
+  /auth/session:
+    get:
+      tags: [Authentication]
+      summary: Inspect the active session
+      responses:
+        '200':
+          description: Active session
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties: {user: {$ref: '#/components/schemas/User'}}
+        '401': {$ref: '#/components/responses/AuthenticationError'}
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke the active session
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses:
+        '204': {description: Logged out}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+  /organizations:
+    get:
+      tags: [Organizations]
+      summary: List organizations for the current user
+      responses:
+        '200':
+          description: Organization memberships
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [organizations]
+                properties:
+                  organizations: {type: array, items: {$ref: '#/components/schemas/Organization'}}
+    post:
+      tags: [Organizations]
+      summary: Create an organization and owner membership
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NamedSlugInput'}
+      responses:
+        '201':
+          description: Created
+          content: {application/json: {schema: {$ref: '#/components/schemas/Organization'}}}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /organizations/{organizationID}/access:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Organizations]
+      summary: Return current role and permissions
+      responses:
+        '200':
+          description: Access policy result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [role, permissions]
+                properties:
+                  role: {$ref: '#/components/schemas/Role'}
+                  permissions: {type: array, items: {type: string}}
+        '404': {$ref: '#/components/responses/NotFoundError'}
+  /organizations/{organizationID}/members:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Organizations]
+      summary: List organization members
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {members: {type: array, items: {$ref: '#/components/schemas/Member'}}}
+    post:
+      tags: [Organizations]
+      summary: Add an existing local user as a member
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, role]
+              properties:
+                email: {type: string, format: email}
+                role: {$ref: '#/components/schemas/Role'}
+      responses:
+        '201': {description: Added, content: {application/json: {schema: {$ref: '#/components/schemas/Member'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+  /organizations/{organizationID}/projects:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Projects]
+      summary: List projects
+      responses:
+        '200':
+          description: Projects
+          content:
+            application/json:
+              schema: {type: object, properties: {projects: {type: array, items: {$ref: '#/components/schemas/Project'}}}}
+    post:
+      tags: [Projects]
+      summary: Create a project
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ProjectInput'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Project'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+  /organizations/{organizationID}/projects/{projectID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/ProjectID'}
+    get:
+      tags: [Projects]
+      summary: Get a project
+      responses:
+        '200': {description: Project, content: {application/json: {schema: {$ref: '#/components/schemas/Project'}}}}
+        '404': {$ref: '#/components/responses/NotFoundError'}
+    put:
+      tags: [Projects]
+      summary: Update a project
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectInput'}}}}
+      responses:
+        '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/Project'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+    delete:
+      tags: [Projects]
+      summary: Delete a project and contained records
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses:
+        '204': {description: Deleted}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+  /organizations/{organizationID}/projects/{projectID}/environments:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/ProjectID'}
+    get:
+      tags: [Projects]
+      summary: List project environments
+      responses:
+        '200':
+          description: Environments
+          content:
+            application/json:
+              schema: {type: object, properties: {environments: {type: array, items: {$ref: '#/components/schemas/Environment'}}}}
+    post:
+      tags: [Projects]
+      summary: Create an environment
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/NamedSlugInput'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Environment'}}}}
+  /organizations/{organizationID}/applications:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Applications]
+      summary: List all organization applications
+      responses:
+        '200': {description: Applications, content: {application/json: {schema: {type: object, properties: {applications: {type: array, items: {$ref: '#/components/schemas/Application'}}}}}}}
+  /organizations/{organizationID}/environments/{environmentID}/applications:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/EnvironmentID'}
+    get:
+      tags: [Applications]
+      summary: List environment applications
+      responses:
+        '200': {description: Applications, content: {application/json: {schema: {type: object, properties: {applications: {type: array, items: {$ref: '#/components/schemas/Application'}}}}}}}
+    post:
+      tags: [Applications]
+      summary: Create an application record
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationInput'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}
+  /organizations/{organizationID}/deployments:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Deployments]
+      summary: List recent organization deployments
+      responses:
+        '200': {description: Deployments, content: {application/json: {schema: {type: object, properties: {deployments: {type: array, items: {$ref: '#/components/schemas/Deployment'}}}}}}}
+  /organizations/{organizationID}/applications/{applicationID}/deployments:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/ApplicationID'}
+    get:
+      tags: [Deployments]
+      summary: List application deployments
+      responses:
+        '200': {description: Deployments, content: {application/json: {schema: {type: object, properties: {deployments: {type: array, items: {$ref: '#/components/schemas/Deployment'}}}}}}}
+    post:
+      tags: [Deployments]
+      summary: Create a queued deployment record without execution
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DeploymentInput'}}}}
+      responses:
+        '201': {description: Queued record, content: {application/json: {schema: {$ref: '#/components/schemas/Deployment'}}}}
+  /organizations/{organizationID}/deployments/{deploymentID}/transitions:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/DeploymentID'}
+    post:
+      tags: [Deployments]
+      summary: Apply an allowed deployment state transition
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status: {$ref: '#/components/schemas/DeploymentStatus'}
+                message: {type: string, maxLength: 2000}
+      responses:
+        '200': {description: Transitioned, content: {application/json: {schema: {$ref: '#/components/schemas/Deployment'}}}}
+        '409': {$ref: '#/components/responses/ConflictError'}
+  /organizations/{organizationID}/servers:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Servers]
+      summary: List server inventory records
+      responses:
+        '200': {description: Servers, content: {application/json: {schema: {type: object, properties: {servers: {type: array, items: {$ref: '#/components/schemas/Server'}}}}}}}
+    post:
+      tags: [Servers]
+      summary: Register a server inventory record
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ServerInput'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Server'}}}}
+  /organizations/{organizationID}/identity-providers:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Identity]
+      summary: List disabled/active identity-provider records
+      responses:
+        '200': {description: Providers, content: {application/json: {schema: {type: object, properties: {identityProviders: {type: array, items: {$ref: '#/components/schemas/IdentityProvider'}}}}}}}
+    post:
+      tags: [Identity]
+      summary: Add disabled OIDC configuration metadata
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/IdentityProviderInput'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/IdentityProvider'}}}}
+  /organizations/{organizationID}/audit-events:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Audit]
+      summary: List recent organization audit events
+      responses:
+        '200': {description: Events, content: {application/json: {schema: {type: object, properties: {auditEvents: {type: array, items: {$ref: '#/components/schemas/AuditEvent'}}}}}}}
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: silicon_session
+  parameters:
+    CSRFToken: {name: X-CSRF-Token, in: header, required: true, schema: {type: string}, description: Value of the same-site silicon_csrf cookie}
+    OrganizationID: {name: organizationID, in: path, required: true, schema: {type: string, format: uuid}}
+    ProjectID: {name: projectID, in: path, required: true, schema: {type: string, format: uuid}}
+    EnvironmentID: {name: environmentID, in: path, required: true, schema: {type: string, format: uuid}}
+    ApplicationID: {name: applicationID, in: path, required: true, schema: {type: string, format: uuid}}
+    DeploymentID: {name: deploymentID, in: path, required: true, schema: {type: string, format: uuid}}
+  responses:
+    AuthenticationError: {description: Authentication required, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    ForbiddenError: {description: Permission or CSRF check failed, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    NotFoundError: {description: Resource or membership not found, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    ValidationError: {description: Input validation failed, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    ConflictError: {description: Uniqueness or state conflict, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  schemas:
+    UUID: {type: string, format: uuid}
+    Timestamp: {type: string, format: date-time}
+    Role: {type: string, enum: [owner, admin, developer, viewer]}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties: {code: {type: string}, message: {type: string}}
+    RegisterInput:
+      type: object
+      additionalProperties: false
+      required: [email, displayName, password]
+      properties:
+        email: {type: string, format: email, maxLength: 320}
+        displayName: {type: string, minLength: 1, maxLength: 120}
+        password: {type: string, format: password, minLength: 12, maxLength: 1024}
+    LoginInput:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties: {email: {type: string, format: email}, password: {type: string, format: password}}
+    AuthResult:
+      type: object
+      required: [user, csrfToken]
+      properties: {user: {$ref: '#/components/schemas/User'}, csrfToken: {type: string}}
+    User:
+      type: object
+      required: [id, email, displayName, status, createdAt]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        email: {type: string, format: email}
+        displayName: {type: string}
+        status: {type: string, enum: [active, disabled]}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+    NamedSlugInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        slug: {type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'}
+    Organization:
+      type: object
+      required: [id, name, slug, createdAt]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        name: {type: string}
+        slug: {type: string}
+        role: {$ref: '#/components/schemas/Role'}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+    Member:
+      type: object
+      properties:
+        userId: {$ref: '#/components/schemas/UUID'}
+        email: {type: string, format: email}
+        displayName: {type: string}
+        role: {$ref: '#/components/schemas/Role'}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+    ProjectInput:
+      allOf:
+        - {$ref: '#/components/schemas/NamedSlugInput'}
+        - {type: object, properties: {description: {type: string, maxLength: 2000}}}
+    Project:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        organizationId: {$ref: '#/components/schemas/UUID'}
+        name: {type: string}
+        slug: {type: string}
+        description: {type: string}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+        updatedAt: {$ref: '#/components/schemas/Timestamp'}
+    Environment:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        organizationId: {$ref: '#/components/schemas/UUID'}
+        projectId: {$ref: '#/components/schemas/UUID'}
+        name: {type: string}
+        slug: {type: string}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+    ApplicationInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        sourceType: {type: string, enum: [docker_image, git_dockerfile, compose], default: docker_image}
+        image: {type: string, maxLength: 500}
+        internalPort: {type: integer, minimum: 1, maximum: 65535}
+    Application:
+      allOf:
+        - {$ref: '#/components/schemas/ApplicationInput'}
+        - type: object
+          properties:
+            id: {$ref: '#/components/schemas/UUID'}
+            organizationId: {$ref: '#/components/schemas/UUID'}
+            projectId: {$ref: '#/components/schemas/UUID'}
+            environmentId: {$ref: '#/components/schemas/UUID'}
+            createdAt: {$ref: '#/components/schemas/Timestamp'}
+    DeploymentStatus: {type: string, enum: [queued, preparing, building, deploying, starting, healthy, failed, cancelled, superseded, rolled_back]}
+    DeploymentInput:
+      type: object
+      additionalProperties: false
+      properties:
+        source: {type: string, maxLength: 500}
+        sourceRevision: {type: string, maxLength: 200}
+        image: {type: string, maxLength: 500}
+    Deployment:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        organizationId: {$ref: '#/components/schemas/UUID'}
+        applicationId: {$ref: '#/components/schemas/UUID'}
+        number: {type: integer, minimum: 1}
+        source: {type: string}
+        sourceRevision: {type: string}
+        image: {type: string}
+        status: {$ref: '#/components/schemas/DeploymentStatus'}
+        triggeredBy: {$ref: '#/components/schemas/UUID'}
+        previousDeploymentId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+        updatedAt: {$ref: '#/components/schemas/Timestamp'}
+    ServerInput:
+      type: object
+      additionalProperties: false
+      required: [name, hostname]
+      properties:
+        name: {type: string}
+        hostname: {type: string}
+        operatingSystem: {type: string}
+        architecture: {type: string}
+    Server:
+      allOf:
+        - {$ref: '#/components/schemas/ServerInput'}
+        - type: object
+          properties:
+            id: {$ref: '#/components/schemas/UUID'}
+            organizationId: {$ref: '#/components/schemas/UUID'}
+            runtime: {type: string}
+            connectionStatus: {type: string, enum: [unknown, connected, disconnected]}
+            health: {type: string, enum: [unknown, healthy, degraded, unhealthy]}
+            createdAt: {$ref: '#/components/schemas/Timestamp'}
+    IdentityProviderInput:
+      type: object
+      additionalProperties: false
+      required: [name, issuerUrl, clientId, callbackUrl]
+      properties:
+        name: {type: string}
+        providerType: {type: string, enum: [oidc, authentik], default: oidc}
+        issuerUrl: {type: string, format: uri, pattern: '^https://'}
+        clientId: {type: string}
+        callbackUrl: {type: string, format: uri}
+        scopes: {type: array, items: {type: string}}
+    IdentityProvider:
+      allOf:
+        - {$ref: '#/components/schemas/IdentityProviderInput'}
+        - type: object
+          properties:
+            id: {$ref: '#/components/schemas/UUID'}
+            organizationId: {$ref: '#/components/schemas/UUID'}
+            enabled: {type: boolean}
+            claimMapping: {type: object}
+            createdAt: {$ref: '#/components/schemas/Timestamp'}
+    AuditEvent:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        organizationId: {$ref: '#/components/schemas/UUID'}
+        actorUserId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+        actorName: {type: [string, 'null']}
+        action: {type: string}
+        resourceType: {type: string}
+        resourceId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+        requestId: {$ref: '#/components/schemas/UUID'}
+        metadata: {type: object}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+security:
+  - sessionCookie: []

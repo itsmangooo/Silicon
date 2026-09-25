@@ -1,0 +1,47 @@
+name: silicon
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-silicon}
+      POSTGRES_USER: ${POSTGRES_USER:-silicon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-silicon-development-only}
+    ports:
+      - "5432:5432"
+    volumes:
+      - silicon-postgres:/var/lib/postgresql/data
+      - ./deploy/postgres/init-test-database.sql:/docker-entrypoint-initdb.d/10-test-database.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-silicon} -d ${POSTGRES_DB:-silicon}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    profiles: ["platform"]
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-silicon}:${POSTGRES_PASSWORD:-silicon-development-only}@postgres:5432/${POSTGRES_DB:-silicon}?sslmode=disable
+      SILICON_ADDRESS: :8080
+      SILICON_FRONTEND_ORIGIN: http://localhost:5173
+      SILICON_COOKIE_SECURE: "false"
+      SILICON_AUTO_MIGRATE: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    profiles: ["platform"]
+    build:
+      context: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  silicon-postgres:

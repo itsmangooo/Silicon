@@ -1,0 +1,17 @@
+DROP TABLE IF EXISTS jobs;
+DROP TABLE IF EXISTS audit_events;
+DROP TABLE IF EXISTS secrets;
+DROP TABLE IF EXISTS external_identities;
+DROP TABLE IF EXISTS identity_providers;
+DROP TABLE IF EXISTS domains;
+DROP TABLE IF EXISTS servers;
+DROP TABLE IF EXISTS deployment_events;
+DROP TABLE IF EXISTS deployments;
+DROP TABLE IF EXISTS applications;
+DROP TABLE IF EXISTS environments;
+DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS password_reset_tokens;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS memberships;
+DROP TABLE IF EXISTS organizations;
+DROP TABLE IF EXISTS users;
