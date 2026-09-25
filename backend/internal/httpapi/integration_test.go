@@ -350,9 +350,10 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 		t.Fatalf("current runtime=%v", currentRuntime)
 	}
 	logView := owner.get("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/runtime/logs?tail=20", http.StatusOK)
-	logJSON, _ := json.Marshal(logView)
-	if !bytes.Contains(logJSON, []byte("<script>is text</script>")) || len(arrayField(t, logView, "logs")) != 2 {
-		t.Fatalf("runtime logs missing untrusted text: %s", logJSON)
+	runtimeLogs := arrayField(t, logView, "logs")
+	firstLog, ok := runtimeLogs[0].(map[string]any)
+	if !ok || firstLog["message"] != "runtime output <script>is text</script>" || len(runtimeLogs) != 2 {
+		t.Fatalf("runtime logs missing decoded untrusted text: %#v", logView)
 	}
 	owner.post("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/runtime/stop", map[string]any{}, http.StatusOK)
 	owner.post("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/runtime/start", map[string]any{}, http.StatusOK)
