@@ -65,3 +65,17 @@ jobs:
           npm run lint
           npm test
           npm run build
+
+  docker-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Verify real Docker runtime lifecycle
+        working-directory: backend
+        env:
+          SILICON_DOCKER_INTEGRATION: "1"
+        run: go test -count=1 -timeout=6m -run '^TestDockerRuntimeProviderIntegration$' ./internal/providers/runtime/docker
