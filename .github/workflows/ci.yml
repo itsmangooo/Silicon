@@ -38,10 +38,24 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Verify backend
+      - name: Verify backend tests
         working-directory: backend
         run: |
-          go test -count=1 ./...
+          set +e
+          output=$(go test -count=1 ./... 2>&1)
+          status=$?
+          printf '%s\n' "$output"
+          if [ "$status" -ne 0 ]; then
+            summary=$(printf '%s' "$output" | tail -c 3000)
+            summary="${summary//'%'/'%25'}"
+            summary="${summary//$'\r'/'%0D'}"
+            summary="${summary//$'\n'/'%0A'}"
+            echo "::error title=Backend tests failed::$summary"
+            exit "$status"
+          fi
+      - name: Verify backend static checks
+        working-directory: backend
+        run: |
           go vet ./...
           test -z "$(gofmt -l .)"
       - name: Verify frontend
