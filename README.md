@@ -4,6 +4,38 @@ Silicon is a self-hosted infrastructure and application control plane. Milestone
 
 Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It starts as a modular monolith. It does **not** execute deployments, manage a reverse proxy, issue TLS certificates, or connect to cloud/Kubernetes providers yet.
 
+## Interface previews
+
+These previews were captured from the running Milestone 1 application at a consistent desktop viewport. Authenticated views use temporary, isolated preview fixtures so the implemented data-backed states are visible; Silicon does not ship with seeded users, organizations, or workload records.
+
+| Login | Register |
+| --- | --- |
+| [![Silicon login page](docs/previews/login.png)](docs/previews/login.png) | [![Silicon registration page](docs/previews/register.png)](docs/previews/register.png) |
+
+| Dashboard | Projects |
+| --- | --- |
+| [![Silicon dashboard](docs/previews/dashboard.png)](docs/previews/dashboard.png) | [![Silicon projects page](docs/previews/projects.png)](docs/previews/projects.png) |
+
+| Project detail | Environments |
+| --- | --- |
+| [![Silicon project detail page](docs/previews/project-detail.png)](docs/previews/project-detail.png) | [![Silicon environments page](docs/previews/environments.png)](docs/previews/environments.png) |
+
+| Applications | Deployments |
+| --- | --- |
+| [![Silicon applications page](docs/previews/applications.png)](docs/previews/applications.png) | [![Silicon deployments page](docs/previews/deployments.png)](docs/previews/deployments.png) |
+
+| Servers | Members |
+| --- | --- |
+| [![Silicon servers page](docs/previews/servers.png)](docs/previews/servers.png) | [![Silicon members page](docs/previews/members.png)](docs/previews/members.png) |
+
+| Access | Identity providers |
+| --- | --- |
+| [![Silicon access page](docs/previews/access.png)](docs/previews/access.png) | [![Silicon identity providers page](docs/previews/identity-providers.png)](docs/previews/identity-providers.png) |
+
+| Audit | Settings |
+| --- | --- |
+| [![Silicon audit page](docs/previews/audit.png)](docs/previews/audit.png) | [![Silicon settings page](docs/previews/settings.png)](docs/previews/settings.png) |
+
 ## Repository layout
 
 ```text
