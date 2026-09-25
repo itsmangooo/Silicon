@@ -14,6 +14,14 @@
 
 Milestone 1 expressly stops before workload execution.
 
+## GitHub and Cloudflare integration increment
+
+- GitHub App installation/repository binding and verified push webhooks
+- Exact-commit, deduplicated, ordered deployment jobs
+- Opt-in local Git+Dockerfile executor; no implicit port publication
+- Cloudflare scoped-token connection, zone selection, and owned DNS reconciliation
+- Optional remotely managed Cloudflare Tunnel with shared-route preservation
+
 ## Candidate Milestone 2 — local runtime execution
 
 After a separate design/security review: PostgreSQL-backed jobs, a narrowly scoped Docker runtime adapter, typed deployment operations, environment configuration, encrypted local secrets with key rotation, runtime status, deployment events, and real logs. No general remote shell.
@@ -26,7 +34,7 @@ Mutually authenticated agent enrollment, typed capabilities, replay protection, 
 
 - Generic OIDC login and secure explicit account linking; Authentik preset
 - Additional routing adapters, including a separately built X3 Gateway
-- Git/Dockerfile and Compose deployment sources
+- Docker Compose deployment sources
 - Cloud and Kubernetes providers only after core boundaries prove stable
 - External secrets and logging providers
 

@@ -28,6 +28,8 @@ const (
 	AuditRead              Permission = "audit.read"
 	OrganizationRead       Permission = "organization.read"
 	OrganizationManage     Permission = "organization.manage"
+	IntegrationRead        Permission = "integration.read"
+	IntegrationManage      Permission = "integration.manage"
 )
 
 var rolePermissions = map[string]map[Permission]struct{}{
@@ -40,6 +42,7 @@ var rolePermissions = map[string]map[Permission]struct{}{
 		ServerRead, ServerManage, LogsRead, DomainManage, SecretWrite,
 		MemberRead, MemberManage, IdentityProviderRead, IdentityProviderManage,
 		AuditRead, OrganizationRead, OrganizationManage,
+		IntegrationRead, IntegrationManage,
 	),
 	"developer": set(
 		ProjectRead, ProjectCreate, ProjectUpdate,
@@ -48,11 +51,13 @@ var rolePermissions = map[string]map[Permission]struct{}{
 		DeploymentRead, DeploymentCreate, DeploymentRollback,
 		ServerRead, LogsRead, DomainManage, SecretWrite,
 		MemberRead, IdentityProviderRead, OrganizationRead,
+		IntegrationRead,
 	),
 	"viewer": set(
 		ProjectRead, EnvironmentRead, ApplicationRead, DeploymentRead,
 		ServerRead, LogsRead, MemberRead, IdentityProviderRead,
 		AuditRead, OrganizationRead,
+		IntegrationRead,
 	),
 }
 
@@ -87,5 +92,6 @@ func allPermissions() map[Permission]struct{} {
 		ServerRead, ServerManage, LogsRead, DomainManage, SecretWrite,
 		MemberRead, MemberManage, IdentityProviderRead, IdentityProviderManage,
 		AuditRead, OrganizationRead, OrganizationManage,
+		IntegrationRead, IntegrationManage,
 	)
 }

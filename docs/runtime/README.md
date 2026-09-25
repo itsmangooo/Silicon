@@ -2,6 +2,6 @@
 
 Core Silicon depends on `runtime.Provider`, not Docker. The contract defines typed deploy, lifecycle, inspection, status, and log operations. The deployment specification carries only the fields a provider should need and refers to secret names rather than exposing secret values broadly.
 
-There is no Docker runtime implementation in Milestone 1. Server rows are inventory records with intentionally unknown connection/health status. A future adapter must be added at the composition boundary, enforce organization/application ownership before invocation, redact arguments and output, and translate provider errors into domain-safe failures.
+The GitHub integration adds a narrowly scoped, opt-in local Git+Dockerfile executor. It builds an exact commit through the Docker CLI, starts a managed container without publishing a host port, verifies its running/health-check state, and replaces the prior Silicon-managed container. It is not a complete implementation of the broader `runtime.Provider`: remote server lifecycle, environment/secrets injection, logs, and an agent remain unimplemented. Server rows remain inventory records with intentionally unknown connection/health status.
 
 Kubernetes is explicitly out of scope.

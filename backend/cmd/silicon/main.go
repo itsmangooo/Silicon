@@ -11,7 +11,10 @@ import (
 
 	"github.com/itsmangooo/Silicon/backend/db"
 	"github.com/itsmangooo/Silicon/backend/internal/config"
+	"github.com/itsmangooo/Silicon/backend/internal/execution"
 	"github.com/itsmangooo/Silicon/backend/internal/httpapi"
+	"github.com/itsmangooo/Silicon/backend/internal/jobs"
+	githubprovider "github.com/itsmangooo/Silicon/backend/internal/providers/git/github"
 	"github.com/itsmangooo/Silicon/backend/internal/store"
 )
 
@@ -42,6 +45,13 @@ func main() {
 	}
 
 	api := httpapi.New(cfg, pool, logger)
+	var executor jobs.DeploymentExecutor = jobs.UnavailableExecutor{}
+	if cfg.LocalDockerEnabled {
+		executor = execution.LocalDockerExecutor{Pool: pool, Git: githubprovider.Client{AppID: cfg.GitHubAppID, PrivateKey: cfg.GitHubPrivateKey, BaseURL: cfg.GitHubAPIURL}, DockerBinary: cfg.DockerBinary}
+		logger.Info("local Docker deployment executor enabled")
+	}
+	runner := jobs.Runner{Pool: pool, Executor: executor, Logger: logger, WorkerID: "silicon-control-plane"}
+	go runner.Run(ctx)
 	server := &http.Server{
 		Addr:              cfg.Address,
 		Handler:           api.Handler(),

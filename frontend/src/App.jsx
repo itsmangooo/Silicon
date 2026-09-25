@@ -14,6 +14,8 @@ import { AccessPage } from './pages/AccessPage.jsx'
 import { IdentityProvidersPage } from './pages/IdentityProvidersPage.jsx'
 import { AuditPage } from './pages/AuditPage.jsx'
 import { SettingsPage } from './pages/SettingsPage.jsx'
+import { IntegrationsPage } from './pages/IntegrationsPage.jsx'
+import { DomainsPage } from './pages/DomainsPage.jsx'
 
 function ProtectedApp() {
   return (
@@ -43,6 +45,8 @@ export function App() {
         <Route path="access" element={<AccessPage />} />
         <Route path="identity" element={<IdentityProvidersPage />} />
         <Route path="audit" element={<AuditPage />} />
+		<Route path="domains" element={<DomainsPage />} />
+		<Route path="integrations" element={<IntegrationsPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

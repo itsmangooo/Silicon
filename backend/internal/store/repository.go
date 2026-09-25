@@ -84,8 +84,13 @@ type Deployment struct {
 	SourceRevision       string     `json:"sourceRevision"`
 	Image                string     `json:"image"`
 	Status               string     `json:"status"`
-	TriggeredBy          uuid.UUID  `json:"triggeredBy"`
+	TriggeredBy          *uuid.UUID `json:"triggeredBy"`
 	PreviousDeploymentID *uuid.UUID `json:"previousDeploymentId"`
+	Repository           string     `json:"repository"`
+	Branch               string     `json:"branch"`
+	CommitSHA            string     `json:"commitSha"`
+	TriggerType          string     `json:"triggerType"`
+	ExternalDeliveryID   *string    `json:"githubDeliveryId,omitempty"`
 	CreatedAt            time.Time  `json:"createdAt"`
 	UpdatedAt            time.Time  `json:"updatedAt"`
 }
@@ -100,6 +105,7 @@ type Server struct {
 	Runtime          string     `json:"runtime"`
 	ConnectionStatus string     `json:"connectionStatus"`
 	Health           string     `json:"health"`
+	ConnectivityType string     `json:"connectivityType"`
 	CPUCapacity      *int       `json:"cpuCapacity"`
 	MemoryBytes      *int64     `json:"memoryBytes"`
 	LastSeenAt       *time.Time `json:"lastSeenAt"`
@@ -432,7 +438,7 @@ func (r Repository) CreateApplication(ctx context.Context, organizationID, envir
 }
 
 func (r Repository) ListDeployments(ctx context.Context, organizationID uuid.UUID, applicationID *uuid.UUID) ([]Deployment, error) {
-	query := `SELECT id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,created_at,updated_at FROM deployments WHERE organization_id=$1`
+	query := `SELECT id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type,external_delivery_id,created_at,updated_at FROM deployments WHERE organization_id=$1`
 	args := []any{organizationID}
 	if applicationID != nil {
 		query += ` AND application_id=$2`
@@ -447,7 +453,7 @@ func (r Repository) ListDeployments(ctx context.Context, organizationID uuid.UUI
 	items := []Deployment{}
 	for rows.Next() {
 		var item Deployment
-		if err := rows.Scan(&item.ID, &item.OrganizationID, &item.ApplicationID, &item.Number, &item.Source, &item.SourceRevision, &item.Image, &item.Status, &item.TriggeredBy, &item.PreviousDeploymentID, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.OrganizationID, &item.ApplicationID, &item.Number, &item.Source, &item.SourceRevision, &item.Image, &item.Status, &item.TriggeredBy, &item.PreviousDeploymentID, &item.Repository, &item.Branch, &item.CommitSHA, &item.TriggerType, &item.ExternalDeliveryID, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -465,11 +471,15 @@ func (r Repository) CreateDeployment(ctx context.Context, organizationID, applic
 		return Deployment{}, err
 	}
 	var item Deployment
-	err = tx.QueryRow(ctx, `INSERT INTO deployments(organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id) SELECT $1,a.id,COALESCE((SELECT max(d.number)+1 FROM deployments d WHERE d.application_id=a.id),1),$3,$4,$5,'queued',$6,(SELECT id FROM deployments d WHERE d.application_id=a.id ORDER BY number DESC LIMIT 1) FROM applications a WHERE a.id=$2 AND a.organization_id=$1 RETURNING id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,created_at,updated_at`, organizationID, applicationID, source, revision, image, actorID).Scan(&item.ID, &item.OrganizationID, &item.ApplicationID, &item.Number, &item.Source, &item.SourceRevision, &item.Image, &item.Status, &item.TriggeredBy, &item.PreviousDeploymentID, &item.CreatedAt, &item.UpdatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO deployments(organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type) SELECT $1,a.id,COALESCE((SELECT max(d.number)+1 FROM deployments d WHERE d.application_id=a.id),1),$3,$4,$5,'queued',$6,(SELECT id FROM deployments d WHERE d.application_id=a.id ORDER BY number DESC LIMIT 1),$3,'',$4,'manual' FROM applications a WHERE a.id=$2 AND a.organization_id=$1 RETURNING id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type,external_delivery_id,created_at,updated_at`, organizationID, applicationID, source, revision, image, actorID).Scan(&item.ID, &item.OrganizationID, &item.ApplicationID, &item.Number, &item.Source, &item.SourceRevision, &item.Image, &item.Status, &item.TriggeredBy, &item.PreviousDeploymentID, &item.Repository, &item.Branch, &item.CommitSHA, &item.TriggerType, &item.ExternalDeliveryID, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return Deployment{}, notFound(err)
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO deployment_events(deployment_id,to_status,message) VALUES($1,'queued','Deployment record created; no runtime execution is configured')`, item.ID); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO deployment_events(deployment_id,to_status,message) VALUES($1,'queued','Deployment queued')`, item.ID); err != nil {
+		return Deployment{}, err
+	}
+	payload, _ := json.Marshal(map[string]any{"deploymentId": item.ID, "repository": source, "commitSha": revision})
+	if _, err = tx.Exec(ctx, `INSERT INTO jobs(organization_id,job_type,payload) VALUES($1,'deploy_application',$2)`, organizationID, payload); err != nil {
 		return Deployment{}, err
 	}
 	if err = insertAudit(ctx, tx, &organizationID, &actorID, "deployment.triggered", "deployment", &item.ID, requestID, map[string]any{"number": item.Number}, ip); err != nil {
@@ -495,7 +505,7 @@ func (r Repository) TransitionDeployment(ctx context.Context, organizationID, de
 		return Deployment{}, err
 	}
 	var item Deployment
-	err = tx.QueryRow(ctx, `UPDATE deployments SET status=$3,updated_at=now(),started_at=CASE WHEN $3='preparing' THEN COALESCE(started_at,now()) ELSE started_at END,finished_at=CASE WHEN $3 IN ('healthy','failed','cancelled','superseded','rolled_back') THEN now() ELSE finished_at END WHERE organization_id=$1 AND id=$2 RETURNING id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,created_at,updated_at`, organizationID, deploymentID, to).Scan(&item.ID, &item.OrganizationID, &item.ApplicationID, &item.Number, &item.Source, &item.SourceRevision, &item.Image, &item.Status, &item.TriggeredBy, &item.PreviousDeploymentID, &item.CreatedAt, &item.UpdatedAt)
+	err = tx.QueryRow(ctx, `UPDATE deployments SET status=$3,updated_at=now(),started_at=CASE WHEN $3='preparing' THEN COALESCE(started_at,now()) ELSE started_at END,finished_at=CASE WHEN $3 IN ('healthy','failed','cancelled','superseded','rolled_back') THEN now() ELSE finished_at END WHERE organization_id=$1 AND id=$2 RETURNING id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type,external_delivery_id,created_at,updated_at`, organizationID, deploymentID, to).Scan(&item.ID, &item.OrganizationID, &item.ApplicationID, &item.Number, &item.Source, &item.SourceRevision, &item.Image, &item.Status, &item.TriggeredBy, &item.PreviousDeploymentID, &item.Repository, &item.Branch, &item.CommitSHA, &item.TriggerType, &item.ExternalDeliveryID, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return Deployment{}, err
 	}
@@ -512,7 +522,7 @@ func (r Repository) TransitionDeployment(ctx context.Context, organizationID, de
 }
 
 func (r Repository) ListServers(ctx context.Context, organizationID uuid.UUID) ([]Server, error) {
-	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,cpu_capacity,memory_bytes,last_seen_at,created_at FROM servers WHERE organization_id=$1 ORDER BY name`, organizationID)
+	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,connectivity_type,cpu_capacity,memory_bytes,last_seen_at,created_at FROM servers WHERE organization_id=$1 ORDER BY name`, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +530,7 @@ func (r Repository) ListServers(ctx context.Context, organizationID uuid.UUID) (
 	items := []Server{}
 	for rows.Next() {
 		var item Server
-		if err := rows.Scan(&item.ID, &item.OrganizationID, &item.Name, &item.Hostname, &item.OperatingSystem, &item.Architecture, &item.Runtime, &item.ConnectionStatus, &item.Health, &item.CPUCapacity, &item.MemoryBytes, &item.LastSeenAt, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.OrganizationID, &item.Name, &item.Hostname, &item.OperatingSystem, &item.Architecture, &item.Runtime, &item.ConnectionStatus, &item.Health, &item.ConnectivityType, &item.CPUCapacity, &item.MemoryBytes, &item.LastSeenAt, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -528,14 +538,14 @@ func (r Repository) ListServers(ctx context.Context, organizationID uuid.UUID) (
 	return items, rows.Err()
 }
 
-func (r Repository) CreateServer(ctx context.Context, organizationID, actorID uuid.UUID, name, hostname, osName, architecture string, requestID uuid.UUID, ip net.IP) (Server, error) {
+func (r Repository) CreateServer(ctx context.Context, organizationID, actorID uuid.UUID, name, hostname, osName, architecture, connectivityType string, requestID uuid.UUID, ip net.IP) (Server, error) {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return Server{}, err
 	}
 	defer tx.Rollback(ctx)
 	var item Server
-	err = tx.QueryRow(ctx, `INSERT INTO servers(organization_id,name,hostname,operating_system,architecture) VALUES($1,$2,$3,$4,$5) RETURNING id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,cpu_capacity,memory_bytes,last_seen_at,created_at`, organizationID, name, hostname, osName, architecture).Scan(&item.ID, &item.OrganizationID, &item.Name, &item.Hostname, &item.OperatingSystem, &item.Architecture, &item.Runtime, &item.ConnectionStatus, &item.Health, &item.CPUCapacity, &item.MemoryBytes, &item.LastSeenAt, &item.CreatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO servers(organization_id,name,hostname,operating_system,architecture,connectivity_type) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,connectivity_type,cpu_capacity,memory_bytes,last_seen_at,created_at`, organizationID, name, hostname, osName, architecture, connectivityType).Scan(&item.ID, &item.OrganizationID, &item.Name, &item.Hostname, &item.OperatingSystem, &item.Architecture, &item.Runtime, &item.ConnectionStatus, &item.Health, &item.ConnectivityType, &item.CPUCapacity, &item.MemoryBytes, &item.LastSeenAt, &item.CreatedAt)
 	if err != nil {
 		return Server{}, err
 	}

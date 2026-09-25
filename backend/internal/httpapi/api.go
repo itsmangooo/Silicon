@@ -18,6 +18,7 @@ import (
 	"github.com/itsmangooo/Silicon/backend/internal/auth"
 	"github.com/itsmangooo/Silicon/backend/internal/authorization"
 	"github.com/itsmangooo/Silicon/backend/internal/config"
+	"github.com/itsmangooo/Silicon/backend/internal/cryptoenvelope"
 	"github.com/itsmangooo/Silicon/backend/internal/deployments"
 	"github.com/itsmangooo/Silicon/backend/internal/store"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -28,6 +29,7 @@ type API struct {
 	cfg    config.Config
 	repo   store.Repository
 	logger *slog.Logger
+	box    *cryptoenvelope.Box
 }
 
 type contextKey string
@@ -42,7 +44,11 @@ const (
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 func New(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) *API {
-	return &API{cfg: cfg, repo: store.Repository{Pool: pool}, logger: logger}
+	api := &API{cfg: cfg, repo: store.Repository{Pool: pool}, logger: logger}
+	if box, err := cryptoenvelope.New(cfg.EncryptionKey); err == nil {
+		api.box = &box
+	}
+	return api
 }
 
 func (a *API) Handler() http.Handler {
@@ -50,6 +56,7 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", a.health)
 	mux.HandleFunc("POST /api/v1/auth/register", a.register)
 	mux.HandleFunc("POST /api/v1/auth/login", a.login)
+	mux.HandleFunc("POST /api/v1/webhooks/github", a.githubWebhook)
 	mux.Handle("GET /api/v1/auth/session", a.auth(http.HandlerFunc(a.session)))
 	mux.Handle("POST /api/v1/auth/logout", a.auth(http.HandlerFunc(a.logout)))
 	mux.Handle("GET /api/v1/organizations", a.auth(http.HandlerFunc(a.listOrganizations)))
@@ -77,6 +84,24 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("GET /api/v1/organizations/{organizationID}/identity-providers", a.org(authorization.IdentityProviderRead, http.HandlerFunc(a.listIdentityProviders)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/identity-providers", a.org(authorization.IdentityProviderManage, http.HandlerFunc(a.createIdentityProvider)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/audit-events", a.org(authorization.AuditRead, http.HandlerFunc(a.listAuditEvents)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/integrations/github", a.org(authorization.IntegrationRead, http.HandlerFunc(a.getGitHubIntegration)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/integrations/github", a.org(authorization.IntegrationManage, http.HandlerFunc(a.connectGitHub)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/integrations/github", a.org(authorization.IntegrationManage, http.HandlerFunc(a.disconnectGitHub)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/integrations/github/repositories", a.org(authorization.IntegrationRead, http.HandlerFunc(a.listGitHubRepositories)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/git-source", a.org(authorization.ApplicationRead, http.HandlerFunc(a.getGitSource)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/applications/{applicationID}/git-source", a.org(authorization.ApplicationUpdate, http.HandlerFunc(a.updateGitSource)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/integrations/cloudflare", a.org(authorization.IntegrationRead, http.HandlerFunc(a.getCloudflareIntegration)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/integrations/cloudflare", a.org(authorization.IntegrationManage, http.HandlerFunc(a.connectCloudflare)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/integrations/cloudflare/zones", a.org(authorization.IntegrationRead, http.HandlerFunc(a.listCloudflareZones)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/integrations/cloudflare/zones/{zoneID}", a.org(authorization.IntegrationManage, http.HandlerFunc(a.selectCloudflareZone)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/domains", a.org(authorization.OrganizationRead, http.HandlerFunc(a.listDomains)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/applications/{applicationID}/domains", a.org(authorization.DomainManage, http.HandlerFunc(a.createDomain)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/domains/{domainID}/sync", a.org(authorization.DomainManage, http.HandlerFunc(a.syncDomain)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/domains/{domainID}", a.org(authorization.DomainManage, http.HandlerFunc(a.updateDomain)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/domains/{domainID}", a.org(authorization.DomainManage, http.HandlerFunc(a.deleteDomain)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/integrations/cloudflare/tunnels", a.org(authorization.IntegrationRead, http.HandlerFunc(a.listTunnels)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/integrations/cloudflare/tunnels", a.org(authorization.IntegrationManage, http.HandlerFunc(a.createTunnel)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/routes", a.org(authorization.DomainManage, http.HandlerFunc(a.createTunnelRoute)))
 
 	return a.recover(a.security(a.cors(a.requestLog(mux))))
 }
@@ -458,22 +483,26 @@ func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Name            string `json:"name"`
-		Hostname        string `json:"hostname"`
-		OperatingSystem string `json:"operatingSystem"`
-		Architecture    string `json:"architecture"`
+		Name             string `json:"name"`
+		Hostname         string `json:"hostname"`
+		OperatingSystem  string `json:"operatingSystem"`
+		Architecture     string `json:"architecture"`
+		ConnectivityType string `json:"connectivityType"`
 	}
 	if !decode(w, r, &input) {
 		return
 	}
 	input.Name = strings.TrimSpace(input.Name)
 	input.Hostname = strings.TrimSpace(input.Hostname)
-	if input.Name == "" || input.Hostname == "" {
+	if input.ConnectivityType == "" {
+		input.ConnectivityType = "public"
+	}
+	if input.Name == "" || input.Hostname == "" || !oneOf(input.ConnectivityType, "public", "self_hosted", "private") {
 		validation(w, "Name and hostname are required.")
 		return
 	}
 	orgID := pathUUID(r, "organizationID")
-	item, err := a.repo.CreateServer(r.Context(), orgID, currentUser(r.Context()).ID, input.Name, input.Hostname, input.OperatingSystem, input.Architecture, requestID(r.Context()), clientIP(r))
+	item, err := a.repo.CreateServer(r.Context(), orgID, currentUser(r.Context()).ID, input.Name, input.Hostname, input.OperatingSystem, input.Architecture, input.ConnectivityType, requestID(r.Context()), clientIP(r))
 	if err != nil {
 		a.persistenceError(w, err)
 		return

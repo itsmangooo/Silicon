@@ -15,6 +15,8 @@ const (
 	DeployApplication    Type = "deploy_application"
 	RollbackDeployment   Type = "rollback_deployment"
 	CollectRuntimeStatus Type = "collect_runtime_status"
+	SyncDomain           Type = "sync_domain"
+	ConfigureTunnel      Type = "configure_tunnel"
 )
 
 type Job struct {
@@ -26,8 +28,7 @@ type Job struct {
 	AvailableAt    time.Time
 }
 
-// Queue describes a PostgreSQL-backed job boundary. Milestone 1 persists the
-// schema and vocabulary but intentionally starts no worker or runtime action.
+// Queue describes the PostgreSQL-backed asynchronous work boundary.
 type Queue interface {
 	Enqueue(context.Context, Job) (uuid.UUID, error)
 	Claim(context.Context, string, time.Duration) (Job, error)

@@ -90,6 +90,7 @@ h3 { font-size: .9rem; font-weight: 500; }
 .button.primary:hover { background: #92dfb7; }
 .button.ghost { border-color: transparent; color: var(--text-muted); }
 .button.ghost:hover { color: var(--text); }
+.button.danger { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); color: var(--danger); }
 .button.compact { min-height: 30px; padding: var(--space-1) var(--space-2); }
 .button.wide { width: 100%; }
 .button:disabled { cursor: not-allowed; opacity: .5; }
@@ -102,7 +103,17 @@ input:disabled, textarea:disabled, select:disabled, input[readonly] { background
 .field { display: grid; gap: var(--space-2); color: var(--text); font-size: .78rem; font-weight: 500; }
 .field small { color: var(--text-muted); font-size: .7rem; font-weight: 400; line-height: 1.5; }
 .form-stack { display: grid; gap: var(--space-5); }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4) var(--space-5); margin: var(--space-5) 0; }
+.form-grid .form-actions { grid-column: 1 / -1; }
+.inline-form { display: flex; align-items: end; gap: var(--space-3); margin: var(--space-5) 0; }
+.inline-form .field { flex: 1; }
+.check-row { min-height: 40px; display: flex; align-items: center; gap: var(--space-2); font-weight: 400; }
+.check-row input { width: auto; min-height: auto; }
 .form-actions { display: flex; justify-content: flex-end; gap: var(--space-2); padding-top: var(--space-2); }
+.row-actions, .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.toolbar { justify-content: flex-end; margin-bottom: var(--space-3); }
+.key-value { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: var(--space-2) var(--space-4); padding: var(--space-2) 0; font-size: .8rem; }
+.key-value > span:nth-child(odd) { color: var(--text-muted); }
 
 table { width: 100%; border-collapse: collapse; font-size: .8rem; }
 th { padding: 0 var(--space-3) var(--space-3); border-bottom: 1px solid var(--border-strong); color: var(--text-muted); text-align: left; font-size: .66rem; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; }
@@ -116,6 +127,9 @@ tbody tr:hover { background: rgba(255,255,255,.018); }
 .status-failed, .status-unhealthy, .status-disabled { color: var(--danger); }
 .status-queued, .status-preparing, .status-building, .status-pending, .status-degraded { color: var(--warning); }
 .status-deploying, .status-starting { color: var(--info); }
+.status-active { color: var(--success); }
+.status-error, .status-conflict { color: var(--danger); }
+.status-external, .status-inactive { color: var(--text-muted); }
 .role-label { text-transform: capitalize; }
 
 .empty-state { padding: var(--space-6) 0; color: var(--text-muted); }
@@ -179,6 +193,8 @@ tbody tr:hover { background: rgba(255,255,255,.018); }
   .section { margin-top: var(--space-6); }
   .definition-grid { grid-template-columns: 1fr; }
   .permission-list { columns: 1; }
+	.form-grid { grid-template-columns: 1fr; }
+	.inline-form { align-items: stretch; flex-direction: column; }
   table, thead, tbody, tr, th, td { display: block; }
   thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
   tbody tr { padding: var(--space-3) 0; border-bottom: 1px solid var(--border-strong); }

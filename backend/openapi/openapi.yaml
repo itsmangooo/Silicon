@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: Silicon Control Plane API
-  version: 0.1.0
+  version: 0.2.0
   description: >-
-    Milestone 1 API for local authentication and organization-scoped platform
-    records. Deployment endpoints create history but do not execute workloads.
+    Silicon control-plane API with local authentication, organization-scoped
+    records, GitHub push automation, and Cloudflare DNS/tunnel integration.
 servers:
   - url: http://localhost:8080/api/v1
 tags:
@@ -16,6 +16,9 @@ tags:
   - name: Servers
   - name: Identity
   - name: Audit
+  - name: GitHub
+  - name: Cloudflare
+  - name: Domains
 paths:
   /auth/register:
     post:
@@ -321,6 +324,82 @@ paths:
       summary: List recent organization audit events
       responses:
         '200': {description: Events, content: {application/json: {schema: {type: object, properties: {auditEvents: {type: array, items: {$ref: '#/components/schemas/AuditEvent'}}}}}}}
+  /webhooks/github:
+    post:
+      tags: [GitHub]
+      summary: Accept a signed GitHub App webhook
+      security: []
+      parameters:
+        - {name: X-GitHub-Event, in: header, required: true, schema: {type: string}}
+        - {name: X-GitHub-Delivery, in: header, required: true, schema: {type: string}}
+        - {name: X-Hub-Signature-256, in: header, required: true, schema: {type: string}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object}}}}
+      responses:
+        '202': {description: Verified push accepted or safely ignored}
+        '401': {description: Invalid signature}
+        '413': {description: Payload exceeds one MiB}
+  /organizations/{organizationID}/integrations/github:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get: {tags: [GitHub], summary: Read GitHub App connection, responses: {'200': {description: Connected installation, content: {application/json: {schema: {$ref: '#/components/schemas/GitHubIntegration'}}}}}}
+    post:
+      tags: [GitHub]
+      summary: Connect or reconnect a GitHub App installation
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [installationId], properties: {installationId: {type: integer, minimum: 1}}}}}}
+      responses: {'201': {description: Connected, content: {application/json: {schema: {$ref: '#/components/schemas/GitHubIntegration'}}}}}
+    delete: {tags: [GitHub], summary: Disconnect GitHub, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: Disconnected}}}
+  /organizations/{organizationID}/integrations/github/repositories:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get: {tags: [GitHub], summary: List repositories granted to the installation, responses: {'200': {description: Repositories}}}
+  /organizations/{organizationID}/applications/{applicationID}/git-source:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ApplicationID'}]
+    get: {tags: [GitHub], summary: Read application Git source, responses: {'200': {description: Source, content: {application/json: {schema: {$ref: '#/components/schemas/GitSource'}}}}}}
+    put:
+      tags: [GitHub]
+      summary: Select repository, branch, and push automation
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitSourceInput'}}}}
+      responses: {'200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/GitSource'}}}}}
+  /organizations/{organizationID}/integrations/cloudflare:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get: {tags: [Cloudflare], summary: Read redacted Cloudflare connection, responses: {'200': {description: Connection}}}
+    post:
+      tags: [Cloudflare]
+      summary: Verify and encrypt a scoped API token
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [accountId, apiToken], properties: {accountId: {type: string}, apiToken: {type: string, format: password}}}}}}
+      responses: {'201': {description: Connected}}
+  /organizations/{organizationID}/integrations/cloudflare/zones:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get: {tags: [Cloudflare], summary: Verify connection and discover zones, responses: {'200': {description: Zones}}}
+  /organizations/{organizationID}/integrations/cloudflare/zones/{zoneID}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ZoneID'}]
+    put: {tags: [Cloudflare], summary: Enable or disable a discovered zone for matching, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: Selection updated}}}
+  /organizations/{organizationID}/domains:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get: {tags: [Domains], summary: List organization domains and DNS state, responses: {'200': {description: Domains}}}
+  /organizations/{organizationID}/applications/{applicationID}/domains:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ApplicationID'}]
+    post:
+      tags: [Domains]
+      summary: Create and reconcile a Cloudflare DNS record
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DomainInput'}}}}
+      responses: {'201': {description: Active managed domain}, '409': {description: Existing unrelated record or missing zone}}
+  /organizations/{organizationID}/domains/{domainID}/sync:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/DomainID'}]
+    post: {tags: [Domains], summary: Reconcile a Silicon-owned record, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'200': {description: Reconciled}, '409': {description: Ownership conflict}}}
+  /organizations/{organizationID}/domains/{domainID}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/DomainID'}]
+    put: {tags: [Domains], summary: Update and reconcile a Silicon-owned DNS record, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DomainUpdateInput'}}}}, responses: {'200': {description: Updated}, '409': {description: Ownership conflict}}}
+    delete: {tags: [Domains], summary: Delete local domain and only a Silicon-owned provider record, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: Deleted}}}
+  /organizations/{organizationID}/integrations/cloudflare/tunnels:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get: {tags: [Cloudflare], summary: List configured tunnel records, responses: {'200': {description: Tunnels}}}
+    post: {tags: [Cloudflare], summary: Create or import an optional remotely-managed tunnel, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'201': {description: Tunnel configured}}}
+  /organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/routes:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/TunnelID'}]
+    post: {tags: [Cloudflare], summary: Add a hostname route and reconcile its tunnel CNAME, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'201': {description: Route configured}}}
 components:
   securitySchemes:
     sessionCookie:
@@ -334,6 +413,9 @@ components:
     EnvironmentID: {name: environmentID, in: path, required: true, schema: {type: string, format: uuid}}
     ApplicationID: {name: applicationID, in: path, required: true, schema: {type: string, format: uuid}}
     DeploymentID: {name: deploymentID, in: path, required: true, schema: {type: string, format: uuid}}
+    DomainID: {name: domainID, in: path, required: true, schema: {type: string, format: uuid}}
+    TunnelID: {name: tunnelID, in: path, required: true, schema: {type: string, format: uuid}}
+    ZoneID: {name: zoneID, in: path, required: true, schema: {type: string, format: uuid}}
   responses:
     AuthenticationError: {description: Authentication required, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     ForbiddenError: {description: Permission or CSRF check failed, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -465,6 +547,11 @@ components:
         status: {$ref: '#/components/schemas/DeploymentStatus'}
         triggeredBy: {$ref: '#/components/schemas/UUID'}
         previousDeploymentId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+        repository: {type: string}
+        branch: {type: string}
+        commitSha: {type: string}
+        triggerType: {type: string, enum: [manual, github_push, rollback, redeploy]}
+        githubDeliveryId: {type: [string, 'null']}
         createdAt: {$ref: '#/components/schemas/Timestamp'}
         updatedAt: {$ref: '#/components/schemas/Timestamp'}
     ServerInput:
@@ -476,6 +563,7 @@ components:
         hostname: {type: string}
         operatingSystem: {type: string}
         architecture: {type: string}
+        connectivityType: {type: string, enum: [public, self_hosted, private], default: public}
     Server:
       allOf:
         - {$ref: '#/components/schemas/ServerInput'}
@@ -486,6 +574,7 @@ components:
             runtime: {type: string}
             connectionStatus: {type: string, enum: [unknown, connected, disconnected]}
             health: {type: string, enum: [unknown, healthy, degraded, unhealthy]}
+            connectivityType: {type: string, enum: [public, self_hosted, private]}
             createdAt: {$ref: '#/components/schemas/Timestamp'}
     IdentityProviderInput:
       type: object
@@ -521,5 +610,27 @@ components:
         requestId: {$ref: '#/components/schemas/UUID'}
         metadata: {type: object}
         createdAt: {$ref: '#/components/schemas/Timestamp'}
+    GitHubIntegration:
+      type: object
+      properties: {id: {$ref: '#/components/schemas/UUID'}, organizationId: {$ref: '#/components/schemas/UUID'}, installationId: {type: integer}, accountLogin: {type: string}, status: {type: string, enum: [connected, disconnected, error]}}
+    GitSourceInput:
+      type: object
+      additionalProperties: false
+      required: [repositoryId, repositoryFullName, branch, autoDeploy]
+      properties: {repositoryId: {type: integer}, repositoryFullName: {type: string}, branch: {type: string}, autoDeploy: {type: boolean}}
+    GitSource:
+      allOf:
+        - {$ref: '#/components/schemas/GitSourceInput'}
+        - {type: object, properties: {applicationId: {$ref: '#/components/schemas/UUID'}, organizationId: {$ref: '#/components/schemas/UUID'}, provider: {type: string, enum: [github]}}}
+    DomainInput:
+      type: object
+      additionalProperties: false
+      required: [hostname, targetPort, recordType, content, proxied]
+      properties: {hostname: {type: string}, targetPort: {type: integer, minimum: 1, maximum: 65535}, recordType: {type: string, enum: [A, AAAA, CNAME]}, content: {type: string}, proxied: {type: boolean}}
+    DomainUpdateInput:
+      type: object
+      additionalProperties: false
+      required: [targetPort, recordType, content, proxied]
+      properties: {targetPort: {type: integer, minimum: 1, maximum: 65535}, recordType: {type: string, enum: [A, AAAA, CNAME]}, content: {type: string}, proxied: {type: boolean}}
 security:
   - sessionCookie: []

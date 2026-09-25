@@ -1,8 +1,8 @@
 # Silicon
 
-Silicon is a self-hosted infrastructure and application control plane. Milestone 1 establishes the platform itself: local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, server inventory, audit events, provider boundaries, a PostgreSQL schema, a versioned REST API, and a responsive web interface.
+Silicon is a self-hosted infrastructure and application control plane. Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, server inventory, audit events, provider boundaries, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation and Cloudflare DNS/optional Tunnel providers are part of the control plane.
 
-Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It starts as a modular monolith. It does **not** execute deployments, manage a reverse proxy, issue TLS certificates, or connect to cloud/Kubernetes providers yet.
+Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It remains a modular monolith. It does **not** include a custom reverse proxy, automatic TLS, AWS, Azure, or Kubernetes integration.
 
 ## Interface previews
 
@@ -104,7 +104,7 @@ cd backend
 TEST_DATABASE_URL='postgres://silicon:silicon-development-only@localhost:5432/silicon_test?sslmode=disable' go test -count=1 ./internal/httpapi
 ```
 
-That flow verifies a fresh migration, registration, sessions, organization creation, membership, permission denial, project/environment/application/deployment creation, audit records, logout, validation, and cross-organization isolation.
+That flow verifies a fresh migration, registration, sessions, organization creation, membership, permission denial, project/environment/application/deployment creation, signed GitHub pushes, deduplication, exact SHA propagation, rapid-push ordering, audit records, logout, validation, and cross-organization isolation. Cloudflare API behavior uses mock servers and needs no real account.
 
 ## API
 
@@ -120,17 +120,23 @@ The REST API is rooted at `/api/v1`. Its OpenAPI contract lives at [`backend/ope
 - `/organizations/{organizationID}/members`
 - `/organizations/{organizationID}/identity-providers`
 - `/organizations/{organizationID}/audit-events`
+- `/organizations/{organizationID}/integrations/github`
+- `/organizations/{organizationID}/integrations/cloudflare`
+- `/organizations/{organizationID}/domains`
+- `/webhooks/github`
 
 Authentication uses an opaque server-side session in an HTTP-only cookie. Unsafe requests also require a CSRF header. Authorization is always enforced by the backend against the organization in the route.
 
-## Milestone 1 boundaries
+## Current boundaries
 
 Implemented means the record and control-plane behavior is real and PostgreSQL-backed. It does not imply a workload is running. In particular:
 
-- deployment creation creates a historical record in `queued`; it does not pull, build, or run an image;
+- deployment creation and verified GitHub pushes enter the same persistent job runner; local Git+Dockerfile execution requires the explicit `SILICON_LOCAL_DOCKER_ENABLED=true` opt-in;
 - servers are inventory records; there is no agent and no remote shell;
 - `ExternalRoutingProvider` reports externally managed routing/TLS semantics; it changes no proxy configuration;
 - OIDC/Authentik configuration records are disabled planning records; the OIDC login flow is not activated;
 - secret storage has a schema/provider boundary, but no secret API is exposed until encryption-key lifecycle support is complete.
+
+Provider credentials are handled separately: GitHub App secrets remain process configuration, while Cloudflare API and tunnel tokens use authenticated encryption at rest. See [GitHub integration](docs/integrations/github.md) and [Cloudflare integration](docs/integrations/cloudflare.md).
 
 See [ROADMAP.md](ROADMAP.md) for future milestones and [SECURITY.md](SECURITY.md) for the security model.

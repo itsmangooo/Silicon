@@ -15,14 +15,17 @@ import {
   SignOutIcon,
   StackIcon,
   UsersIcon,
+	CloudIcon,
+	GitBranchIcon,
 } from '@phosphor-icons/react'
 import { useAuth } from '../state/AuthContext.jsx'
 import { useWorkspace } from '../state/WorkspaceContext.jsx'
 
 const groups = [
   ['PLATFORM', [['Projects', '/projects', FolderIcon], ['Environments', '/environments', StackIcon], ['Applications', '/applications', CubeIcon], ['Deployments', '/deployments', RocketLaunchIcon], ['Servers', '/servers', HardDrivesIcon]]],
+  ['OPERATIONS', [['Domains', '/domains', CloudIcon]]],
   ['ORGANIZATION', [['Members', '/members', UsersIcon], ['Access', '/access', ShieldCheckIcon], ['Identity', '/identity', IdentificationCardIcon], ['Audit', '/audit', ClipboardTextIcon]]],
-  ['SYSTEM', [['Settings', '/settings', GearSixIcon]]],
+  ['SYSTEM', [['Integrations', '/integrations', GitBranchIcon], ['Settings', '/settings', GearSixIcon]]],
 ]
 
 function NavigationItem({ to, icon, children, end = false, onClick }) {
