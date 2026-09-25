@@ -325,7 +325,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	capturedSpec := dockerRuntime.spec
 	dockerRuntime.mu.Unlock()
 	if capturedSpec.Image != "nginx:alpine" || !capturedSpec.PullImage || capturedSpec.Environment["APP_MODE"] != "production" || capturedSpec.Environment["API_TOKEN"] != "runtime-secret-value" || capturedSpec.HostAddress != "127.0.0.1" || capturedSpec.HostPort != 32781 {
-		t.Fatal("runtime deployment spec is incomplete")
+		t.Fatalf("runtime deployment spec is incomplete: image=%q pull=%t mode=%q secretPresent=%t host=%q port=%d", capturedSpec.Image, capturedSpec.PullImage, capturedSpec.Environment["APP_MODE"], capturedSpec.Environment["API_TOKEN"] != "", capturedSpec.HostAddress, capturedSpec.HostPort)
 	}
 	var runtimeID, runtimeState, deploymentState string
 	if err := pool.QueryRow(ctx, `SELECT external_id,state FROM runtime_instances WHERE deployment_id=$1`, stringField(t, firstRuntimeDeployment, "id")).Scan(&runtimeID, &runtimeState); err != nil {

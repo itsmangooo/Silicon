@@ -386,7 +386,7 @@ func (r Repository) CreateEnvironment(ctx context.Context, organizationID, proje
 }
 
 func (r Repository) ListApplications(ctx context.Context, organizationID, environmentID uuid.UUID) ([]Application, error) {
-	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host_bind_address::text,published_port,created_at FROM applications WHERE organization_id=$1 AND environment_id=$2 ORDER BY name`, organizationID, environmentID)
+	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,created_at FROM applications WHERE organization_id=$1 AND environment_id=$2 ORDER BY name`, organizationID, environmentID)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +403,7 @@ func (r Repository) ListApplications(ctx context.Context, organizationID, enviro
 }
 
 func (r Repository) ListAllApplications(ctx context.Context, organizationID uuid.UUID) ([]Application, error) {
-	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host_bind_address::text,published_port,created_at FROM applications WHERE organization_id=$1 ORDER BY name`, organizationID)
+	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,created_at FROM applications WHERE organization_id=$1 ORDER BY name`, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +426,7 @@ func (r Repository) CreateApplication(ctx context.Context, organizationID, envir
 	}
 	defer tx.Rollback(ctx)
 	var item Application
-	err = tx.QueryRow(ctx, `INSERT INTO applications(organization_id,project_id,environment_id,name,source_type,image,internal_port,host_bind_address,published_port) SELECT $1,e.project_id,e.id,$3,$4,$5,$6,$7,$8 FROM environments e WHERE e.id=$2 AND e.organization_id=$1 RETURNING id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host_bind_address::text,published_port,created_at`, organizationID, environmentID, name, sourceType, image, internalPort, hostAddress, publishedPort).Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.CreatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO applications(organization_id,project_id,environment_id,name,source_type,image,internal_port,host_bind_address,published_port) SELECT $1,e.project_id,e.id,$3,$4,$5,$6,$7,$8 FROM environments e WHERE e.id=$2 AND e.organization_id=$1 RETURNING id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,created_at`, organizationID, environmentID, name, sourceType, image, internalPort, hostAddress, publishedPort).Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.CreatedAt)
 	if err != nil {
 		return Application{}, notFound(err)
 	}
