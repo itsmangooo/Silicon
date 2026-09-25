@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CheckIcon, PlusIcon, XIcon } from '@phosphor-icons/react'
 
 export function Page({ title, description, actions, children }) {
   return <div className="page"><header className="page-header"><div><h1>{title}</h1>{description && <p>{description}</p>}</div>{actions && <div className="page-actions">{actions}</div>}</header>{children}</div>
@@ -12,6 +13,10 @@ export function EmptyState({ title, children, action }) {
   return <div className="empty-state"><strong>{title}</strong>{children && <p>{children}</p>}{action}</div>
 }
 
+export function CreateButton({ children, ...props }) {
+  return <button type="button" className="button primary" {...props}><PlusIcon size={16} aria-hidden="true" /><span>{children}</span></button>
+}
+
 export function Notice({ tone = 'info', children }) { return <div className={`notice ${tone}`} role={tone === 'danger' ? 'alert' : 'status'}>{children}</div> }
 
 export function Status({ value }) { return <span className={`status status-${String(value).toLowerCase().replaceAll('_', '-')}`}><i aria-hidden="true" />{value}</span> }
@@ -20,12 +25,12 @@ export function Mono({ children }) { return <span className="mono">{children}</s
 
 export function Dialog({ title, open, onClose, children }) {
   if (!open) return null
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="dialog-header"><h2 id="dialog-title">{title}</h2><button className="button ghost compact" onClick={onClose} aria-label="Close">Close</button></div>{children}</section></div>
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="dialog-header"><h2 id="dialog-title">{title}</h2><button className="button ghost compact" onClick={onClose} aria-label="Close"><XIcon size={16} aria-hidden="true" /><span>Close</span></button></div>{children}</section></div>
 }
 
 export function Field({ label, hint, children }) { return <label className="field"><span>{label}</span>{children}{hint && <small>{hint}</small>}</label> }
 
-export function SubmitRow({ submitting, onCancel, label = 'Save' }) { return <div className="form-actions">{onCancel && <button type="button" className="button ghost" onClick={onCancel}>Cancel</button>}<button className="button primary" disabled={submitting}>{submitting ? 'Saving…' : label}</button></div> }
+export function SubmitRow({ submitting, onCancel, label = 'Save' }) { return <div className="form-actions">{onCancel && <button type="button" className="button ghost" onClick={onCancel}><XIcon size={16} aria-hidden="true" /><span>Cancel</span></button>}<button className="button primary" disabled={submitting}><CheckIcon size={16} aria-hidden="true" /><span>{submitting ? 'Saving…' : label}</span></button></div> }
 
 export function useResource(load, dependencies = []) {
   const [data, setData] = useState(null)

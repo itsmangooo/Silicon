@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { ArrowRightIcon, UserPlusIcon } from '@phosphor-icons/react'
 import { Field, Notice } from '../components/ui.jsx'
 import { useAuth } from '../state/AuthContext.jsx'
 
@@ -10,11 +11,11 @@ function AuthFrame({ title, description, children, footer }) {
 export function LoginPage() {
   const { login } = useAuth(); const navigate = useNavigate(); const [error,setError]=useState(''); const [submitting,setSubmitting]=useState(false)
   const submit=async(event)=>{event.preventDefault();setSubmitting(true);setError('');const values=Object.fromEntries(new FormData(event.currentTarget));try{await login(values);navigate('/')}catch(requestError){setError(requestError.message)}finally{setSubmitting(false)}}
-  return <AuthFrame title="Sign in" description="Access the Silicon control plane." footer={<>New to Silicon? <Link to="/register">Create an account</Link></>}><form className="form-stack" onSubmit={submit}><Field label="Email"><input name="email" type="email" autoComplete="email" required /></Field><Field label="Password"><input name="password" type="password" autoComplete="current-password" required /></Field>{error&&<Notice tone="danger">{error}</Notice>}<button className="button primary wide" disabled={submitting}>{submitting?'Signing in…':'Sign in'}</button></form></AuthFrame>
+  return <AuthFrame title="Sign in" description="Access the Silicon control plane." footer={<>New to Silicon? <Link to="/register">Create an account</Link></>}><form className="form-stack" onSubmit={submit}><Field label="Email"><input name="email" type="email" autoComplete="email" required /></Field><Field label="Password"><input name="password" type="password" autoComplete="current-password" required /></Field>{error&&<Notice tone="danger">{error}</Notice>}<button className="button primary wide" disabled={submitting}><ArrowRightIcon size={17} aria-hidden="true" /><span>{submitting?'Signing in…':'Sign in'}</span></button></form></AuthFrame>
 }
 
 export function RegisterPage() {
   const { register }=useAuth();const navigate=useNavigate();const [error,setError]=useState('');const [submitting,setSubmitting]=useState(false)
   const submit=async(event)=>{event.preventDefault();setSubmitting(true);setError('');const values=Object.fromEntries(new FormData(event.currentTarget));try{await register(values);navigate('/')}catch(requestError){setError(requestError.message)}finally{setSubmitting(false)}}
-  return <AuthFrame title="Create account" description="Start with a local Silicon identity." footer={<>Already registered? <Link to="/login">Sign in</Link></>}><form className="form-stack" onSubmit={submit}><Field label="Display name"><input name="displayName" autoComplete="name" maxLength="120" required /></Field><Field label="Email"><input name="email" type="email" autoComplete="email" required /></Field><Field label="Password" hint="At least 12 characters. Passwords are hashed with Argon2id."><input name="password" type="password" autoComplete="new-password" minLength="12" required /></Field>{error&&<Notice tone="danger">{error}</Notice>}<button className="button primary wide" disabled={submitting}>{submitting?'Creating…':'Create account'}</button></form></AuthFrame>
+  return <AuthFrame title="Create account" description="Start with a local Silicon identity." footer={<>Already registered? <Link to="/login">Sign in</Link></>}><form className="form-stack" onSubmit={submit}><Field label="Display name"><input name="displayName" autoComplete="name" maxLength="120" required /></Field><Field label="Email"><input name="email" type="email" autoComplete="email" required /></Field><Field label="Password" hint="At least 12 characters. Passwords are hashed with Argon2id."><input name="password" type="password" autoComplete="new-password" minLength="12" required /></Field>{error&&<Notice tone="danger">{error}</Notice>}<button className="button primary wide" disabled={submitting}><UserPlusIcon size={17} aria-hidden="true" /><span>{submitting?'Creating…':'Create account'}</span></button></form></AuthFrame>
 }
