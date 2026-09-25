@@ -24,7 +24,9 @@ import (
 	"github.com/itsmangooo/Silicon/backend/db"
 	"github.com/itsmangooo/Silicon/backend/internal/config"
 	"github.com/itsmangooo/Silicon/backend/internal/deployments"
+	"github.com/itsmangooo/Silicon/backend/internal/execution"
 	"github.com/itsmangooo/Silicon/backend/internal/jobs"
+	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -34,6 +36,79 @@ type testClient struct {
 	client *http.Client
 	base   string
 	csrf   string
+}
+
+type fakeRuntime struct {
+	mu        sync.Mutex
+	spec      runtimeprovider.DeploymentSpec
+	instances map[string]runtimeprovider.InstanceStatus
+	actions   []string
+	next      int
+}
+
+func (f *fakeRuntime) Deploy(_ context.Context, spec runtimeprovider.DeploymentSpec) (runtimeprovider.InstanceStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	copiedEnvironment := make(map[string]string, len(spec.Environment))
+	for name, value := range spec.Environment {
+		copiedEnvironment[name] = value
+	}
+	spec.Environment = copiedEnvironment
+	f.spec = spec
+	f.next++
+	now := time.Now().UTC()
+	status := runtimeprovider.InstanceStatus{InstanceID: fmt.Sprintf("managed-container-%d", f.next), Image: spec.Image, State: "running", Health: "running", Healthy: true, HostAddress: spec.HostAddress, HostPort: spec.HostPort, CreatedAt: &now, StartedAt: &now}
+	if f.instances == nil {
+		f.instances = map[string]runtimeprovider.InstanceStatus{}
+	}
+	f.instances[status.InstanceID] = status
+	return status, nil
+}
+func (f *fakeRuntime) Start(_ context.Context, id string) error {
+	f.record("start", id, "running", "running")
+	return nil
+}
+func (f *fakeRuntime) Stop(_ context.Context, id string) error {
+	f.record("stop", id, "exited", "exited")
+	return nil
+}
+func (f *fakeRuntime) Restart(_ context.Context, id string) error {
+	f.record("restart", id, "running", "running")
+	return nil
+}
+func (f *fakeRuntime) Remove(_ context.Context, id string) error {
+	f.record("remove", id, "removed", "unknown")
+	return nil
+}
+func (f *fakeRuntime) Inspect(_ context.Context, id string) (runtimeprovider.InstanceStatus, error) {
+	return f.current(id)
+}
+func (f *fakeRuntime) Status(_ context.Context, id string) (runtimeprovider.InstanceStatus, error) {
+	return f.current(id)
+}
+func (f *fakeRuntime) Logs(context.Context, string, runtimeprovider.LogRequest) (<-chan runtimeprovider.LogLine, error) {
+	result := make(chan runtimeprovider.LogLine, 2)
+	result <- runtimeprovider.LogLine{Timestamp: time.Now().UTC(), Stream: "stdout", Message: "runtime output <script>is text</script>"}
+	result <- runtimeprovider.LogLine{Timestamp: time.Now().UTC(), Stream: "stderr", Message: "diagnostic"}
+	close(result)
+	return result, nil
+}
+func (f *fakeRuntime) record(action, id, state, health string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.actions = append(f.actions, action+":"+id)
+	status := f.instances[id]
+	status.State, status.Health, status.Healthy = state, health, state == "running"
+	f.instances[id] = status
+}
+func (f *fakeRuntime) current(id string) (runtimeprovider.InstanceStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	status, ok := f.instances[id]
+	if !ok {
+		return runtimeprovider.InstanceStatus{}, errors.New("not found")
+	}
+	return status, nil
 }
 
 func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
@@ -64,8 +139,10 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cloudflareServer, cloudflareState := newCloudflareServer(t)
 	defer cloudflareServer.Close()
-	cfg := config.Config{DatabaseURL: databaseURL, CookieName: "silicon_test_session", SessionTTL: time.Hour, FrontendOrigin: "http://localhost:5173", GitHubWebhookSecret: "webhook-test-secret", EncryptionKey: bytes.Repeat([]byte{5}, 32), CloudflareAPIURL: cloudflareServer.URL}
-	server := httptest.NewServer(New(cfg, pool, logger).Handler())
+	cfg := config.Config{DatabaseURL: databaseURL, CookieName: "silicon_test_session", SessionTTL: time.Hour, FrontendOrigin: "http://localhost:5173", GitHubWebhookSecret: "webhook-test-secret", EncryptionKey: bytes.Repeat([]byte{5}, 32), CloudflareAPIURL: cloudflareServer.URL, RuntimeLogFollowTimeout: time.Minute}
+	dockerRuntime := &fakeRuntime{}
+	apiServer := NewWithProviders(cfg, pool, logger, dockerRuntime, nil)
+	server := httptest.NewServer(apiServer.Handler())
 	defer server.Close()
 	owner := newTestClient(t, server.URL)
 	viewer := newTestClient(t, server.URL)
@@ -215,6 +292,77 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	}
 	if healthy != 1 || superseded != 6 {
 		t.Fatalf("ordered results healthy=%d superseded=%d", healthy, superseded)
+	}
+
+	// Docker image deployments use the same job runner and RuntimeProvider as
+	// GitHub builds. Configuration and encrypted secrets are resolved only for
+	// the scoped application at execution time.
+	runtimeApplication := owner.post("/organizations/"+orgA+"/environments/"+environmentID+"/applications", map[string]any{"name": "web", "sourceType": "docker_image", "image": "nginx:alpine", "internalPort": 80, "hostAddress": "127.0.0.1", "publishedPort": 32781}, http.StatusCreated)
+	runtimeApplicationID := stringField(t, runtimeApplication, "id")
+	owner.put("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "APP_MODE", "value": "production"}}}, http.StatusOK)
+	owner.put("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/secrets/API_TOKEN", map[string]any{"value": "runtime-secret-value"}, http.StatusOK)
+	secretView := owner.get("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/secrets", http.StatusOK)
+	encodedSecrets, _ := json.Marshal(secretView)
+	if bytes.Contains(encodedSecrets, []byte("runtime-secret-value")) || len(arrayField(t, secretView, "secrets")) != 1 {
+		t.Fatalf("secret API exposed plaintext or metadata is missing: %s", encodedSecrets)
+	}
+	var encryptedSecret []byte
+	if err := pool.QueryRow(ctx, `SELECT encrypted_value FROM secrets WHERE organization_id=$1 AND application_id=$2 AND name='API_TOKEN'`, orgA, runtimeApplicationID).Scan(&encryptedSecret); err != nil || bytes.Contains(encryptedSecret, []byte("runtime-secret-value")) {
+		t.Fatalf("secret encryption failed: err=%v", err)
+	}
+	var secretAudit string
+	if err := pool.QueryRow(ctx, `SELECT metadata::text FROM audit_events WHERE organization_id=$1 AND action='secret.changed' ORDER BY created_at DESC LIMIT 1`, orgA).Scan(&secretAudit); err != nil || strings.Contains(secretAudit, "runtime-secret-value") {
+		t.Fatalf("secret leaked into audit metadata: %q err=%v", secretAudit, err)
+	}
+	viewer.put("/organizations/"+orgB+"/applications/"+runtimeApplicationID+"/secrets/CROSS_TENANT", map[string]any{"value": "forbidden"}, http.StatusNotFound)
+
+	firstRuntimeDeployment := owner.post("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/deployments", map[string]any{}, http.StatusCreated)
+	dockerRunner := jobs.Runner{Pool: pool, Executor: execution.DockerDeploymentExecutor{Pool: pool, Runtime: dockerRuntime, Secrets: apiServer.secrets, DockerBinary: "docker"}, Logger: logger, WorkerID: "docker-integration-test"}
+	if err := dockerRunner.RunOnce(ctx); err != nil {
+		t.Fatalf("Docker image deployment: %v", err)
+	}
+	dockerRuntime.mu.Lock()
+	capturedSpec := dockerRuntime.spec
+	dockerRuntime.mu.Unlock()
+	if capturedSpec.Image != "nginx:alpine" || !capturedSpec.PullImage || capturedSpec.Environment["APP_MODE"] != "production" || capturedSpec.Environment["API_TOKEN"] != "runtime-secret-value" || capturedSpec.HostAddress != "127.0.0.1" || capturedSpec.HostPort != 32781 {
+		t.Fatal("runtime deployment spec is incomplete")
+	}
+	var runtimeID, runtimeState, deploymentState string
+	if err := pool.QueryRow(ctx, `SELECT external_id,state FROM runtime_instances WHERE deployment_id=$1`, stringField(t, firstRuntimeDeployment, "id")).Scan(&runtimeID, &runtimeState); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT status FROM deployments WHERE id=$1`, stringField(t, firstRuntimeDeployment, "id")).Scan(&deploymentState); err != nil || runtimeID != "managed-container-1" || runtimeState != "running" || deploymentState != "healthy" {
+		t.Fatalf("persisted runtime id=%q state=%q deployment=%q err=%v", runtimeID, runtimeState, deploymentState, err)
+	}
+
+	// A newer healthy instance replaces only the prior database-owned instance.
+	secondRuntimeDeployment := owner.post("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/deployments", map[string]any{"image": "nginx:stable-alpine"}, http.StatusCreated)
+	if err := dockerRunner.RunOnce(ctx); err != nil {
+		t.Fatalf("replacement Docker deployment: %v", err)
+	}
+	var removedAt *time.Time
+	if err := pool.QueryRow(ctx, `SELECT removed_at FROM runtime_instances WHERE deployment_id=$1`, stringField(t, firstRuntimeDeployment, "id")).Scan(&removedAt); err != nil || removedAt == nil {
+		t.Fatalf("previous runtime was not cleaned up: removedAt=%v err=%v", removedAt, err)
+	}
+	currentRuntime := owner.get("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/runtime", http.StatusOK)
+	currentInstance := currentRuntime["instance"].(map[string]any)
+	if currentInstance["instanceId"] != "managed-container-2" || currentInstance["deploymentId"] != stringField(t, secondRuntimeDeployment, "id") {
+		t.Fatalf("current runtime=%v", currentRuntime)
+	}
+	logView := owner.get("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/runtime/logs?tail=20", http.StatusOK)
+	logJSON, _ := json.Marshal(logView)
+	if !bytes.Contains(logJSON, []byte("<script>is text</script>")) || len(arrayField(t, logView, "logs")) != 2 {
+		t.Fatalf("runtime logs missing untrusted text: %s", logJSON)
+	}
+	owner.post("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/runtime/stop", map[string]any{}, http.StatusOK)
+	owner.post("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/runtime/start", map[string]any{}, http.StatusOK)
+	owner.post("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/runtime/restart", map[string]any{}, http.StatusOK)
+	owner.post("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/runtime/remove", map[string]any{}, http.StatusOK)
+	dockerRuntime.mu.Lock()
+	actions := strings.Join(dockerRuntime.actions, ",")
+	dockerRuntime.mu.Unlock()
+	if !strings.Contains(actions, "remove:managed-container-1") || !strings.Contains(actions, "stop:managed-container-2") || !strings.Contains(actions, "start:managed-container-2") || !strings.Contains(actions, "restart:managed-container-2") || !strings.Contains(actions, "remove:managed-container-2") {
+		t.Fatalf("runtime actions were not scoped to persisted managed instances: %s", actions)
 	}
 
 	cloudflare := owner.post("/organizations/"+orgA+"/integrations/cloudflare", map[string]any{"accountId": "account-1", "apiToken": "scoped-secret-token"}, http.StatusCreated)

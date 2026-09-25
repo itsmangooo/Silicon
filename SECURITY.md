@@ -38,7 +38,7 @@ GitHub webhooks are size-limited and HMAC-SHA-256 verified before JSON decoding.
 
 Cloudflare API and tunnel tokens are encrypted with AES-256-GCM and organization-bound authenticated context. `SILICON_ENCRYPTION_KEY` must be supplied by the deployment secret manager, backed up securely, and never committed. DNS updates and deletes require Silicon ownership metadata; an existing unrelated record becomes a conflict. Externally managed tunnels cannot be modified through Silicon.
 
-The optional local Docker executor grants the control plane high privilege over the host Docker daemon. Leave it disabled unless the control plane host is an intended workload target, restrict host access, and run only reviewed repositories. Source archives are bounded, reject links and path traversal, and containers receive no published host port automatically.
+The optional local Docker provider grants the control plane high privilege over the host Docker daemon. Leave it disabled unless the control-plane host is an intended workload target, restrict host access, and run only reviewed images/repositories. Source archives are bounded, reject links and path traversal, and containers receive no published host port automatically. Lifecycle APIs resolve a tenant-scoped database instance and the provider verifies Silicon ownership labels before every action, including logs and removal.
 
 ## External identity
 
@@ -46,7 +46,7 @@ OIDC execution is not enabled. The provider contract requires a mature library t
 
 ## Secrets
 
-The schema and `SecretProvider` contract distinguish secrets from normal environment variables. No secret API is exposed in Milestone 1 because a production-quality encryption-key lifecycle is not yet present. Before enabling local encrypted secrets, implement versioned authenticated encryption, key rotation, locked-down key loading, one-way create/update responses, redaction tests, and tenant-isolation tests.
+The schema and `SecretProvider` contract distinguish secrets from normal environment variables. The local provider uses AES-256-GCM with organization/application/name authenticated context and one-way create/update responses. `SILICON_ENCRYPTION_KEY` is host-supplied and must be protected and backed up separately. Secret values never appear in audit metadata, API reads, deployment events, or structured logs. Docker administrators can inspect container environment metadata and are therefore part of the trusted boundary. Automated key rotation is not yet implemented.
 
 ## Reporting
 

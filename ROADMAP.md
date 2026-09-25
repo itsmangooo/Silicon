@@ -22,9 +22,15 @@ Milestone 1 expressly stops before workload execution.
 - Cloudflare scoped-token connection, zone selection, and owned DNS reconciliation
 - Optional remotely managed Cloudflare Tunnel with shared-route preservation
 
-## Candidate Milestone 2 — local runtime execution
+## Local Docker runtime increment
 
-After a separate design/security review: PostgreSQL-backed jobs, a narrowly scoped Docker runtime adapter, typed deployment operations, environment configuration, encrypted local secrets with key rotation, runtime status, deployment events, and real logs. No general remote shell.
+- `DockerRuntimeProvider` deploy/start/stop/restart/remove/inspect/status/logs operations
+- Existing image pulls and exact-commit Dockerfile builds on one runtime path
+- Persisted runtime instances, explicit local port publication, real health state, and deterministic cleanup
+- Ordinary environment variables and AES-256-GCM local application secrets
+- Bounded historical and live runtime logs
+
+Automated encryption-key rotation, registry credential management, and zero-downtime fixed-port replacement remain future hardening work. No general remote shell was introduced.
 
 ## Candidate Milestone 3 — managed server agent
 

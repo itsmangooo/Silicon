@@ -1,10 +1,11 @@
 openapi: 3.1.0
 info:
   title: Silicon Control Plane API
-  version: 0.2.0
+  version: 0.3.0
   description: >-
     Silicon control-plane API with local authentication, organization-scoped
-    records, GitHub push automation, and Cloudflare DNS/tunnel integration.
+    records, GitHub push automation, Cloudflare DNS/tunnel integration, and a
+    local Docker runtime provider.
 servers:
   - url: http://localhost:8080/api/v1
 tags:
@@ -19,6 +20,8 @@ tags:
   - name: GitHub
   - name: Cloudflare
   - name: Domains
+  - name: Runtime
+  - name: Secrets
 paths:
   /auth/register:
     post:
@@ -262,11 +265,100 @@ paths:
         '200': {description: Deployments, content: {application/json: {schema: {type: object, properties: {deployments: {type: array, items: {$ref: '#/components/schemas/Deployment'}}}}}}}
     post:
       tags: [Deployments]
-      summary: Create a queued deployment record without execution
+      summary: Queue a deployment for the configured runtime provider
       parameters: [{$ref: '#/components/parameters/CSRFToken'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DeploymentInput'}}}}
       responses:
-        '201': {description: Queued record, content: {application/json: {schema: {$ref: '#/components/schemas/Deployment'}}}}
+        '201': {description: Queued deployment, content: {application/json: {schema: {$ref: '#/components/schemas/Deployment'}}}}
+  /organizations/{organizationID}/applications/{applicationID}/environment-variables:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/ApplicationID'}
+    get:
+      tags: [Applications]
+      summary: List ordinary application environment variables
+      responses:
+        '200': {description: Variables, content: {application/json: {schema: {type: object, properties: {variables: {type: array, items: {$ref: '#/components/schemas/EnvironmentVariable'}}}}}}}
+    put:
+      tags: [Applications]
+      summary: Replace ordinary application environment variables
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [variables]
+              properties: {variables: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/EnvironmentVariableInput'}}}
+      responses:
+        '200': {description: Variables replaced}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /organizations/{organizationID}/applications/{applicationID}/secrets:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/ApplicationID'}
+    get:
+      tags: [Secrets]
+      summary: List write-only secret metadata
+      responses:
+        '200': {description: Secret metadata, content: {application/json: {schema: {type: object, properties: {secrets: {type: array, items: {$ref: '#/components/schemas/SecretMetadata'}}}}}}}
+  /organizations/{organizationID}/applications/{applicationID}/secrets/{secret}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/ApplicationID'}
+      - {name: secret, in: path, required: true, description: Environment-style name for PUT or UUID for DELETE, schema: {type: string}}
+    put:
+      tags: [Secrets]
+      summary: Create or rotate an encrypted local secret
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [value], properties: {value: {type: string, writeOnly: true, maxLength: 65536}}}}}}
+      responses:
+        '200': {description: Secret stored; plaintext is never returned}
+        '503': {description: Encryption key unavailable}
+    delete:
+      tags: [Secrets]
+      summary: Delete an application secret
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses:
+        '204': {description: Deleted}
+  /organizations/{organizationID}/applications/{applicationID}/runtime:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/ApplicationID'}
+    get:
+      tags: [Runtime]
+      summary: Inspect the current persisted instance and refresh it from Docker
+      responses:
+        '200': {description: Current runtime, content: {application/json: {schema: {type: object, properties: {instance: {oneOf: [{$ref: '#/components/schemas/RuntimeInstance'}, {type: 'null'}]}, providerAvailable: {type: boolean}, providerError: {type: string}}}}}}
+  /organizations/{organizationID}/applications/{applicationID}/runtime/{action}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/ApplicationID'}
+      - {name: action, in: path, required: true, schema: {type: string, enum: [start, stop, restart, remove]}}
+    post:
+      tags: [Runtime]
+      summary: Apply a lifecycle action to the current Silicon-managed instance
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses:
+        '200': {description: Updated runtime, content: {application/json: {schema: {$ref: '#/components/schemas/RuntimeInstance'}}}}
+        '503': {description: Runtime provider unavailable}
+  /organizations/{organizationID}/applications/{applicationID}/runtime/logs:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/ApplicationID'}
+      - {name: tail, in: query, schema: {type: integer, minimum: 0, maximum: 1000, default: 200}}
+      - {name: follow, in: query, schema: {type: boolean, default: false}}
+      - {name: since, in: query, schema: {type: string, format: date-time}}
+    get:
+      tags: [Runtime]
+      summary: Read bounded historical logs or follow them using server-sent events
+      responses:
+        '200':
+          description: JSON log lines when follow is false; text/event-stream when true
+          content:
+            application/json: {schema: {type: object, properties: {logs: {type: array, items: {$ref: '#/components/schemas/RuntimeLogLine'}}}}}
+            text/event-stream: {schema: {type: string}}
   /organizations/{organizationID}/deployments/{deploymentID}/transitions:
     parameters:
       - {$ref: '#/components/parameters/OrganizationID'}
@@ -516,6 +608,8 @@ components:
         sourceType: {type: string, enum: [docker_image, git_dockerfile, compose], default: docker_image}
         image: {type: string, maxLength: 500}
         internalPort: {type: integer, minimum: 1, maximum: 65535}
+        hostAddress: {type: string, description: Explicit IPv4 or IPv6 bind address; omit to publish no host port}
+        publishedPort: {type: integer, minimum: 1, maximum: 65535}
     Application:
       allOf:
         - {$ref: '#/components/schemas/ApplicationInput'}
@@ -526,6 +620,41 @@ components:
             projectId: {$ref: '#/components/schemas/UUID'}
             environmentId: {$ref: '#/components/schemas/UUID'}
             createdAt: {$ref: '#/components/schemas/Timestamp'}
+    EnvironmentVariableInput:
+      type: object
+      additionalProperties: false
+      required: [name, value]
+      properties: {name: {type: string, pattern: '^[A-Za-z_][A-Za-z0-9_]*$'}, value: {type: string, maxLength: 32768}}
+    EnvironmentVariable:
+      allOf:
+        - {$ref: '#/components/schemas/EnvironmentVariableInput'}
+        - {type: object, properties: {updatedAt: {$ref: '#/components/schemas/Timestamp'}}}
+    SecretMetadata:
+      type: object
+      properties: {id: {$ref: '#/components/schemas/UUID'}, name: {type: string}, provider: {type: string, enum: [local]}, createdAt: {$ref: '#/components/schemas/Timestamp'}, updatedAt: {$ref: '#/components/schemas/Timestamp'}}
+    RuntimeInstance:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        organizationId: {$ref: '#/components/schemas/UUID'}
+        applicationId: {$ref: '#/components/schemas/UUID'}
+        deploymentId: {$ref: '#/components/schemas/UUID'}
+        provider: {type: string, enum: [docker]}
+        instanceId: {type: string}
+        image: {type: string}
+        state: {type: string}
+        health: {type: string, enum: [unknown, starting, healthy, unhealthy, running, exited]}
+        containerPort: {type: [integer, 'null']}
+        hostAddress: {type: [string, 'null']}
+        hostPort: {type: [integer, 'null']}
+        runtimeCreatedAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        runtimeStartedAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        runtimeFinishedAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        lastInspectedAt: {$ref: '#/components/schemas/Timestamp'}
+        removedAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+    RuntimeLogLine:
+      type: object
+      properties: {timestamp: {$ref: '#/components/schemas/Timestamp'}, stream: {type: string, enum: [stdout, stderr]}, message: {type: string}}
     DeploymentStatus: {type: string, enum: [queued, preparing, building, deploying, starting, healthy, failed, cancelled, superseded, rolled_back]}
     DeploymentInput:
       type: object

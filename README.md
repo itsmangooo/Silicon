@@ -116,6 +116,10 @@ The REST API is rooted at `/api/v1`. Its OpenAPI contract lives at [`backend/ope
 - `/organizations/{organizationID}/projects/{projectID}/environments`
 - `/organizations/{organizationID}/environments/{environmentID}/applications`
 - `/organizations/{organizationID}/applications/{applicationID}/deployments`
+- `/organizations/{organizationID}/applications/{applicationID}/environment-variables`
+- `/organizations/{organizationID}/applications/{applicationID}/secrets`
+- `/organizations/{organizationID}/applications/{applicationID}/runtime`
+- `/organizations/{organizationID}/applications/{applicationID}/runtime/logs`
 - `/organizations/{organizationID}/servers`
 - `/organizations/{organizationID}/members`
 - `/organizations/{organizationID}/identity-providers`
@@ -129,13 +133,16 @@ Authentication uses an opaque server-side session in an HTTP-only cookie. Unsafe
 
 ## Current boundaries
 
-Implemented means the record and control-plane behavior is real and PostgreSQL-backed. It does not imply a workload is running. In particular:
+Runtime records and control-plane behavior are PostgreSQL-backed. When the local provider is enabled, Docker state—not deployment status—is authoritative for a running workload. Current boundaries are:
 
-- deployment creation and verified GitHub pushes enter the same persistent job runner; local Git+Dockerfile execution requires the explicit `SILICON_LOCAL_DOCKER_ENABLED=true` opt-in;
+- Docker image deployment and exact-revision GitHub Dockerfile builds enter the same persistent job runner and `DockerRuntimeProvider`; local execution requires the explicit `SILICON_LOCAL_DOCKER_ENABLED=true` opt-in;
+- environment variables are readable application configuration; local secrets are AES-256-GCM encrypted, write-only through the API, and require `SILICON_ENCRYPTION_KEY`;
+- ports are never published implicitly; an IP address and host port must both be configured;
+- runtime inspection, lifecycle actions, bounded historical logs, and bounded live SSE logs operate only on persisted Silicon-managed containers;
 - servers are inventory records; there is no agent and no remote shell;
 - `ExternalRoutingProvider` reports externally managed routing/TLS semantics; it changes no proxy configuration;
 - OIDC/Authentik configuration records are disabled planning records; the OIDC login flow is not activated;
-- secret storage has a schema/provider boundary, but no secret API is exposed until encryption-key lifecycle support is complete.
+- Docker execution is local to the control-plane host; registry credential management, remote agents, and Compose execution are not implemented.
 
 Provider credentials are handled separately: GitHub App secrets remain process configuration, while Cloudflare API and tunnel tokens use authenticated encryption at rest. See [GitHub integration](docs/integrations/github.md) and [Cloudflare integration](docs/integrations/cloudflare.md).
 

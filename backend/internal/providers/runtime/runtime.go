@@ -1,24 +1,37 @@
 package runtime
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type DeploymentSpec struct {
-	DeploymentID string
-	Application  string
-	Image        string
-	InternalPort int
-	Environment  map[string]string
-	SecretNames  []string
+	DeploymentID   string
+	OrganizationID string
+	ApplicationID  string
+	Application    string
+	Image          string
+	PullImage      bool
+	InternalPort   int
+	HostAddress    string
+	HostPort       int
+	Environment    map[string]string
 }
 
 type InstanceStatus struct {
-	InstanceID string
-	State      string
-	Healthy    bool
+	InstanceID  string     `json:"instanceId"`
+	Image       string     `json:"image"`
+	State       string     `json:"state"`
+	Health      string     `json:"health"`
+	Healthy     bool       `json:"healthy"`
+	HostAddress string     `json:"hostAddress,omitempty"`
+	HostPort    int        `json:"hostPort,omitempty"`
+	CreatedAt   *time.Time `json:"createdAt,omitempty"`
+	StartedAt   *time.Time `json:"startedAt,omitempty"`
+	FinishedAt  *time.Time `json:"finishedAt,omitempty"`
 }
 
 // Provider is the boundary between Silicon's deployment domain and a runtime.
-// Milestone 1 defines the contract but deliberately ships no execution adapter.
 type Provider interface {
 	Deploy(context.Context, DeploymentSpec) (InstanceStatus, error)
 	Start(context.Context, string) error
@@ -33,10 +46,11 @@ type Provider interface {
 type LogRequest struct {
 	Follow bool
 	Tail   int
+	Since  time.Time
 }
 
 type LogLine struct {
-	Timestamp string
-	Stream    string
-	Message   string
+	Timestamp time.Time `json:"timestamp"`
+	Stream    string    `json:"stream"`
+	Message   string    `json:"message"`
 }

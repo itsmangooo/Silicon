@@ -20,16 +20,21 @@ import (
 	"github.com/itsmangooo/Silicon/backend/internal/config"
 	"github.com/itsmangooo/Silicon/backend/internal/cryptoenvelope"
 	"github.com/itsmangooo/Silicon/backend/internal/deployments"
+	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
+	secretprovider "github.com/itsmangooo/Silicon/backend/internal/providers/secrets"
+	localsecrets "github.com/itsmangooo/Silicon/backend/internal/providers/secrets/local"
 	"github.com/itsmangooo/Silicon/backend/internal/store"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type API struct {
-	cfg    config.Config
-	repo   store.Repository
-	logger *slog.Logger
-	box    *cryptoenvelope.Box
+	cfg     config.Config
+	repo    store.Repository
+	logger  *slog.Logger
+	box     *cryptoenvelope.Box
+	runtime runtimeprovider.Provider
+	secrets secretprovider.Provider
 }
 
 type contextKey string
@@ -44,9 +49,19 @@ const (
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 func New(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) *API {
-	api := &API{cfg: cfg, repo: store.Repository{Pool: pool}, logger: logger}
+	return NewWithProviders(cfg, pool, logger, nil, nil)
+}
+
+func NewWithProviders(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger, runtime runtimeprovider.Provider, secrets secretprovider.Provider) *API {
+	if cfg.RuntimeLogFollowTimeout <= 0 {
+		cfg.RuntimeLogFollowTimeout = 5 * time.Minute
+	}
+	api := &API{cfg: cfg, repo: store.Repository{Pool: pool}, logger: logger, runtime: runtime, secrets: secrets}
 	if box, err := cryptoenvelope.New(cfg.EncryptionKey); err == nil {
 		api.box = &box
+		if api.secrets == nil {
+			api.secrets = localsecrets.Provider{Pool: pool, Box: box}
+		}
 	}
 	return api
 }
@@ -79,6 +94,14 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/deployments", a.org(authorization.DeploymentRead, http.HandlerFunc(a.listDeployments)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/applications/{applicationID}/deployments", a.org(authorization.DeploymentCreate, http.HandlerFunc(a.createDeployment)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/deployments/{deploymentID}/transitions", a.org(authorization.DeploymentCreate, http.HandlerFunc(a.transitionDeployment)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/environment-variables", a.org(authorization.ApplicationRead, http.HandlerFunc(a.listEnvironmentVariables)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/applications/{applicationID}/environment-variables", a.org(authorization.ApplicationUpdate, http.HandlerFunc(a.replaceEnvironmentVariables)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/secrets", a.org(authorization.ApplicationRead, http.HandlerFunc(a.listSecrets)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/applications/{applicationID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.putSecret)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/applications/{applicationID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.deleteSecret)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/runtime", a.org(authorization.ApplicationRead, http.HandlerFunc(a.getRuntime)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/applications/{applicationID}/runtime/{action}", a.org(authorization.DeploymentCreate, http.HandlerFunc(a.runtimeAction)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/runtime/logs", a.org(authorization.LogsRead, http.HandlerFunc(a.runtimeLogs)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/servers", a.org(authorization.ServerRead, http.HandlerFunc(a.listServers)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/servers", a.org(authorization.ServerManage, http.HandlerFunc(a.createServer)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/identity-providers", a.org(authorization.IdentityProviderRead, http.HandlerFunc(a.listIdentityProviders)))
@@ -382,24 +405,41 @@ func (a *API) listAllApplications(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Name         string  `json:"name"`
-		SourceType   string  `json:"sourceType"`
-		Image        *string `json:"image"`
-		InternalPort *int    `json:"internalPort"`
+		Name          string  `json:"name"`
+		SourceType    string  `json:"sourceType"`
+		Image         *string `json:"image"`
+		InternalPort  *int    `json:"internalPort"`
+		HostAddress   *string `json:"hostAddress"`
+		PublishedPort *int    `json:"publishedPort"`
 	}
 	if !decode(w, r, &input) {
 		return
 	}
 	input.Name = strings.TrimSpace(input.Name)
+	if input.Image != nil {
+		value := strings.TrimSpace(*input.Image)
+		input.Image = &value
+	}
 	if input.SourceType == "" {
 		input.SourceType = "docker_image"
 	}
-	if input.Name == "" || !oneOf(input.SourceType, "docker_image", "git_dockerfile", "compose") || (input.InternalPort != nil && (*input.InternalPort < 1 || *input.InternalPort > 65535)) {
+	if input.HostAddress != nil {
+		value := strings.TrimSpace(*input.HostAddress)
+		input.HostAddress = &value
+	}
+	portsInvalid := input.InternalPort != nil && (*input.InternalPort < 1 || *input.InternalPort > 65535) || input.PublishedPort != nil && (*input.PublishedPort < 1 || *input.PublishedPort > 65535)
+	bindingInvalid := (input.HostAddress == nil) != (input.PublishedPort == nil) || input.PublishedPort != nil && input.InternalPort == nil
+	imageInvalid := input.Image != nil && (strings.HasPrefix(*input.Image, "-") || strings.ContainsAny(*input.Image, " \t\r\n\x00"))
+	if input.Name == "" || !oneOf(input.SourceType, "docker_image", "git_dockerfile", "compose") || portsInvalid || bindingInvalid || imageInvalid || input.HostAddress != nil && net.ParseIP(*input.HostAddress) == nil {
 		validation(w, "Provide a valid application name, source type, and internal port.")
 		return
 	}
+	if input.SourceType == "docker_image" && (input.Image == nil || strings.TrimSpace(*input.Image) == "") {
+		validation(w, "Docker image applications require an image reference.")
+		return
+	}
 	orgID := pathUUID(r, "organizationID")
-	item, err := a.repo.CreateApplication(r.Context(), orgID, pathUUID(r, "environmentID"), currentUser(r.Context()).ID, input.Name, input.SourceType, input.Image, input.InternalPort, requestID(r.Context()), clientIP(r))
+	item, err := a.repo.CreateApplication(r.Context(), orgID, pathUUID(r, "environmentID"), currentUser(r.Context()).ID, input.Name, input.SourceType, input.Image, input.InternalPort, input.HostAddress, input.PublishedPort, requestID(r.Context()), clientIP(r))
 	if err != nil {
 		a.persistenceError(w, err)
 		return

@@ -1,5 +1,7 @@
 const baseUrl = import.meta.env.VITE_API_URL || ''
 
+export const apiUrl = (path) => `${baseUrl}/api/v1${path}`
+
 function cookie(name) {
   return document.cookie
     .split('; ')
@@ -17,7 +19,7 @@ export async function api(path, options = {}) {
     const csrf = cookie('silicon_csrf')
     if (csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf)
   }
-  const response = await fetch(`${baseUrl}/api/v1${path}`, {
+  const response = await fetch(apiUrl(path), {
     ...options,
     method,
     headers,

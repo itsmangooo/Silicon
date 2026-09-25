@@ -1,7 +1,35 @@
-# Runtime
+# Docker runtime
 
-Core Silicon depends on `runtime.Provider`, not Docker. The contract defines typed deploy, lifecycle, inspection, status, and log operations. The deployment specification carries only the fields a provider should need and refers to secret names rather than exposing secret values broadly.
+Core deployment code depends on `runtime.Provider`. `DockerRuntimeProvider` is the first implementation and is enabled only when `SILICON_LOCAL_DOCKER_ENABLED=true`. It uses the configured Docker CLI to deploy, start, stop, restart, remove, inspect, query status, and stream logs. Docker-specific labels, commands, health semantics, and ownership checks remain inside the adapter.
 
-The GitHub integration adds a narrowly scoped, opt-in local Git+Dockerfile executor. It builds an exact commit through the Docker CLI, starts a managed container without publishing a host port, verifies its running/health-check state, and replaces the prior Silicon-managed container. It is not a complete implementation of the broader `runtime.Provider`: remote server lifecycle, environment/secrets injection, logs, and an agent remain unimplemented. Server rows remain inventory records with intentionally unknown connection/health status.
+## Deployment paths
 
-Kubernetes is explicitly out of scope.
+Both supported source paths converge before runtime deployment:
+
+1. `docker_image` pulls the configured image reference.
+2. `git_dockerfile` downloads the exact GitHub commit archive, safely extracts it, and builds a commit-tagged local image.
+3. The shared executor resolves application environment variables and local encrypted secrets.
+4. `DockerRuntimeProvider.Deploy` creates and starts a Silicon-labeled container from the resulting image.
+5. Silicon persists the provider, container ID, image, state, health, timestamps, and port binding in `runtime_instances`.
+
+Compose is rejected. GitHub branches are never resolved again during execution: the job uses the 40-character commit SHA stored by the verified webhook.
+
+## Ports
+
+The internal container port, host publication, and routing target remain separate concepts. No port is published by default. A publication requires both an explicit IP address and host port, for example `127.0.0.1:32781 -> 80`. Silicon never changes an omitted binding into `0.0.0.0`.
+
+Fixed host ports cannot be held by two containers simultaneously. For those deployments Silicon stops the previous managed instance immediately before starting the replacement, restores it if the replacement fails, and removes it after the replacement becomes healthy. This is a deterministic replacement policy, not zero-downtime deployment. Deployments without a published port can start before the old instance is removed.
+
+## Health and lifecycle
+
+Docker is authoritative for runtime state. An image-defined `HEALTHCHECK` reports `starting`, `healthy`, or `unhealthy`; an unhealthy result fails deployment. Without a health check, a running container is the initial health signal. A container that exits during startup fails deployment.
+
+Lifecycle endpoints first resolve the current instance through organization- and application-scoped PostgreSQL data. The Docker adapter then verifies all Silicon ownership labels before operating. The API never accepts an arbitrary container ID. Removed containers retain historical deployment and runtime rows.
+
+## Logs
+
+Historical logs are limited to 1,000 requested lines. Live follow uses server-sent events and is bounded by `SILICON_RUNTIME_LOG_FOLLOW_TIMEOUT` (default five minutes). Timestamps and stdout/stderr stream identity are retained where Docker exposes them. The UI renders every message as plain text.
+
+## Current limitation
+
+The provider talks only to the Docker daemon on the control-plane host. The default Silicon Compose service does not mount the Docker socket. Run the backend on the intended Docker host or provide a deliberately secured Docker CLI/daemon connection. No Silicon Agent, remote-server transport, registry credential UI, Compose execution, or general remote shell exists yet.

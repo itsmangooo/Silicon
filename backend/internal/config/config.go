@@ -11,40 +11,42 @@ import (
 )
 
 type Config struct {
-	Address             string
-	DatabaseURL         string
-	FrontendOrigin      string
-	CookieSecure        bool
-	CookieName          string
-	SessionTTL          time.Duration
-	AutoMigrate         bool
-	LogLevel            slog.Level
-	EncryptionKey       []byte
-	GitHubAppID         int64
-	GitHubPrivateKey    string
-	GitHubWebhookSecret string
-	GitHubAPIURL        string
-	CloudflareAPIURL    string
-	LocalDockerEnabled  bool
-	DockerBinary        string
+	Address                 string
+	DatabaseURL             string
+	FrontendOrigin          string
+	CookieSecure            bool
+	CookieName              string
+	SessionTTL              time.Duration
+	AutoMigrate             bool
+	LogLevel                slog.Level
+	EncryptionKey           []byte
+	GitHubAppID             int64
+	GitHubPrivateKey        string
+	GitHubWebhookSecret     string
+	GitHubAPIURL            string
+	CloudflareAPIURL        string
+	LocalDockerEnabled      bool
+	DockerBinary            string
+	RuntimeLogFollowTimeout time.Duration
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		Address:             env("SILICON_ADDRESS", ":8080"),
-		DatabaseURL:         os.Getenv("DATABASE_URL"),
-		FrontendOrigin:      env("SILICON_FRONTEND_ORIGIN", "http://localhost:5173"),
-		CookieName:          env("SILICON_SESSION_COOKIE", "silicon_session"),
-		SessionTTL:          24 * time.Hour,
-		AutoMigrate:         envBool("SILICON_AUTO_MIGRATE", true),
-		CookieSecure:        envBool("SILICON_COOKIE_SECURE", false),
-		LogLevel:            slog.LevelInfo,
-		GitHubPrivateKey:    os.Getenv("SILICON_GITHUB_PRIVATE_KEY"),
-		GitHubWebhookSecret: os.Getenv("SILICON_GITHUB_WEBHOOK_SECRET"),
-		GitHubAPIURL:        env("SILICON_GITHUB_API_URL", "https://api.github.com"),
-		CloudflareAPIURL:    env("SILICON_CLOUDFLARE_API_URL", "https://api.cloudflare.com/client/v4"),
-		LocalDockerEnabled:  envBool("SILICON_LOCAL_DOCKER_ENABLED", false),
-		DockerBinary:        env("SILICON_DOCKER_BINARY", "docker"),
+		Address:                 env("SILICON_ADDRESS", ":8080"),
+		DatabaseURL:             os.Getenv("DATABASE_URL"),
+		FrontendOrigin:          env("SILICON_FRONTEND_ORIGIN", "http://localhost:5173"),
+		CookieName:              env("SILICON_SESSION_COOKIE", "silicon_session"),
+		SessionTTL:              24 * time.Hour,
+		AutoMigrate:             envBool("SILICON_AUTO_MIGRATE", true),
+		CookieSecure:            envBool("SILICON_COOKIE_SECURE", false),
+		LogLevel:                slog.LevelInfo,
+		GitHubPrivateKey:        os.Getenv("SILICON_GITHUB_PRIVATE_KEY"),
+		GitHubWebhookSecret:     os.Getenv("SILICON_GITHUB_WEBHOOK_SECRET"),
+		GitHubAPIURL:            env("SILICON_GITHUB_API_URL", "https://api.github.com"),
+		CloudflareAPIURL:        env("SILICON_CLOUDFLARE_API_URL", "https://api.cloudflare.com/client/v4"),
+		LocalDockerEnabled:      envBool("SILICON_LOCAL_DOCKER_ENABLED", false),
+		DockerBinary:            env("SILICON_DOCKER_BINARY", "docker"),
+		RuntimeLogFollowTimeout: 5 * time.Minute,
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
@@ -55,6 +57,13 @@ func Load() (Config, error) {
 			return Config{}, errors.New("SILICON_SESSION_TTL must be a duration of at least 15m")
 		}
 		cfg.SessionTTL = duration
+	}
+	if value := os.Getenv("SILICON_RUNTIME_LOG_FOLLOW_TIMEOUT"); value != "" {
+		duration, err := time.ParseDuration(value)
+		if err != nil || duration < 10*time.Second || duration > time.Hour {
+			return Config{}, errors.New("SILICON_RUNTIME_LOG_FOLLOW_TIMEOUT must be between 10s and 1h")
+		}
+		cfg.RuntimeLogFollowTimeout = duration
 	}
 	if value := os.Getenv("SILICON_ENCRYPTION_KEY"); value != "" {
 		key, err := base64.StdEncoding.DecodeString(value)

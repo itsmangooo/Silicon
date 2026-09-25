@@ -16,117 +16,208 @@ import (
 	"github.com/itsmangooo/Silicon/backend/internal/deployments"
 	"github.com/itsmangooo/Silicon/backend/internal/jobs"
 	gitprovider "github.com/itsmangooo/Silicon/backend/internal/providers/git"
+	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
+	secretprovider "github.com/itsmangooo/Silicon/backend/internal/providers/secrets"
+	"github.com/itsmangooo/Silicon/backend/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const maxArchiveBytes int64 = 1 << 30
 
-type LocalDockerExecutor struct {
+type DockerDeploymentExecutor struct {
 	Pool         *pgxpool.Pool
 	Git          gitprovider.Provider
+	Runtime      runtimeprovider.Provider
+	Secrets      secretprovider.Provider
 	DockerBinary string
 }
 
-func (e LocalDockerExecutor) Execute(ctx context.Context, spec jobs.DeploymentSpec, progress func(deployments.State, string) error) error {
-	var installationID int64
-	var repository, sourceType string
-	err := e.Pool.QueryRow(ctx, `SELECT g.installation_id,s.repository_full_name,a.source_type FROM application_git_sources s JOIN github_integrations g ON g.id=s.integration_id AND g.organization_id=s.organization_id JOIN applications a ON a.id=s.application_id AND a.organization_id=s.organization_id WHERE s.application_id=$1 AND s.organization_id=$2 AND g.status='connected'`, spec.ApplicationID, spec.OrganizationID).Scan(&installationID, &repository, &sourceType)
-	if err != nil {
-		return fmt.Errorf("load deployment source: %w", err)
+func (e DockerDeploymentExecutor) Execute(ctx context.Context, spec jobs.DeploymentSpec, progress func(deployments.State, string) error) error {
+	if e.Runtime == nil {
+		return errors.New("Docker runtime provider is not configured")
 	}
-	if sourceType != "git_dockerfile" {
-		return fmt.Errorf("source type %q is not supported by the local Docker executor", sourceType)
+	repository := store.Repository{Pool: e.Pool}
+	application, err := repository.ApplicationByID(ctx, spec.OrganizationID, spec.ApplicationID)
+	if err != nil {
+		return fmt.Errorf("load application: %w", err)
+	}
+	image := strings.TrimSpace(spec.Image)
+	pullImage := false
+	switch application.SourceType {
+	case "docker_image":
+		if image == "" && application.Image != nil {
+			image = strings.TrimSpace(*application.Image)
+		}
+		if image == "" {
+			return errors.New("Docker image application has no image configured")
+		}
+		pullImage = true
+	case "git_dockerfile":
+		image, err = e.buildGitHubRevision(ctx, spec, progress)
+		if err != nil {
+			return err
+		}
+	case "compose":
+		return errors.New("Docker Compose execution is intentionally unsupported")
+	default:
+		return fmt.Errorf("unsupported application source type %q", application.SourceType)
+	}
+	environment, err := repository.ListEnvironmentVariables(ctx, spec.OrganizationID, spec.ApplicationID)
+	if err != nil {
+		return fmt.Errorf("load environment variables: %w", err)
+	}
+	values := make(map[string]string, len(environment))
+	for _, variable := range environment {
+		values[variable.Name] = variable.Value
+	}
+	secrets, err := repository.ListSecretMetadata(ctx, spec.OrganizationID, spec.ApplicationID)
+	if err != nil {
+		return fmt.Errorf("load secret references: %w", err)
+	}
+	if len(secrets) > 0 && e.Secrets == nil {
+		return errors.New("local encrypted secret provider is unavailable")
+	}
+	for _, secret := range secrets {
+		plaintext, resolveErr := e.Secrets.Resolve(ctx, secretprovider.Reference{OrganizationID: spec.OrganizationID.String(), EnvironmentID: application.EnvironmentID.String(), ApplicationID: application.ID.String(), SecretID: secret.ID.String(), Name: secret.Name})
+		if resolveErr != nil {
+			return fmt.Errorf("resolve secret %q: %w", secret.Name, resolveErr)
+		}
+		values[secret.Name] = string(plaintext)
+		for index := range plaintext {
+			plaintext[index] = 0
+		}
+	}
+	if err = progress(deployments.Deploying, "Deploying image through DockerRuntimeProvider"); err != nil {
+		return err
+	}
+	if err = progress(deployments.Starting, "Creating and starting a Silicon-managed container"); err != nil {
+		return err
+	}
+	runtimeSpec := runtimeprovider.DeploymentSpec{
+		DeploymentID: spec.DeploymentID.String(), OrganizationID: spec.OrganizationID.String(), ApplicationID: application.ID.String(), Application: application.Name,
+		Image: image, PullImage: pullImage, Environment: values,
+	}
+	if application.InternalPort != nil {
+		runtimeSpec.InternalPort = *application.InternalPort
+	}
+	if application.HostAddress != nil {
+		runtimeSpec.HostAddress = *application.HostAddress
+	}
+	if application.PublishedPort != nil {
+		runtimeSpec.HostPort = *application.PublishedPort
+	}
+	previous, err := repository.PreviousRuntimeInstances(ctx, spec.OrganizationID, spec.ApplicationID, spec.DeploymentID)
+	if err != nil {
+		return fmt.Errorf("load previous runtime instances: %w", err)
+	}
+	stoppedForBinding := make([]store.RuntimeInstance, 0, len(previous))
+	if runtimeSpec.HostPort > 0 {
+		for _, old := range previous {
+			if err = e.Runtime.Stop(ctx, old.ExternalID); err != nil {
+				for _, stopped := range stoppedForBinding {
+					_ = e.Runtime.Start(ctx, stopped.ExternalID)
+				}
+				return fmt.Errorf("stop previous container for fixed port replacement: %w", err)
+			}
+			stoppedForBinding = append(stoppedForBinding, old)
+		}
+	}
+	status, deployErr := e.Runtime.Deploy(ctx, runtimeSpec)
+	for name := range values {
+		values[name] = ""
+		delete(values, name)
+	}
+	if status.InstanceID != "" {
+		if status.Image == "" {
+			status.Image = image
+		}
+		if _, err = repository.SaveRuntimeInstance(ctx, spec.OrganizationID, spec.ApplicationID, spec.DeploymentID, status, runtimeSpec.InternalPort); err != nil {
+			return fmt.Errorf("persist runtime instance: %w", err)
+		}
+	}
+	if deployErr != nil {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if status.InstanceID != "" {
+			_ = e.Runtime.Remove(cleanupCtx, status.InstanceID)
+			if current, findErr := repository.CurrentRuntimeInstance(cleanupCtx, spec.OrganizationID, spec.ApplicationID); findErr == nil && current.DeploymentID == spec.DeploymentID {
+				_ = repository.MarkRuntimeRemoved(cleanupCtx, spec.OrganizationID, current.ID)
+			}
+		}
+		for _, stopped := range stoppedForBinding {
+			_ = e.Runtime.Start(cleanupCtx, stopped.ExternalID)
+		}
+		return fmt.Errorf("Docker runtime deploy failed: %w", deployErr)
+	}
+	if !status.Healthy {
+		return fmt.Errorf("Docker reported state %q and health %q", status.State, status.Health)
+	}
+	if _, err = e.Pool.Exec(ctx, `UPDATE deployments SET image=$2,updated_at=now() WHERE id=$1`, spec.DeploymentID, image); err != nil {
+		return fmt.Errorf("store deployed image: %w", err)
+	}
+	removed, cleanupErrors := 0, 0
+	for _, old := range previous {
+		if err = e.Runtime.Remove(ctx, old.ExternalID); err != nil {
+			cleanupErrors++
+			continue
+		}
+		if err = repository.MarkRuntimeRemoved(ctx, spec.OrganizationID, old.ID); err != nil {
+			cleanupErrors++
+			continue
+		}
+		removed++
+	}
+	message := fmt.Sprintf("Docker container is %s (%s)", status.Health, shortID(status.InstanceID))
+	if removed > 0 {
+		message += fmt.Sprintf("; removed %d previous managed instance(s)", removed)
+	}
+	if cleanupErrors > 0 {
+		message += fmt.Sprintf("; %d previous instance(s) require cleanup", cleanupErrors)
+	}
+	return progress(deployments.Healthy, message)
+}
+
+func (e DockerDeploymentExecutor) buildGitHubRevision(ctx context.Context, spec jobs.DeploymentSpec, progress func(deployments.State, string) error) (string, error) {
+	if e.Git == nil {
+		return "", errors.New("GitHub provider is not configured")
+	}
+	var installationID int64
+	var repository string
+	err := e.Pool.QueryRow(ctx, `SELECT g.installation_id,s.repository_full_name FROM application_git_sources s JOIN github_integrations g ON g.id=s.integration_id AND g.organization_id=s.organization_id WHERE s.application_id=$1 AND s.organization_id=$2 AND g.status='connected'`, spec.ApplicationID, spec.OrganizationID).Scan(&installationID, &repository)
+	if err != nil {
+		return "", fmt.Errorf("load GitHub source: %w", err)
 	}
 	if repository != spec.Repository {
-		return errors.New("deployment repository no longer matches the application source")
+		return "", errors.New("deployment repository no longer matches the application source")
+	}
+	if len(spec.CommitSHA) != 40 {
+		return "", errors.New("an exact 40-character Git commit SHA is required")
 	}
 	archive, err := e.Git.Archive(ctx, installationID, repository, spec.CommitSHA)
 	if err != nil {
-		return fmt.Errorf("fetch exact GitHub revision: %w", err)
+		return "", fmt.Errorf("fetch exact GitHub revision: %w", err)
 	}
 	defer archive.Close()
 	workdir, err := os.MkdirTemp("", "silicon-build-*")
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer os.RemoveAll(workdir)
 	if err = extractGitHubArchive(archive, workdir); err != nil {
-		return fmt.Errorf("extract source archive: %w", err)
+		return "", fmt.Errorf("extract source archive: %w", err)
 	}
 	if err = progress(deployments.Building, "Building exact GitHub revision "+spec.CommitSHA); err != nil {
-		return err
+		return "", err
 	}
 	image := "silicon/" + spec.ApplicationID.String() + ":" + shortSHA(spec.CommitSHA)
 	binary := e.DockerBinary
 	if binary == "" {
 		binary = "docker"
 	}
-	if err = run(ctx, binary, "build", "--pull", "--label", "silicon.managed=true", "--label", "silicon.application_id="+spec.ApplicationID.String(), "--label", "silicon.commit_sha="+spec.CommitSHA, "-t", image, workdir); err != nil {
-		return fmt.Errorf("docker build failed: %w", err)
+	if _, err = runOutput(ctx, binary, "build", "--pull", "--label", "silicon.managed=true", "--label", "silicon.application_id="+spec.ApplicationID.String(), "--label", "silicon.commit_sha="+spec.CommitSHA, "-t", image, workdir); err != nil {
+		return "", fmt.Errorf("Docker build failed: %w", err)
 	}
-	if err = progress(deployments.Deploying, "Starting image built from exact revision "+spec.CommitSHA); err != nil {
-		return err
-	}
-	name := "silicon-" + compact(spec.ApplicationID.String(), 12) + "-" + compact(spec.DeploymentID.String(), 12)
-	output, err := runOutput(ctx, binary, "run", "--detach", "--restart", "unless-stopped", "--name", name, "--label", "silicon.managed=true", "--label", "silicon.application_id="+spec.ApplicationID.String(), "--label", "silicon.deployment_id="+spec.DeploymentID.String(), "--label", "silicon.commit_sha="+spec.CommitSHA, image)
-	if err != nil {
-		return fmt.Errorf("docker run failed: %w", err)
-	}
-	containerID := strings.TrimSpace(output)
-	if containerID == "" {
-		return errors.New("docker returned an empty container ID")
-	}
-	if err = progress(deployments.Starting, "Verifying the new container is running"); err != nil {
-		return err
-	}
-	if err = waitContainerReady(ctx, binary, containerID); err != nil {
-		_ = run(ctx, binary, "rm", "--force", containerID)
-		return err
-	}
-	old, err := runOutput(ctx, binary, "ps", "--all", "--quiet", "--filter", "label=silicon.managed=true", "--filter", "label=silicon.application_id="+spec.ApplicationID.String())
-	if err != nil {
-		_ = run(ctx, binary, "rm", "--force", containerID)
-		return fmt.Errorf("list previous containers: %w", err)
-	}
-	for _, id := range strings.Fields(old) {
-		if id == containerID || strings.HasPrefix(containerID, id) || strings.HasPrefix(id, containerID) {
-			continue
-		}
-		if err = run(ctx, binary, "rm", "--force", id); err != nil {
-			_ = run(ctx, binary, "rm", "--force", containerID)
-			return fmt.Errorf("remove superseded container: %w", err)
-		}
-	}
-	return progress(deployments.Healthy, "Container is running from exact revision "+spec.CommitSHA)
-}
-
-func waitContainerReady(ctx context.Context, binary, containerID string) error {
-	deadline := time.NewTimer(90 * time.Second)
-	defer deadline.Stop()
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for {
-		state, err := runOutput(ctx, binary, "inspect", "--format", "{{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}", containerID)
-		if err != nil {
-			return fmt.Errorf("inspect new container: %w", err)
-		}
-		fields := strings.Fields(state)
-		if len(fields) == 2 && fields[0] == "true" {
-			switch fields[1] {
-			case "none", "healthy":
-				return nil
-			case "unhealthy":
-				return errors.New("new container health check failed")
-			}
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-deadline.C:
-			return errors.New("new container did not become healthy within 90 seconds")
-		case <-ticker.C:
-		}
-	}
+	return image, nil
 }
 
 func extractGitHubArchive(source io.Reader, destination string) error {
@@ -197,30 +288,55 @@ func extractGitHubArchive(source io.Reader, destination string) error {
 	return nil
 }
 
-func run(ctx context.Context, binary string, args ...string) error {
-	command := exec.CommandContext(ctx, binary, args...)
-	command.Stdout = io.Discard
-	command.Stderr = io.Discard
-	return command.Run()
-}
 func runOutput(ctx context.Context, binary string, args ...string) (string, error) {
 	command := exec.CommandContext(ctx, binary, args...)
-	output, err := command.Output()
-	if len(output) > 1<<20 {
-		return "", errors.New("docker output exceeded one MiB")
+	stdout, stderr := &boundedBuffer{limit: 1 << 20}, &boundedBuffer{limit: 1 << 20}
+	command.Stdout, command.Stderr = stdout, stderr
+	err := command.Run()
+	if err != nil {
+		message := strings.TrimSpace(stderr.String())
+		if message == "" {
+			message = err.Error()
+		}
+		message = strings.ReplaceAll(strings.ReplaceAll(message, "\r", " "), "\n", " ")
+		if len(message) > 500 {
+			message = message[:500]
+		}
+		return "", errors.New(message)
 	}
-	return string(output), err
+	return stdout.String(), nil
 }
+
+type boundedBuffer struct {
+	data     []byte
+	limit    int
+	exceeded bool
+}
+
+func (b *boundedBuffer) Write(value []byte) (int, error) {
+	remaining := b.limit - len(b.data)
+	if remaining > 0 {
+		if remaining > len(value) {
+			remaining = len(value)
+		}
+		b.data = append(b.data, value[:remaining]...)
+	}
+	if remaining < len(value) {
+		b.exceeded = true
+	}
+	return len(value), nil
+}
+
+func (b *boundedBuffer) String() string { return string(b.data) }
 func shortSHA(value string) string {
 	if len(value) > 12 {
 		return value[:12]
 	}
 	return value
 }
-func compact(value string, length int) string {
-	value = strings.ReplaceAll(value, "-", "")
-	if len(value) > length {
-		return value[:length]
+func shortID(value string) string {
+	if len(value) > 12 {
+		return value[:12]
 	}
 	return value
 }

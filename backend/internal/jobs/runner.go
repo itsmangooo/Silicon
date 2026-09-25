@@ -21,6 +21,7 @@ type DeploymentSpec struct {
 	Repository     string
 	Branch         string
 	CommitSHA      string
+	Image          string
 }
 type DeploymentExecutor interface {
 	Execute(context.Context, DeploymentSpec, func(deployments.State, string) error) error
@@ -82,7 +83,7 @@ func (r Runner) RunOnce(ctx context.Context) error {
 	var spec DeploymentSpec
 	var number int64
 	var status string
-	err = conn.QueryRow(ctx, `SELECT id,organization_id,application_id,number,status,repository,branch,commit_sha FROM deployments WHERE id=$1 AND organization_id=$2`, input.DeploymentID, orgID).Scan(&spec.DeploymentID, &spec.OrganizationID, &spec.ApplicationID, &number, &status, &spec.Repository, &spec.Branch, &spec.CommitSHA)
+	err = conn.QueryRow(ctx, `SELECT id,organization_id,application_id,number,status,repository,branch,commit_sha,image FROM deployments WHERE id=$1 AND organization_id=$2`, input.DeploymentID, orgID).Scan(&spec.DeploymentID, &spec.OrganizationID, &spec.ApplicationID, &number, &status, &spec.Repository, &spec.Branch, &spec.CommitSHA, &spec.Image)
 	if err != nil {
 		return r.failJob(ctx, jobID, err)
 	}
@@ -103,7 +104,11 @@ func (r Runner) RunOnce(ctx context.Context) error {
 	if status != "queued" {
 		return r.failJob(ctx, jobID, fmt.Errorf("deployment is %s, expected queued", status))
 	}
-	if err = r.setState(ctx, conn, spec.DeploymentID, deployments.Preparing, "Deployment executor accepted exact revision "+spec.CommitSHA); err != nil {
+	preparingMessage := "Deployment executor accepted workload"
+	if spec.CommitSHA != "" {
+		preparingMessage = "Deployment executor accepted exact revision " + spec.CommitSHA
+	}
+	if err = r.setState(ctx, conn, spec.DeploymentID, deployments.Preparing, preparingMessage); err != nil {
 		return r.failJob(ctx, jobID, err)
 	}
 	executor := r.Executor
