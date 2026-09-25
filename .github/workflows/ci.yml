@@ -78,4 +78,16 @@ jobs:
         working-directory: backend
         env:
           SILICON_DOCKER_INTEGRATION: "1"
-        run: go test -count=1 -timeout=6m -run '^TestDockerRuntimeProviderIntegration$' ./internal/providers/runtime/docker
+        run: |
+          set +e
+          output=$(go test -count=1 -timeout=6m -run '^TestDockerRuntimeProviderIntegration$' ./internal/providers/runtime/docker 2>&1)
+          status=$?
+          printf '%s\n' "$output"
+          if [ "$status" -ne 0 ]; then
+            summary=$(printf '%s' "$output" | tail -c 3000)
+            summary="${summary//'%'/'%25'}"
+            summary="${summary//$'\r'/'%0D'}"
+            summary="${summary//$'\n'/'%0A'}"
+            echo "::error title=Docker runtime integration failed::$summary"
+            exit "$status"
+          fi
