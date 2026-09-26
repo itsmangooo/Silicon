@@ -19,16 +19,15 @@ export function ServersPage() {
     {hasPrivate && <Notice>Cloudflare Tunnel can expose a private target without direct inbound HTTP/HTTPS, but it remains optional.</Notice>}
     <ErrorNotice error={resource.error} />
     <Section title="Server inventory" description="Status reflects the last SSH and Docker check; Silicon does not fabricate online state.">
-      <table><thead><tr><th>Name</th><th>Connection</th><th>Status</th><th>Host</th><th>Docker</th><th>Last check</th><th>Applications</th><th>Action</th></tr></thead><tbody>
-        {resource.loading ? <LoadingRows columns={8} /> : resource.data?.servers.length ? resource.data.servers.map((item) => <tr key={item.id}>
-          <td data-label="Name"><button className="button ghost compact" onClick={() => setSelected(item)}><HardDrivesIcon size={16} aria-hidden="true" /><span>{item.name}</span></button></td>
-          <td data-label="Connection">{item.connectionType}</td><td data-label="Status"><Status value={item.connectionStatus} /></td>
-          <td data-label="Host"><Mono>{item.hostname || '—'}</Mono></td>
-          <td data-label="Docker">{item.dockerAvailable ? <><Status value="available" /> <Mono>{item.dockerVersion}</Mono></> : <Status value="unavailable" />}</td>
+      <table><thead><tr><th>Name</th><th>Connection</th><th>Health</th><th>Last check</th><th>Applications</th><th>Action</th></tr></thead><tbody>
+        {resource.loading ? <LoadingRows columns={6} /> : resource.data?.servers.length ? resource.data.servers.map((item) => <tr key={item.id}>
+          <td data-label="Name"><button className="button ghost compact table-link" onClick={() => setSelected(item)}><HardDrivesIcon size={16} aria-hidden="true" /><span>{item.name}</span></button></td>
+          <td data-label="Connection"><span className="cell-stack"><span>{item.connectionType}</span><Mono>{item.hostname || '—'}{item.connectionType === 'ssh' ? `:${item.sshPort}` : ''}</Mono></span></td>
+          <td data-label="Health"><span className="cell-stack"><Status value={item.connectionStatus} />{item.dockerAvailable ? <span className="cell-subtle">Docker {item.dockerVersion || 'available'}</span> : <span className="cell-subtle">Docker unavailable</span>}</span></td>
           <td data-label="Last check">{formatDate(item.lastCheckedAt)}</td>
           <td data-label="Applications">{resource.data.applications.filter((application) => application.serverId === item.id).length}</td>
           <td data-label="Action"><button className="button ghost compact" onClick={() => setSelected(item)}>Inspect</button></td>
-        </tr>) : <tr><td colSpan="8"><EmptyState title="No servers configured">Add the local Docker host or an SSH-connected Linux server.</EmptyState></td></tr>}
+        </tr>) : <tr><td colSpan="6"><EmptyState title="No servers configured">Add the local Docker host or an SSH-connected Linux server.</EmptyState></td></tr>}
       </tbody></table>
     </Section>
     <ServerForm open={createOpen} onClose={() => setCreateOpen(false)} onSaved={async () => { setCreateOpen(false); await resource.refresh() }} />
@@ -62,7 +61,7 @@ function ServerDetail({ server, applications, organizationId, onClose, onChanged
   }
   const check = async () => { setBusy(true); setError(''); setPresentedFingerprint(''); try { const result = await api(organizationPath(organizationId, `/servers/${server.id}/check`), { method: 'POST' }); await onChanged(result.server) } catch (requestError) { setError(requestError.message); setPresentedFingerprint(requestError.payload?.fingerprint || '') } finally { setBusy(false) } }
   const trust = async () => { setBusy(true); setError(''); try { const result = await api(organizationPath(organizationId, `/servers/${server.id}/trust-host-key`), { method: 'POST', body: { fingerprint: presentedFingerprint } }); setPresentedFingerprint(''); await onChanged(result.server) } catch (requestError) { setError(requestError.message) } finally { setBusy(false) } }
-  return <Dialog title={server.name} open onClose={close}><ErrorNotice error={error} />
+  return <Dialog title={server.name} open wide onClose={close}><ErrorNotice error={error} />
     {server.connectionError && <Notice tone="warning">{server.connectionError}</Notice>}
     {presentedFingerprint && <Notice tone="warning">Presented host key: <Mono>{presentedFingerprint}</Mono>. Verify it out-of-band before trusting.</Notice>}
     <div className="subsection"><h3>Connection</h3><dl className="detail-grid"><Detail label="Provider">{server.connectionType}</Detail><Detail label="Status"><Status value={server.connectionStatus} /></Detail><Detail label="Host"><Mono>{server.hostname || '—'}{server.connectionType === 'ssh' ? `:${server.sshPort}` : ''}</Mono></Detail><Detail label="Username">{server.sshUsername || '—'}</Detail><Detail label="Credential">{server.credentialConfigured ? 'Encrypted key configured' : 'Not required / not configured'}</Detail><Detail label="Trusted host key"><Mono>{server.sshHostKeyFingerprint || 'not trusted'}</Mono></Detail><Detail label="Public address"><Mono>{server.publicAddress || 'tunnel only'}</Mono></Detail><Detail label="Last check">{formatDate(server.lastCheckedAt)}</Detail></dl><div className="form-actions"><button className="button ghost" disabled={busy} onClick={startEditing}><GearIcon size={16} aria-hidden="true" /><span>Configure connection</span></button><button className="button secondary" disabled={busy} onClick={check}><ArrowClockwiseIcon size={16} aria-hidden="true" /><span>Check connection</span></button>{presentedFingerprint && <button className="button primary" disabled={busy} onClick={trust}><KeyIcon size={16} aria-hidden="true" /><span>Trust verified key</span></button>}</div></div>

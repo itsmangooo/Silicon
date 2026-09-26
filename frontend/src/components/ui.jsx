@@ -23,9 +23,9 @@ export function Status({ value }) { return <span className={`status status-${Str
 
 export function Mono({ children }) { return <span className="mono">{children}</span> }
 
-export function Dialog({ title, open, onClose, children }) {
+export function Dialog({ title, open, onClose, children, wide = false }) {
   if (!open) return null
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="dialog-header"><h2 id="dialog-title">{title}</h2><button className="button ghost compact" onClick={onClose} aria-label="Close"><XIcon size={16} aria-hidden="true" /><span>Close</span></button></div>{children}</section></div>
+  return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className={`dialog${wide ? ' dialog-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="dialog-header"><h2 id="dialog-title">{title}</h2><button className="button ghost compact" onClick={onClose} aria-label="Close"><XIcon size={16} aria-hidden="true" /><span>Close</span></button></div>{children}</section></div>
 }
 
 export function Field({ label, hint, children }) { return <label className="field"><span>{label}</span>{children}{hint && <small>{hint}</small>}</label> }
