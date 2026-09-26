@@ -34,7 +34,9 @@ case "$ARCH_NAME" in x86_64|amd64|aarch64|arm64) ;; *) fail "unsupported archite
 case "$PUBLIC_URL" in http://*|https://*) ;; *) fail '--public-url must be an absolute HTTP or HTTPS URL' ;; esac
 case "$PUBLIC_URL" in *" "*) fail '--public-url contains unsafe whitespace' ;; esac
 case "$HTTP_PORT" in ''|*[!0-9]*) fail '--http-port must be numeric' ;; esac
-[ "$HTTP_PORT" -ge 1 ] && [ "$HTTP_PORT" -le 65535 ] || fail '--http-port must be between 1 and 65535'
+if [ "$HTTP_PORT" -lt 1 ] || [ "$HTTP_PORT" -gt 65535 ]; then
+  fail '--http-port must be between 1 and 65535'
+fi
 
 if [ "$TEST_MODE" != "true" ]; then
   command -v git >/dev/null 2>&1 || fail 'git is required'
