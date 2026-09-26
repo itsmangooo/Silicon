@@ -31,6 +31,7 @@ type RuntimeInstance struct {
 	ApplicationID     uuid.UUID  `json:"applicationId"`
 	DeploymentID      uuid.UUID  `json:"deploymentId"`
 	Provider          string     `json:"provider"`
+	ServerID          *uuid.UUID `json:"serverId"`
 	ExternalID        string     `json:"instanceId"`
 	Image             string     `json:"image"`
 	State             string     `json:"state"`
@@ -49,7 +50,7 @@ type RuntimeInstance struct {
 
 func (r Repository) ApplicationByID(ctx context.Context, organizationID, applicationID uuid.UUID) (Application, error) {
 	var item Application
-	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,created_at FROM applications WHERE organization_id=$1 AND id=$2`, organizationID, applicationID).Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.CreatedAt)
+	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,server_id,created_at FROM applications WHERE organization_id=$1 AND id=$2`, organizationID, applicationID).Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.ServerID, &item.CreatedAt)
 	return item, notFound(err)
 }
 
@@ -130,24 +131,24 @@ func (r Repository) RecordAudit(ctx context.Context, organizationID, actorID uui
 
 func (r Repository) SaveRuntimeInstance(ctx context.Context, organizationID, applicationID, deploymentID uuid.UUID, status runtimeprovider.InstanceStatus, containerPort int) (RuntimeInstance, error) {
 	var item RuntimeInstance
-	err := r.Pool.QueryRow(ctx, `INSERT INTO runtime_instances(organization_id,application_id,deployment_id,provider,external_id,image,state,health,container_port,host_address,host_port,runtime_created_at,runtime_started_at,runtime_finished_at) VALUES($1,$2,$3,'docker',$4,$5,$6,$7,$8,NULLIF($9,'')::inet,NULLIF($10,0),$11,$12,$13) ON CONFLICT (deployment_id) DO UPDATE SET external_id=EXCLUDED.external_id,image=EXCLUDED.image,state=EXCLUDED.state,health=EXCLUDED.health,container_port=EXCLUDED.container_port,host_address=EXCLUDED.host_address,host_port=EXCLUDED.host_port,runtime_created_at=EXCLUDED.runtime_created_at,runtime_started_at=EXCLUDED.runtime_started_at,runtime_finished_at=EXCLUDED.runtime_finished_at,last_inspected_at=now(),updated_at=now() RETURNING id,organization_id,application_id,deployment_id,provider,external_id,image,state,health,container_port,host(host_address),host_port,runtime_created_at,runtime_started_at,runtime_finished_at,last_inspected_at,removed_at,created_at,updated_at`, organizationID, applicationID, deploymentID, status.InstanceID, status.Image, status.State, status.Health, nullablePort(containerPort), status.HostAddress, status.HostPort, status.CreatedAt, status.StartedAt, status.FinishedAt).Scan(runtimeScan(&item)...)
+	err := r.Pool.QueryRow(ctx, `INSERT INTO runtime_instances(organization_id,application_id,deployment_id,provider,server_id,external_id,image,state,health,container_port,host_address,host_port,runtime_created_at,runtime_started_at,runtime_finished_at) VALUES($1,$2,$3,'docker',NULLIF($4,'')::uuid,$5,$6,$7,$8,$9,NULLIF($10,'')::inet,NULLIF($11,0),$12,$13,$14) ON CONFLICT (deployment_id) DO UPDATE SET server_id=EXCLUDED.server_id,external_id=EXCLUDED.external_id,image=EXCLUDED.image,state=EXCLUDED.state,health=EXCLUDED.health,container_port=EXCLUDED.container_port,host_address=EXCLUDED.host_address,host_port=EXCLUDED.host_port,runtime_created_at=EXCLUDED.runtime_created_at,runtime_started_at=EXCLUDED.runtime_started_at,runtime_finished_at=EXCLUDED.runtime_finished_at,last_inspected_at=now(),updated_at=now() RETURNING id,organization_id,application_id,deployment_id,provider,server_id,external_id,image,state,health,container_port,host(host_address),host_port,runtime_created_at,runtime_started_at,runtime_finished_at,last_inspected_at,removed_at,created_at,updated_at`, organizationID, applicationID, deploymentID, status.ServerID, status.InstanceID, status.Image, status.State, status.Health, nullablePort(containerPort), status.HostAddress, status.HostPort, status.CreatedAt, status.StartedAt, status.FinishedAt).Scan(runtimeScan(&item)...)
 	return item, err
 }
 
 func (r Repository) UpdateRuntimeInstance(ctx context.Context, organizationID, instanceID uuid.UUID, status runtimeprovider.InstanceStatus) (RuntimeInstance, error) {
 	var item RuntimeInstance
-	err := r.Pool.QueryRow(ctx, `UPDATE runtime_instances SET image=$3,state=$4,health=$5,host_address=NULLIF($6,'')::inet,host_port=NULLIF($7,0),runtime_created_at=COALESCE($8,runtime_created_at),runtime_started_at=$9,runtime_finished_at=$10,last_inspected_at=now(),updated_at=now() WHERE organization_id=$1 AND id=$2 RETURNING id,organization_id,application_id,deployment_id,provider,external_id,image,state,health,container_port,host(host_address),host_port,runtime_created_at,runtime_started_at,runtime_finished_at,last_inspected_at,removed_at,created_at,updated_at`, organizationID, instanceID, status.Image, status.State, status.Health, status.HostAddress, status.HostPort, status.CreatedAt, status.StartedAt, status.FinishedAt).Scan(runtimeScan(&item)...)
+	err := r.Pool.QueryRow(ctx, `UPDATE runtime_instances SET image=$3,state=$4,health=$5,host_address=NULLIF($6,'')::inet,host_port=NULLIF($7,0),runtime_created_at=COALESCE($8,runtime_created_at),runtime_started_at=$9,runtime_finished_at=$10,last_inspected_at=now(),updated_at=now() WHERE organization_id=$1 AND id=$2 RETURNING id,organization_id,application_id,deployment_id,provider,server_id,external_id,image,state,health,container_port,host(host_address),host_port,runtime_created_at,runtime_started_at,runtime_finished_at,last_inspected_at,removed_at,created_at,updated_at`, organizationID, instanceID, status.Image, status.State, status.Health, status.HostAddress, status.HostPort, status.CreatedAt, status.StartedAt, status.FinishedAt).Scan(runtimeScan(&item)...)
 	return item, notFound(err)
 }
 
 func (r Repository) CurrentRuntimeInstance(ctx context.Context, organizationID, applicationID uuid.UUID) (RuntimeInstance, error) {
 	var item RuntimeInstance
-	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,application_id,deployment_id,provider,external_id,image,state,health,container_port,host(host_address),host_port,runtime_created_at,runtime_started_at,runtime_finished_at,last_inspected_at,removed_at,created_at,updated_at FROM runtime_instances WHERE organization_id=$1 AND application_id=$2 AND removed_at IS NULL ORDER BY created_at DESC LIMIT 1`, organizationID, applicationID).Scan(runtimeScan(&item)...)
+	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,application_id,deployment_id,provider,server_id,external_id,image,state,health,container_port,host(host_address),host_port,runtime_created_at,runtime_started_at,runtime_finished_at,last_inspected_at,removed_at,created_at,updated_at FROM runtime_instances WHERE organization_id=$1 AND application_id=$2 AND removed_at IS NULL ORDER BY created_at DESC LIMIT 1`, organizationID, applicationID).Scan(runtimeScan(&item)...)
 	return item, notFound(err)
 }
 
 func (r Repository) PreviousRuntimeInstances(ctx context.Context, organizationID, applicationID, deploymentID uuid.UUID) ([]RuntimeInstance, error) {
-	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,application_id,deployment_id,provider,external_id,image,state,health,container_port,host(host_address),host_port,runtime_created_at,runtime_started_at,runtime_finished_at,last_inspected_at,removed_at,created_at,updated_at FROM runtime_instances WHERE organization_id=$1 AND application_id=$2 AND deployment_id<>$3 AND removed_at IS NULL ORDER BY created_at`, organizationID, applicationID, deploymentID)
+	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,application_id,deployment_id,provider,server_id,external_id,image,state,health,container_port,host(host_address),host_port,runtime_created_at,runtime_started_at,runtime_finished_at,last_inspected_at,removed_at,created_at,updated_at FROM runtime_instances WHERE organization_id=$1 AND application_id=$2 AND deployment_id<>$3 AND removed_at IS NULL ORDER BY created_at`, organizationID, applicationID, deploymentID)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +176,7 @@ func (r Repository) MarkRuntimeRemoved(ctx context.Context, organizationID, inst
 }
 
 func runtimeScan(item *RuntimeInstance) []any {
-	return []any{&item.ID, &item.OrganizationID, &item.ApplicationID, &item.DeploymentID, &item.Provider, &item.ExternalID, &item.Image, &item.State, &item.Health, &item.ContainerPort, &item.HostAddress, &item.HostPort, &item.RuntimeCreatedAt, &item.RuntimeStartedAt, &item.RuntimeFinishedAt, &item.LastInspectedAt, &item.RemovedAt, &item.CreatedAt, &item.UpdatedAt}
+	return []any{&item.ID, &item.OrganizationID, &item.ApplicationID, &item.DeploymentID, &item.Provider, &item.ServerID, &item.ExternalID, &item.Image, &item.State, &item.Health, &item.ContainerPort, &item.HostAddress, &item.HostPort, &item.RuntimeCreatedAt, &item.RuntimeStartedAt, &item.RuntimeFinishedAt, &item.LastInspectedAt, &item.RemovedAt, &item.CreatedAt, &item.UpdatedAt}
 }
 
 func nullablePort(value int) any {

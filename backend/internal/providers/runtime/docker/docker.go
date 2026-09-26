@@ -28,13 +28,17 @@ const (
 )
 
 type Provider struct {
-	Binary        string
-	HealthTimeout time.Duration
+	Binary         string
+	HealthTimeout  time.Duration
+	OrganizationID string
 }
 
 func (p Provider) Deploy(ctx context.Context, spec runtimeprovider.DeploymentSpec) (runtimeprovider.InstanceStatus, error) {
 	if err := validateSpec(spec); err != nil {
 		return runtimeprovider.InstanceStatus{}, err
+	}
+	if p.OrganizationID != "" && spec.OrganizationID != p.OrganizationID {
+		return runtimeprovider.InstanceStatus{}, errors.New("deployment organization does not match this Agent")
 	}
 	if spec.PullImage {
 		if err := p.run(ctx, "pull", "--", spec.Image); err != nil {
@@ -232,6 +236,9 @@ func (p Provider) managedInspect(ctx context.Context, id string) (inspectResult,
 	}
 	if value.Config.Labels[managedLabel] != "true" || value.Config.Labels[deploymentLabel] == "" || value.Config.Labels[applicationLabel] == "" || value.Config.Labels[organizationLabel] == "" {
 		return inspectResult{}, errors.New("refusing to operate on a container not managed by Silicon")
+	}
+	if p.OrganizationID != "" && value.Config.Labels[organizationLabel] != p.OrganizationID {
+		return inspectResult{}, errors.New("refusing to operate on a container owned by another organization")
 	}
 	return value, nil
 }

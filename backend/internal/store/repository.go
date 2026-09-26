@@ -64,17 +64,18 @@ type Environment struct {
 }
 
 type Application struct {
-	ID             uuid.UUID `json:"id"`
-	OrganizationID uuid.UUID `json:"organizationId"`
-	ProjectID      uuid.UUID `json:"projectId"`
-	EnvironmentID  uuid.UUID `json:"environmentId"`
-	Name           string    `json:"name"`
-	SourceType     string    `json:"sourceType"`
-	Image          *string   `json:"image"`
-	InternalPort   *int      `json:"internalPort"`
-	HostAddress    *string   `json:"hostAddress"`
-	PublishedPort  *int      `json:"publishedPort"`
-	CreatedAt      time.Time `json:"createdAt"`
+	ID             uuid.UUID  `json:"id"`
+	OrganizationID uuid.UUID  `json:"organizationId"`
+	ProjectID      uuid.UUID  `json:"projectId"`
+	EnvironmentID  uuid.UUID  `json:"environmentId"`
+	Name           string     `json:"name"`
+	SourceType     string     `json:"sourceType"`
+	Image          *string    `json:"image"`
+	InternalPort   *int       `json:"internalPort"`
+	HostAddress    *string    `json:"hostAddress"`
+	PublishedPort  *int       `json:"publishedPort"`
+	ServerID       *uuid.UUID `json:"serverId"`
+	CreatedAt      time.Time  `json:"createdAt"`
 }
 
 type Deployment struct {
@@ -98,20 +99,31 @@ type Deployment struct {
 }
 
 type Server struct {
-	ID               uuid.UUID  `json:"id"`
-	OrganizationID   uuid.UUID  `json:"organizationId"`
-	Name             string     `json:"name"`
-	Hostname         string     `json:"hostname"`
-	OperatingSystem  string     `json:"operatingSystem"`
-	Architecture     string     `json:"architecture"`
-	Runtime          string     `json:"runtime"`
-	ConnectionStatus string     `json:"connectionStatus"`
-	Health           string     `json:"health"`
-	ConnectivityType string     `json:"connectivityType"`
-	CPUCapacity      *int       `json:"cpuCapacity"`
-	MemoryBytes      *int64     `json:"memoryBytes"`
-	LastSeenAt       *time.Time `json:"lastSeenAt"`
-	CreatedAt        time.Time  `json:"createdAt"`
+	ID                 uuid.UUID  `json:"id"`
+	OrganizationID     uuid.UUID  `json:"organizationId"`
+	Name               string     `json:"name"`
+	Hostname           string     `json:"hostname"`
+	OperatingSystem    string     `json:"operatingSystem"`
+	Architecture       string     `json:"architecture"`
+	Runtime            string     `json:"runtime"`
+	ConnectionStatus   string     `json:"connectionStatus"`
+	Health             string     `json:"health"`
+	ConnectivityType   string     `json:"connectivityType"`
+	CPUCapacity        *int       `json:"cpuCapacity"`
+	MemoryBytes        *int64     `json:"memoryBytes"`
+	MemoryUsedBytes    *int64     `json:"memoryUsedBytes"`
+	DiskTotalBytes     *int64     `json:"diskTotalBytes"`
+	DiskUsedBytes      *int64     `json:"diskUsedBytes"`
+	CPUUsagePercent    *float64   `json:"cpuUsagePercent"`
+	UptimeSeconds      *int64     `json:"uptimeSeconds"`
+	DockerAvailable    bool       `json:"dockerAvailable"`
+	DockerVersion      string     `json:"dockerVersion"`
+	AgentID            *uuid.UUID `json:"agentId"`
+	AgentVersion       string     `json:"agentVersion"`
+	AgentCompatibility string     `json:"agentCompatibility"`
+	AgentCapabilities  []string   `json:"agentCapabilities"`
+	LastSeenAt         *time.Time `json:"lastSeenAt"`
+	CreatedAt          time.Time  `json:"createdAt"`
 }
 
 type IdentityProvider struct {
@@ -386,7 +398,7 @@ func (r Repository) CreateEnvironment(ctx context.Context, organizationID, proje
 }
 
 func (r Repository) ListApplications(ctx context.Context, organizationID, environmentID uuid.UUID) ([]Application, error) {
-	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,created_at FROM applications WHERE organization_id=$1 AND environment_id=$2 ORDER BY name`, organizationID, environmentID)
+	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,server_id,created_at FROM applications WHERE organization_id=$1 AND environment_id=$2 ORDER BY name`, organizationID, environmentID)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +406,7 @@ func (r Repository) ListApplications(ctx context.Context, organizationID, enviro
 	items := []Application{}
 	for rows.Next() {
 		var item Application
-		if err := rows.Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.ServerID, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -403,7 +415,7 @@ func (r Repository) ListApplications(ctx context.Context, organizationID, enviro
 }
 
 func (r Repository) ListAllApplications(ctx context.Context, organizationID uuid.UUID) ([]Application, error) {
-	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,created_at FROM applications WHERE organization_id=$1 ORDER BY name`, organizationID)
+	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,server_id,created_at FROM applications WHERE organization_id=$1 ORDER BY name`, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -411,7 +423,7 @@ func (r Repository) ListAllApplications(ctx context.Context, organizationID uuid
 	items := []Application{}
 	for rows.Next() {
 		var item Application
-		if err := rows.Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.ServerID, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -419,14 +431,14 @@ func (r Repository) ListAllApplications(ctx context.Context, organizationID uuid
 	return items, rows.Err()
 }
 
-func (r Repository) CreateApplication(ctx context.Context, organizationID, environmentID, actorID uuid.UUID, name, sourceType string, image *string, internalPort *int, hostAddress *string, publishedPort *int, requestID uuid.UUID, ip net.IP) (Application, error) {
+func (r Repository) CreateApplication(ctx context.Context, organizationID, environmentID, actorID uuid.UUID, name, sourceType string, image *string, internalPort *int, hostAddress *string, publishedPort *int, serverID *uuid.UUID, requestID uuid.UUID, ip net.IP) (Application, error) {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return Application{}, err
 	}
 	defer tx.Rollback(ctx)
 	var item Application
-	err = tx.QueryRow(ctx, `INSERT INTO applications(organization_id,project_id,environment_id,name,source_type,image,internal_port,host_bind_address,published_port) SELECT $1,e.project_id,e.id,$3,$4,$5,$6,$7,$8 FROM environments e WHERE e.id=$2 AND e.organization_id=$1 RETURNING id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,created_at`, organizationID, environmentID, name, sourceType, image, internalPort, hostAddress, publishedPort).Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.CreatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO applications(organization_id,project_id,environment_id,name,source_type,image,internal_port,host_bind_address,published_port,server_id) SELECT $1,e.project_id,e.id,$3,$4,$5,$6,$7,$8,$9 FROM environments e WHERE e.id=$2 AND e.organization_id=$1 AND ($9::uuid IS NULL OR EXISTS(SELECT 1 FROM servers s WHERE s.id=$9 AND s.organization_id=$1)) RETURNING id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,server_id,created_at`, organizationID, environmentID, name, sourceType, image, internalPort, hostAddress, publishedPort, serverID).Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.ServerID, &item.CreatedAt)
 	if err != nil {
 		return Application{}, notFound(err)
 	}
@@ -524,7 +536,7 @@ func (r Repository) TransitionDeployment(ctx context.Context, organizationID, de
 }
 
 func (r Repository) ListServers(ctx context.Context, organizationID uuid.UUID) ([]Server, error) {
-	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,connectivity_type,cpu_capacity,memory_bytes,last_seen_at,created_at FROM servers WHERE organization_id=$1 ORDER BY name`, organizationID)
+	rows, err := r.Pool.Query(ctx, serverSelect+` WHERE s.organization_id=$1 ORDER BY s.name`, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -532,7 +544,7 @@ func (r Repository) ListServers(ctx context.Context, organizationID uuid.UUID) (
 	items := []Server{}
 	for rows.Next() {
 		var item Server
-		if err := rows.Scan(&item.ID, &item.OrganizationID, &item.Name, &item.Hostname, &item.OperatingSystem, &item.Architecture, &item.Runtime, &item.ConnectionStatus, &item.Health, &item.ConnectivityType, &item.CPUCapacity, &item.MemoryBytes, &item.LastSeenAt, &item.CreatedAt); err != nil {
+		if err := rows.Scan(serverScan(&item)...); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -547,7 +559,7 @@ func (r Repository) CreateServer(ctx context.Context, organizationID, actorID uu
 	}
 	defer tx.Rollback(ctx)
 	var item Server
-	err = tx.QueryRow(ctx, `INSERT INTO servers(organization_id,name,hostname,operating_system,architecture,connectivity_type) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,connectivity_type,cpu_capacity,memory_bytes,last_seen_at,created_at`, organizationID, name, hostname, osName, architecture, connectivityType).Scan(&item.ID, &item.OrganizationID, &item.Name, &item.Hostname, &item.OperatingSystem, &item.Architecture, &item.Runtime, &item.ConnectionStatus, &item.Health, &item.ConnectivityType, &item.CPUCapacity, &item.MemoryBytes, &item.LastSeenAt, &item.CreatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO servers(organization_id,name,hostname,operating_system,architecture,connectivity_type) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,connectivity_type,cpu_capacity,memory_bytes,memory_used_bytes,disk_total_bytes,disk_used_bytes,cpu_usage_percent,uptime_seconds,docker_available,docker_version,NULL::uuid,agent_version,agent_compatibility,agent_capabilities,last_seen_at,created_at`, organizationID, name, hostname, osName, architecture, connectivityType).Scan(serverScan(&item)...)
 	if err != nil {
 		return Server{}, err
 	}
@@ -556,6 +568,42 @@ func (r Repository) CreateServer(ctx context.Context, organizationID, actorID uu
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return Server{}, err
+	}
+	return item, nil
+}
+
+const serverSelect = `SELECT s.id,s.organization_id,s.name,s.hostname,s.operating_system,s.architecture,s.runtime,s.connection_status,s.health,s.connectivity_type,s.cpu_capacity,s.memory_bytes,s.memory_used_bytes,s.disk_total_bytes,s.disk_used_bytes,s.cpu_usage_percent,s.uptime_seconds,s.docker_available,s.docker_version,(SELECT a.id FROM server_agents a WHERE a.server_id=s.id AND a.status='active' LIMIT 1),s.agent_version,s.agent_compatibility,s.agent_capabilities,s.last_seen_at,s.created_at FROM servers s`
+
+func serverScan(item *Server) []any {
+	return []any{&item.ID, &item.OrganizationID, &item.Name, &item.Hostname, &item.OperatingSystem, &item.Architecture, &item.Runtime, &item.ConnectionStatus, &item.Health, &item.ConnectivityType, &item.CPUCapacity, &item.MemoryBytes, &item.MemoryUsedBytes, &item.DiskTotalBytes, &item.DiskUsedBytes, &item.CPUUsagePercent, &item.UptimeSeconds, &item.DockerAvailable, &item.DockerVersion, &item.AgentID, &item.AgentVersion, &item.AgentCompatibility, &item.AgentCapabilities, &item.LastSeenAt, &item.CreatedAt}
+}
+
+func (r Repository) ServerByID(ctx context.Context, organizationID, serverID uuid.UUID) (Server, error) {
+	var item Server
+	err := r.Pool.QueryRow(ctx, serverSelect+` WHERE s.organization_id=$1 AND s.id=$2`, organizationID, serverID).Scan(serverScan(&item)...)
+	return item, notFound(err)
+}
+
+func (r Repository) SetApplicationServer(ctx context.Context, organizationID, applicationID, actorID uuid.UUID, serverID *uuid.UUID, requestID uuid.UUID, ip net.IP) (Application, error) {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return Application{}, err
+	}
+	defer tx.Rollback(ctx)
+	var item Application
+	err = tx.QueryRow(ctx, `UPDATE applications a SET server_id=$3,updated_at=now() WHERE a.organization_id=$1 AND a.id=$2 AND ($3::uuid IS NULL OR EXISTS(SELECT 1 FROM servers s WHERE s.organization_id=$1 AND s.id=$3)) RETURNING id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,server_id,created_at`, organizationID, applicationID, serverID).Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.ServerID, &item.CreatedAt)
+	if err != nil {
+		return Application{}, notFound(err)
+	}
+	metadata := map[string]any{"serverId": nil}
+	if serverID != nil {
+		metadata["serverId"] = serverID.String()
+	}
+	if err = insertAudit(ctx, tx, &organizationID, &actorID, "application.server_changed", "application", &applicationID, requestID, metadata, ip); err != nil {
+		return Application{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Application{}, err
 	}
 	return item, nil
 }

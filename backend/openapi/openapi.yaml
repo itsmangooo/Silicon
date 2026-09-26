@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
   title: Silicon Control Plane API
-  version: 0.3.0
+  version: 0.4.0
   description: >-
     Silicon control-plane API with local authentication, organization-scoped
     records, GitHub push automation, Cloudflare DNS/tunnel integration, and a
-    local Docker runtime provider.
+    local and outbound-Agent Docker runtime providers.
 servers:
   - url: http://localhost:8080/api/v1
 tags:
@@ -15,6 +15,7 @@ tags:
   - name: Applications
   - name: Deployments
   - name: Servers
+  - name: Agent
   - name: Identity
   - name: Audit
   - name: GitHub
@@ -394,7 +395,63 @@ paths:
       parameters: [{$ref: '#/components/parameters/CSRFToken'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ServerInput'}}}}
       responses:
-        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Server'}}}}
+        '201': {description: Created with a one-time enrollment command, content: {application/json: {schema: {type: object, properties: {server: {$ref: '#/components/schemas/Server'}, enrollment: {$ref: '#/components/schemas/Enrollment'}}}}}}
+  /organizations/{organizationID}/servers/{serverID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: serverID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    get:
+      tags: [Servers]
+      summary: Read real Agent-reported server state
+      responses: {'200': {description: Server, content: {application/json: {schema: {$ref: '#/components/schemas/Server'}}}}}
+  /organizations/{organizationID}/servers/{serverID}/enrollment-token:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: serverID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    post:
+      tags: [Agent]
+      summary: Create a short-lived single-use enrollment command
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses: {'201': {description: Enrollment, content: {application/json: {schema: {$ref: '#/components/schemas/Enrollment'}}}}}
+  /organizations/{organizationID}/servers/{serverID}/agent/revoke:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: serverID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    post:
+      tags: [Agent]
+      summary: Revoke the active machine credential and disconnect the Agent
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses: {'204': {description: Revoked}}
+  /organizations/{organizationID}/applications/{applicationID}/server:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/ApplicationID'}
+    put:
+      tags: [Applications]
+      summary: Select an organization-owned deployment target, or null for local
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, properties: {serverId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}}}}}}
+      responses: {'200': {description: Updated application, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}}
+  /agent/enroll:
+    post:
+      tags: [Agent]
+      security: []
+      summary: Exchange an enrollment token for a machine credential over TLS
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentEnrollmentInput'}}}}
+      responses: {'201': {description: Credential returned once, content: {application/json: {schema: {$ref: '#/components/schemas/AgentEnrollmentResult'}}}}, '401': {$ref: '#/components/responses/UnauthorizedError'}}
+  /agent/connect:
+    get:
+      tags: [Agent]
+      summary: Upgrade an authenticated outbound Agent connection to WebSocket
+      description: Requires TLS, an Authorization Bearer machine credential, and X-Silicon-Agent-ID.
+      security: []
+      responses: {'101': {description: WebSocket protocol upgrade}, '401': {$ref: '#/components/responses/UnauthorizedError'}}
+  /agent/check:
+    get:
+      tags: [Agent]
+      summary: Verify machine credential and active command connection
+      security: []
+      responses: {'200': {description: Connected}, '401': {$ref: '#/components/responses/UnauthorizedError'}, '503': {description: Authenticated but disconnected}}
   /organizations/{organizationID}/identity-providers:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}]
     get:
@@ -610,6 +667,7 @@ components:
         internalPort: {type: integer, minimum: 1, maximum: 65535}
         hostAddress: {type: string, description: Explicit IPv4 or IPv6 bind address; omit to publish no host port}
         publishedPort: {type: integer, minimum: 1, maximum: 65535}
+        serverId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
     Application:
       allOf:
         - {$ref: '#/components/schemas/ApplicationInput'}
@@ -640,6 +698,7 @@ components:
         applicationId: {$ref: '#/components/schemas/UUID'}
         deploymentId: {$ref: '#/components/schemas/UUID'}
         provider: {type: string, enum: [docker]}
+        serverId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
         instanceId: {type: string}
         image: {type: string}
         state: {type: string}
@@ -701,10 +760,47 @@ components:
             id: {$ref: '#/components/schemas/UUID'}
             organizationId: {$ref: '#/components/schemas/UUID'}
             runtime: {type: string}
-            connectionStatus: {type: string, enum: [unknown, connected, disconnected]}
+            connectionStatus: {type: string, enum: [unknown, connected, disconnected, degraded, docker_unavailable]}
             health: {type: string, enum: [unknown, healthy, degraded, unhealthy]}
             connectivityType: {type: string, enum: [public, self_hosted, private]}
+            dockerAvailable: {type: boolean}
+            dockerVersion: {type: string}
+            cpuCapacity: {type: [integer, 'null']}
+            cpuUsagePercent: {type: [number, 'null']}
+            memoryBytes: {type: [integer, 'null'], format: int64}
+            memoryUsedBytes: {type: [integer, 'null'], format: int64}
+            diskTotalBytes: {type: [integer, 'null'], format: int64}
+            diskUsedBytes: {type: [integer, 'null'], format: int64}
+            uptimeSeconds: {type: [integer, 'null'], format: int64}
+            agentId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+            agentVersion: {type: string}
+            agentCompatibility: {type: string, enum: [unknown, compatible, outdated, incompatible]}
+            agentCapabilities: {type: array, items: {type: string}}
+            lastSeenAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
             createdAt: {$ref: '#/components/schemas/Timestamp'}
+    Enrollment:
+      type: object
+      properties:
+        expiresAt: {$ref: '#/components/schemas/Timestamp'}
+        command: {type: string, description: Contains a secret that is displayed only once}
+    AgentEnrollmentInput:
+      type: object
+      additionalProperties: false
+      required: [serverId, token, protocolVersion, agentVersion]
+      properties:
+        serverId: {$ref: '#/components/schemas/UUID'}
+        token: {type: string, writeOnly: true}
+        protocolVersion: {type: integer, minimum: 1}
+        agentVersion: {type: string}
+        capabilities: {type: array, items: {type: string}}
+    AgentEnrollmentResult:
+      type: object
+      properties:
+        agentId: {$ref: '#/components/schemas/UUID'}
+        serverId: {$ref: '#/components/schemas/UUID'}
+        organizationId: {$ref: '#/components/schemas/UUID'}
+        credential: {type: string, writeOnly: true}
+        protocolVersion: {type: integer}
     IdentityProviderInput:
       type: object
       additionalProperties: false

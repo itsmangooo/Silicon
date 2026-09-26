@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/itsmangooo/Silicon/backend/internal/agent"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 	secretprovider "github.com/itsmangooo/Silicon/backend/internal/providers/secrets"
 	"github.com/itsmangooo/Silicon/backend/internal/store"
@@ -159,7 +160,9 @@ func (a *API) getRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	status, inspectErr := a.runtime.Status(r.Context(), instance.ExternalID)
 	if inspectErr != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"instance": instance, "providerAvailable": true, "providerError": "Docker runtime inspection failed"})
+		available := !errors.Is(inspectErr, agent.ErrDisconnected)
+		instance.State, instance.Health = "unknown", "unknown"
+		writeJSON(w, http.StatusOK, map[string]any{"instance": instance, "providerAvailable": available, "stale": true, "providerError": "Live Docker runtime state is unavailable"})
 		return
 	}
 	instance, err = a.repo.UpdateRuntimeInstance(r.Context(), organizationID, instance.ID, status)
@@ -172,7 +175,7 @@ func (a *API) getRuntime(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) runtimeAction(w http.ResponseWriter, r *http.Request) {
 	if a.runtime == nil {
-		writeError(w, http.StatusServiceUnavailable, "runtime_unavailable", "The local Docker runtime is not enabled.")
+		writeError(w, http.StatusServiceUnavailable, "runtime_unavailable", "No Docker runtime provider is available.")
 		return
 	}
 	action := r.PathValue("action")
@@ -198,6 +201,10 @@ func (a *API) runtimeAction(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		a.logger.Warn("runtime lifecycle action failed", "action", action, "organization_id", organizationID, "application_id", applicationID, "error", err)
+		if errors.Is(err, agent.ErrDisconnected) {
+			writeError(w, http.StatusServiceUnavailable, "agent_disconnected", "The selected Silicon Agent is disconnected; retry after it reconnects.")
+			return
+		}
 		writeError(w, http.StatusBadGateway, "runtime_action_failed", "Docker could not complete the requested lifecycle action.")
 		return
 	}
@@ -265,6 +272,10 @@ func (a *API) runtimeLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	lines, err := a.runtime.Logs(ctx, instance.ExternalID, request)
 	if err != nil {
+		if errors.Is(err, agent.ErrDisconnected) {
+			writeError(w, http.StatusServiceUnavailable, "agent_disconnected", "The selected Silicon Agent is disconnected; logs are unavailable.")
+			return
+		}
 		writeError(w, http.StatusBadGateway, "runtime_logs_failed", "Docker logs could not be read.")
 		return
 	}

@@ -40,6 +40,14 @@ Cloudflare API and tunnel tokens are encrypted with AES-256-GCM and organization
 
 The optional local Docker provider grants the control plane high privilege over the host Docker daemon. Leave it disabled unless the control-plane host is an intended workload target, restrict host access, and run only reviewed images/repositories. Source archives are bounded, reject links and path traversal, and containers receive no published host port automatically. Lifecycle APIs resolve a tenant-scoped database instance and the provider verifies Silicon ownership labels before every action, including logs and removal.
 
+## Agent security
+
+Agent enrollment tokens and permanent credentials use 256 bits of cryptographically secure randomness. Only their SHA-256 hashes are stored. Enrollment tokens are short-lived, single-use, and scoped by server and organization. Re-enrollment revokes the previous active identity; explicit revocation closes the live connection. Token and credential values are never written to audit metadata or structured logs.
+
+Agent traffic requires TLS unless the operator explicitly enables the isolated-development override. Forwarded HTTPS is trusted only when `SILICON_TRUST_FORWARDED_PROTO=true`; that setting requires a trusted proxy boundary and no direct untrusted access to the HTTP listener. A stable Agent UUID plus bearer credential authenticates the WebSocket. Heartbeats cannot change the credential's server or organization scope. The protocol contains an enumerated typed operation set and has no generic command execution. Remote Docker lifecycle operations reuse Silicon-label validation and add organization-label enforcement.
+
+The Agent configuration file contains the permanent credential and is installed with mode `0600`. Docker administrators and root on an Agent host remain inside the trusted boundary because they can inspect containers and their environment. Protect WebSocket upgrade paths and preserve `X-Forwarded-Proto` at the HTTPS ingress.
+
 ## External identity
 
 OIDC execution is not enabled. The provider contract requires a mature library to validate discovery metadata, signature, issuer, audience, expiration, state, and nonce. Authentik must be a generic OIDC preset. External identities link by provider + subject + local user; email equality is never sufficient for an automatic merge.

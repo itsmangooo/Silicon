@@ -1,5 +1,5 @@
 # Deploying Silicon
 
-The root Compose file is the supported Milestone 1 deployment definition for local evaluation. It runs PostgreSQL and, with the `platform` profile, builds the control-plane API and web interface.
+The root `docker-compose.yml` is for local development. `docker-compose.production.yml` is the supported installer-driven production definition and contains PostgreSQL, the control-plane API, the web interface, health checks, restart policies, a private database network, and persistent data.
 
-It does not deploy user workloads, configure a reverse proxy, or issue TLS certificates. Production operators must supply unique database credentials, HTTPS termination, backups, rate limiting, and a secure value for every future encryption key before enabling corresponding features.
+`install.sh` generates unique database/encryption credentials and preserves them on repeat runs and updates. It does not configure public TLS, backups, or ingress rate limiting. Operators must provide HTTPS termination before enrolling remote Agents. No Docker socket is exposed to the control plane.

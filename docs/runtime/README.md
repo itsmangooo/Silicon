@@ -1,6 +1,6 @@
 # Docker runtime
 
-Core deployment code depends on `runtime.Provider`. `DockerRuntimeProvider` is the first implementation and is enabled only when `SILICON_LOCAL_DOCKER_ENABLED=true`. It uses the configured Docker CLI to deploy, start, stop, restart, remove, inspect, query status, and stream logs. Docker-specific labels, commands, health semantics, and ownership checks remain inside the adapter.
+Core deployment code depends on `runtime.Provider`. `DockerRuntimeProvider` uses the configured Docker CLI to deploy, start, stop, restart, remove, inspect, query status, and stream logs. A dispatcher selects the explicit local provider or the outbound Agent transport for an application-selected server. Docker-specific labels, commands, health semantics, and ownership checks remain inside the shared adapter.
 
 ## Deployment paths
 
@@ -30,6 +30,6 @@ Lifecycle endpoints first resolve the current instance through organization- and
 
 Historical logs are limited to 1,000 requested lines. Live follow uses server-sent events and is bounded by `SILICON_RUNTIME_LOG_FOLLOW_TIMEOUT` (default five minutes). Timestamps and stdout/stderr stream identity are retained where Docker exposes them. The UI renders every message as plain text.
 
-## Current limitation
+## Current limitations
 
-The provider talks only to the Docker daemon on the control-plane host. The default Silicon Compose service does not mount the Docker socket. Run the backend on the intended Docker host or provide a deliberately secured Docker CLI/daemon connection. No Silicon Agent, remote-server transport, registry credential UI, Compose execution, or general remote shell exists yet.
+Docker image and exact-revision Git + Dockerfile workloads can run locally or on a selected enrolled Agent. The production control plane does not mount the Docker socket. Registry credential UI, Compose execution, automatic scheduling, distributed build caching, and general remote shell access are not implemented. Fixed-port replacement is deterministic but not zero downtime.

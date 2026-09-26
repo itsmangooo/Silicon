@@ -1,15 +1,10 @@
 package execution
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,11 +13,10 @@ import (
 	gitprovider "github.com/itsmangooo/Silicon/backend/internal/providers/git"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 	secretprovider "github.com/itsmangooo/Silicon/backend/internal/providers/secrets"
+	"github.com/itsmangooo/Silicon/backend/internal/sourcebuild"
 	"github.com/itsmangooo/Silicon/backend/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-const maxArchiveBytes int64 = 1 << 30
 
 type DockerDeploymentExecutor struct {
 	Pool         *pgxpool.Pool
@@ -43,6 +37,10 @@ func (e DockerDeploymentExecutor) Execute(ctx context.Context, spec jobs.Deploym
 	}
 	image := strings.TrimSpace(spec.Image)
 	pullImage := false
+	targetServer := ""
+	if application.ServerID != nil {
+		targetServer = application.ServerID.String()
+	}
 	switch application.SourceType {
 	case "docker_image":
 		if image == "" && application.Image != nil {
@@ -53,7 +51,7 @@ func (e DockerDeploymentExecutor) Execute(ctx context.Context, spec jobs.Deploym
 		}
 		pullImage = true
 	case "git_dockerfile":
-		image, err = e.buildGitHubRevision(ctx, spec, progress)
+		image, err = e.buildGitHubRevision(ctx, spec, targetServer, progress)
 		if err != nil {
 			return err
 		}
@@ -96,6 +94,9 @@ func (e DockerDeploymentExecutor) Execute(ctx context.Context, spec jobs.Deploym
 	runtimeSpec := runtimeprovider.DeploymentSpec{
 		DeploymentID: spec.DeploymentID.String(), OrganizationID: spec.OrganizationID.String(), ApplicationID: application.ID.String(), Application: application.Name,
 		Image: image, PullImage: pullImage, Environment: values,
+	}
+	if application.ServerID != nil {
+		runtimeSpec.ServerID = application.ServerID.String()
 	}
 	if application.InternalPort != nil {
 		runtimeSpec.InternalPort = *application.InternalPort
@@ -177,7 +178,7 @@ func (e DockerDeploymentExecutor) Execute(ctx context.Context, spec jobs.Deploym
 	return progress(deployments.Healthy, message)
 }
 
-func (e DockerDeploymentExecutor) buildGitHubRevision(ctx context.Context, spec jobs.DeploymentSpec, progress func(deployments.State, string) error) (string, error) {
+func (e DockerDeploymentExecutor) buildGitHubRevision(ctx context.Context, spec jobs.DeploymentSpec, targetServer string, progress func(deployments.State, string) error) (string, error) {
 	if e.Git == nil {
 		return "", errors.New("GitHub provider is not configured")
 	}
@@ -198,136 +199,30 @@ func (e DockerDeploymentExecutor) buildGitHubRevision(ctx context.Context, spec 
 		return "", fmt.Errorf("fetch exact GitHub revision: %w", err)
 	}
 	defer archive.Close()
-	workdir, err := os.MkdirTemp("", "silicon-build-*")
-	if err != nil {
-		return "", err
-	}
-	defer os.RemoveAll(workdir)
-	if err = extractGitHubArchive(archive, workdir); err != nil {
-		return "", fmt.Errorf("extract source archive: %w", err)
-	}
 	if err = progress(deployments.Building, "Building exact GitHub revision "+spec.CommitSHA); err != nil {
 		return "", err
 	}
 	image := "silicon/" + spec.ApplicationID.String() + ":" + shortSHA(spec.CommitSHA)
-	binary := e.DockerBinary
-	if binary == "" {
-		binary = "docker"
+	if targetServer != "" {
+		builder, ok := e.Runtime.(runtimeprovider.ImageBuilder)
+		if !ok {
+			return "", errors.New("selected remote runtime does not support exact-revision builds")
+		}
+		return builder.Build(ctx, runtimeprovider.BuildSpec{DeploymentID: spec.DeploymentID.String(), OrganizationID: spec.OrganizationID.String(), ApplicationID: spec.ApplicationID.String(), ServerID: targetServer, CommitSHA: spec.CommitSHA, Image: image}, archive)
 	}
-	if _, err = runOutput(ctx, binary, "build", "--pull", "--label", "silicon.managed=true", "--label", "silicon.application_id="+spec.ApplicationID.String(), "--label", "silicon.commit_sha="+spec.CommitSHA, "-t", image, workdir); err != nil {
-		return "", fmt.Errorf("Docker build failed: %w", err)
+	if err = BuildDockerArchive(ctx, e.DockerBinary, image, spec.OrganizationID.String(), spec.ApplicationID.String(), spec.CommitSHA, archive); err != nil {
+		return "", err
 	}
 	return image, nil
 }
 
+func BuildDockerArchive(ctx context.Context, binary, image, organizationID, applicationID, commitSHA string, archive io.Reader) error {
+	return sourcebuild.BuildDockerArchive(ctx, binary, image, organizationID, applicationID, commitSHA, archive)
+}
+
 func extractGitHubArchive(source io.Reader, destination string) error {
-	limited := io.LimitReader(source, maxArchiveBytes+1)
-	gz, err := gzip.NewReader(limited)
-	if err != nil {
-		return err
-	}
-	defer gz.Close()
-	reader := tar.NewReader(gz)
-	var total int64
-	for {
-		header, err := reader.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		parts := strings.Split(filepath.ToSlash(header.Name), "/")
-		if len(parts) < 2 {
-			continue
-		}
-		relative := filepath.Clean(filepath.FromSlash(strings.Join(parts[1:], "/")))
-		if relative == "." {
-			continue
-		}
-		if filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			return errors.New("archive contains an unsafe path")
-		}
-		target := filepath.Join(destination, relative)
-		if !strings.HasPrefix(target, destination+string(filepath.Separator)) {
-			return errors.New("archive path escapes build directory")
-		}
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0750); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			total += header.Size
-			if total > maxArchiveBytes {
-				return errors.New("source archive exceeds one GiB")
-			}
-			if err := os.MkdirAll(filepath.Dir(target), 0750); err != nil {
-				return err
-			}
-			mode := os.FileMode(header.Mode) & 0777
-			if mode&0111 == 0 {
-				mode = 0640
-			}
-			file, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
-			if err != nil {
-				return err
-			}
-			_, copyErr := io.CopyN(file, reader, header.Size)
-			closeErr := file.Close()
-			if copyErr != nil {
-				return copyErr
-			}
-			if closeErr != nil {
-				return closeErr
-			}
-		default:
-			return fmt.Errorf("archive entry type %d is not allowed", header.Typeflag)
-		}
-	}
-	return nil
+	return sourcebuild.ExtractArchive(source, destination)
 }
-
-func runOutput(ctx context.Context, binary string, args ...string) (string, error) {
-	command := exec.CommandContext(ctx, binary, args...)
-	stdout, stderr := &boundedBuffer{limit: 1 << 20}, &boundedBuffer{limit: 1 << 20}
-	command.Stdout, command.Stderr = stdout, stderr
-	err := command.Run()
-	if err != nil {
-		message := strings.TrimSpace(stderr.String())
-		if message == "" {
-			message = err.Error()
-		}
-		message = strings.ReplaceAll(strings.ReplaceAll(message, "\r", " "), "\n", " ")
-		if len(message) > 500 {
-			message = message[:500]
-		}
-		return "", errors.New(message)
-	}
-	return stdout.String(), nil
-}
-
-type boundedBuffer struct {
-	data     []byte
-	limit    int
-	exceeded bool
-}
-
-func (b *boundedBuffer) Write(value []byte) (int, error) {
-	remaining := b.limit - len(b.data)
-	if remaining > 0 {
-		if remaining > len(value) {
-			remaining = len(value)
-		}
-		b.data = append(b.data, value[:remaining]...)
-	}
-	if remaining < len(value) {
-		b.exceeded = true
-	}
-	return len(value), nil
-}
-
-func (b *boundedBuffer) String() string { return string(b.data) }
 func shortSHA(value string) string {
 	if len(value) > 12 {
 		return value[:12]

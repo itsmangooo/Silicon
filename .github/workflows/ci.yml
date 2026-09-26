@@ -58,6 +58,14 @@ jobs:
         run: |
           go vet ./...
           test -z "$(gofmt -l .)"
+      - name: Verify Silicon Agent
+        working-directory: services/agent
+        run: |
+          go test ./...
+          go vet ./...
+          test -z "$(gofmt -l .)"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./...
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./...
       - name: Verify frontend
         working-directory: frontend
         run: |
@@ -65,6 +73,11 @@ jobs:
           npm run lint
           npm test
           npm run build
+      - name: Verify installers and production Compose
+        run: |
+          shellcheck install.sh services/agent/install.sh deploy/tests/install_test.sh
+          sh deploy/tests/install_test.sh
+          POSTGRES_DB=silicon POSTGRES_USER=silicon POSTGRES_PASSWORD=test SILICON_ENCRYPTION_KEY=dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1sb25nISEhISE= SILICON_PUBLIC_URL=http://localhost SILICON_COOKIE_SECURE=false SILICON_DATA_DIR=/tmp/silicon-data docker compose -f docker-compose.production.yml config --quiet
 
   docker-runtime:
     runs-on: ubuntu-latest
@@ -90,4 +103,36 @@ jobs:
             summary="${summary//$'\n'/'%0A'}"
             echo "::error title=Docker runtime integration failed::$summary"
             exit "$status"
+          fi
+      - name: Verify Control Plane to Agent to Docker lifecycle
+        working-directory: backend
+        env:
+          SILICON_AGENT_DOCKER_INTEGRATION: "1"
+        run: go test -count=1 -timeout=6m -run '^TestControlPlaneAgentDockerIntegration$' ./internal/agent
+
+  production-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Silicon from a clean layout
+        env:
+          SILICON_REPOSITORY_URL: ${{ github.workspace }}
+          SILICON_VERSION: ${{ github.sha }}
+          SILICON_INSTALL_DIR: ${{ runner.temp }}/silicon-install
+          SILICON_PUBLIC_URL: http://127.0.0.1:18080
+          SILICON_HTTP_PORT: "18080"
+        run: |
+          ./install.sh
+          before=$(sha256sum "$SILICON_INSTALL_DIR/config/silicon.env")
+          ./install.sh
+          after=$(sha256sum "$SILICON_INSTALL_DIR/config/silicon.env")
+          test "$before" = "$after"
+      - name: Show installation diagnostics on failure
+        if: failure()
+        run: docker compose --env-file "${{ runner.temp }}/silicon-install/config/silicon.env" -f "${{ runner.temp }}/silicon-install/source/docker-compose.production.yml" ps || true
+      - name: Stop disposable installation
+        if: always()
+        run: |
+          if test -f "${{ runner.temp }}/silicon-install/config/silicon.env"; then
+            docker compose --env-file "${{ runner.temp }}/silicon-install/config/silicon.env" -f "${{ runner.temp }}/silicon-install/source/docker-compose.production.yml" down -v || true
           fi

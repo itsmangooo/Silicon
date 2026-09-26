@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -16,6 +17,20 @@ type DeploymentSpec struct {
 	HostAddress    string
 	HostPort       int
 	Environment    map[string]string
+	ServerID       string
+}
+
+type BuildSpec struct {
+	DeploymentID   string
+	OrganizationID string
+	ApplicationID  string
+	ServerID       string
+	CommitSHA      string
+	Image          string
+}
+
+type ImageBuilder interface {
+	Build(context.Context, BuildSpec, io.Reader) (string, error)
 }
 
 type InstanceStatus struct {
@@ -29,6 +44,7 @@ type InstanceStatus struct {
 	CreatedAt   *time.Time `json:"createdAt,omitempty"`
 	StartedAt   *time.Time `json:"startedAt,omitempty"`
 	FinishedAt  *time.Time `json:"finishedAt,omitempty"`
+	ServerID    string     `json:"serverId,omitempty"`
 }
 
 // Provider is the boundary between Silicon's deployment domain and a runtime.

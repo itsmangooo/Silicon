@@ -28,6 +28,13 @@ type Config struct {
 	LocalDockerEnabled      bool
 	DockerBinary            string
 	RuntimeLogFollowTimeout time.Duration
+	PublicURL               string
+	AgentAllowInsecure      bool
+	AgentExpectedVersion    string
+	AgentEnrollmentTTL      time.Duration
+	AgentHeartbeatTimeout   time.Duration
+	AgentArtifactDirectory  string
+	TrustForwardedProto     bool
 }
 
 func Load() (Config, error) {
@@ -47,6 +54,13 @@ func Load() (Config, error) {
 		LocalDockerEnabled:      envBool("SILICON_LOCAL_DOCKER_ENABLED", false),
 		DockerBinary:            env("SILICON_DOCKER_BINARY", "docker"),
 		RuntimeLogFollowTimeout: 5 * time.Minute,
+		PublicURL:               strings.TrimRight(env("SILICON_PUBLIC_URL", "http://localhost:5173"), "/"),
+		AgentAllowInsecure:      envBool("SILICON_AGENT_ALLOW_INSECURE", false),
+		AgentExpectedVersion:    env("SILICON_AGENT_EXPECTED_VERSION", "0.1.0"),
+		AgentEnrollmentTTL:      15 * time.Minute,
+		AgentHeartbeatTimeout:   45 * time.Second,
+		AgentArtifactDirectory:  env("SILICON_AGENT_ARTIFACT_DIR", "/usr/local/share/silicon/agents"),
+		TrustForwardedProto:     envBool("SILICON_TRUST_FORWARDED_PROTO", false),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
@@ -64,6 +78,20 @@ func Load() (Config, error) {
 			return Config{}, errors.New("SILICON_RUNTIME_LOG_FOLLOW_TIMEOUT must be between 10s and 1h")
 		}
 		cfg.RuntimeLogFollowTimeout = duration
+	}
+	if value := os.Getenv("SILICON_AGENT_ENROLLMENT_TTL"); value != "" {
+		duration, err := time.ParseDuration(value)
+		if err != nil || duration < time.Minute || duration > time.Hour {
+			return Config{}, errors.New("SILICON_AGENT_ENROLLMENT_TTL must be between 1m and 1h")
+		}
+		cfg.AgentEnrollmentTTL = duration
+	}
+	if value := os.Getenv("SILICON_AGENT_HEARTBEAT_TIMEOUT"); value != "" {
+		duration, err := time.ParseDuration(value)
+		if err != nil || duration < 20*time.Second || duration > 10*time.Minute {
+			return Config{}, errors.New("SILICON_AGENT_HEARTBEAT_TIMEOUT must be between 20s and 10m")
+		}
+		cfg.AgentHeartbeatTimeout = duration
 	}
 	if value := os.Getenv("SILICON_ENCRYPTION_KEY"); value != "" {
 		key, err := base64.StdEncoding.DecodeString(value)

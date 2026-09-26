@@ -1,15 +1,69 @@
-# Installation
+# Installing Silicon
 
-Silicon supports controlled self-hosting. Review the security model before exposing the control plane.
+The supported production layout is `/opt/silicon` when installed as root and `$XDG_DATA_HOME/silicon` (normally `~/.local/share/silicon`) otherwise:
 
-1. Copy `.env.example` to `.env` and replace the development password.
-2. Generate a random 32-byte key, base64 encode it, and set `SILICON_ENCRYPTION_KEY`. Back up the key separately from PostgreSQL.
-3. Set `SILICON_COOKIE_SECURE=true` behind HTTPS. Configure the GitHub App variables only when using GitHub integration.
-4. Run `docker compose --profile platform up --build`, or run PostgreSQL in Compose and the Go/Vite processes directly.
-5. To use Docker image and exact-revision Dockerfile execution, run the backend on the intended Docker host and explicitly set `SILICON_LOCAL_DOCKER_ENABLED=true`. The configured `SILICON_DOCKER_BINARY` must reach that daemon. The default container image does not mount the Docker socket.
-6. Check `GET /healthz` and open the frontend.
-7. Register the initial account and create an organization.
+```text
+silicon/
+├── source/              installer-owned Git checkout
+├── config/silicon.env  mode 0600 production configuration
+└── data/postgres/       PostgreSQL data
+```
 
-The backend runs all unapplied embedded migrations transactionally. Back up PostgreSQL before an upgrade. The current Compose definition does not include production TLS, ingress rate limiting, monitoring, or automated backups; operators must supply those controls.
+## Quick install
 
-`SILICON_RUNTIME_LOG_FOLLOW_TIMEOUT` bounds each live log stream and defaults to five minutes. Application ports are not published unless both an explicit host address and port are configured.
+Inspect the script before running it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/itsmangooo/Silicon/main/install.sh -o install.sh
+less install.sh
+sh install.sh
+```
+
+Direct installation is also supported:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/itsmangooo/Silicon/main/install.sh | sh
+```
+
+From a clone:
+
+```sh
+git clone https://github.com/itsmangooo/Silicon.git
+cd Silicon
+./install.sh
+```
+
+The installer verifies Linux, architecture, Docker, and Compose; generates a random PostgreSQL password and 32-byte encryption key; creates the production Compose layout; runs embedded migrations through backend startup; and waits for `/healthz`. PostgreSQL has no host port. The backend and database communicate on an internal network. No Docker socket is mounted into the control plane.
+
+Set the externally reachable URL before installation when Silicon is behind HTTPS termination:
+
+```sh
+SILICON_PUBLIC_URL=https://silicon.example.com ./install.sh
+```
+
+The supplied Compose file serves HTTP. Operators exposing Silicon publicly must provide HTTPS termination and overwrite `X-Forwarded-Proto: https`. For an HTTPS public URL, the installer binds Silicon to `127.0.0.1` and enables forwarded-protocol trust so untrusted clients cannot bypass TLS checks by forging the header. Adjust the bind address only when the trusted proxy runs elsewhere. Agent enrollment and command connections reject plain HTTP. The default `http://localhost` is suitable for local initial setup, not remote Agent enrollment.
+
+## Updates and releases
+
+Update the installed source without replacing configuration or data:
+
+```sh
+/opt/silicon/source/install.sh --update --install-dir /opt/silicon
+```
+
+Use `--version <tag>` or `SILICON_VERSION=<tag>` to select a release. `main` remains supported for development. The update path refuses a dirty installer-owned checkout, builds before replacing containers, runs normal embedded migrations, restarts services, and waits for readiness. It never regenerates the database password or encryption key.
+
+## Backups
+
+Back up both `config/silicon.env` and `data/postgres`. The encryption key is required to recover encrypted provider credentials and application secrets. Protect configuration as sensitive data. Take a PostgreSQL-consistent backup before updates and test restoration separately.
+
+## Development install
+
+Development remains separate: copy `.env.example`, start PostgreSQL with `docker compose up -d postgres`, then run the backend and Vite processes. The root `docker-compose.yml` remains development-oriented; production uses `docker-compose.production.yml`.
+
+## Troubleshooting
+
+- `Docker daemon is unavailable`: ensure the current user can run `docker version` without elevation.
+- `Docker Compose v2 is required`: install the Compose plugin so `docker compose version` succeeds.
+- Readiness timeout: inspect the production Compose service status and logs.
+- Agent enrollment rejected: confirm the public URL is HTTPS, the token has not expired or been used, and the reverse proxy supports WebSocket upgrades.

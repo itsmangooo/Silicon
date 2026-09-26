@@ -1,0 +1,33 @@
+name: Release Agent
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: services/agent/go.mod
+          cache-dependency-path: |
+            backend/go.sum
+            services/agent/go.sum
+      - name: Build Linux Agent artifacts
+        working-directory: services/agent
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${GITHUB_REF_NAME#v}" -o dist/silicon-agent-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${GITHUB_REF_NAME#v}" -o dist/silicon-agent-linux-arm64 .
+          cd dist
+          sha256sum silicon-agent-linux-amd64 > silicon-agent-linux-amd64.sha256
+          sha256sum silicon-agent-linux-arm64 > silicon-agent-linux-arm64.sha256
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" services/agent/dist/* --verify-tag --generate-notes

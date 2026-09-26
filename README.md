@@ -1,6 +1,6 @@
 # Silicon
 
-Silicon is a self-hosted infrastructure and application control plane. Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, server inventory, audit events, provider boundaries, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation and Cloudflare DNS/optional Tunnel providers are part of the control plane.
+Silicon is a self-hosted infrastructure and application control plane. Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, audit events, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation, Cloudflare DNS/optional Tunnel providers, local Docker, and an outbound Linux Agent for explicitly selected remote Docker hosts are part of the control plane.
 
 Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It remains a modular monolith. It does **not** include a custom reverse proxy, automatic TLS, AWS, Azure, or Kubernetes integration.
 
@@ -42,7 +42,7 @@ These previews were captured from the running Milestone 1 application at a consi
 Silicon/
 ├── backend/            Go control-plane API and PostgreSQL migrations
 ├── frontend/           React + Vite JavaScript interface
-├── services/           Reserved for independently justified future processes
+├── services/agent/     Linux Agent for typed remote Docker operations
 ├── docs/               Architecture and operating documentation
 ├── deploy/             Files used to deploy Silicon itself
 ├── docker-compose.yml
@@ -56,6 +56,24 @@ Silicon/
 - Go 1.26 or newer
 - Node.js 24 and npm 11
 - Docker with Compose (for PostgreSQL)
+
+## Quick production installation
+
+Inspect-first installation is recommended:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/itsmangooo/Silicon/main/install.sh -o install.sh
+less install.sh
+sh install.sh
+```
+
+Or run the auditable installer directly:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/itsmangooo/Silicon/main/install.sh | sh
+```
+
+The equivalent cloned-repository flow is `git clone`, `cd Silicon`, then `./install.sh`. See [installation documentation](docs/installation/README.md) for HTTPS/public URL configuration, persistent data, backups, release selection, and `--update`.
 
 ## Local development
 
@@ -121,6 +139,9 @@ The REST API is rooted at `/api/v1`. Its OpenAPI contract lives at [`backend/ope
 - `/organizations/{organizationID}/applications/{applicationID}/runtime`
 - `/organizations/{organizationID}/applications/{applicationID}/runtime/logs`
 - `/organizations/{organizationID}/servers`
+- `/organizations/{organizationID}/servers/{serverID}/enrollment-token`
+- `/organizations/{organizationID}/applications/{applicationID}/server`
+- `/agent/enroll`, `/agent/connect`, `/agent/check`
 - `/organizations/{organizationID}/members`
 - `/organizations/{organizationID}/identity-providers`
 - `/organizations/{organizationID}/audit-events`
@@ -139,10 +160,10 @@ Runtime records and control-plane behavior are PostgreSQL-backed. When the local
 - environment variables are readable application configuration; local secrets are AES-256-GCM encrypted, write-only through the API, and require `SILICON_ENCRYPTION_KEY`;
 - ports are never published implicitly; an IP address and host port must both be configured;
 - runtime inspection, lifecycle actions, bounded historical logs, and bounded live SSE logs operate only on persisted Silicon-managed containers;
-- servers are inventory records; there is no agent and no remote shell;
+- enrolled Linux amd64/arm64 servers connect outbound over an authenticated TLS WebSocket; the Agent exposes typed Docker operations and never exposes a generic shell;
 - `ExternalRoutingProvider` reports externally managed routing/TLS semantics; it changes no proxy configuration;
 - OIDC/Authentik configuration records are disabled planning records; the OIDC login flow is not activated;
-- Docker execution is local to the control-plane host; registry credential management, remote agents, and Compose execution are not implemented.
+- applications select either the explicitly enabled local provider or one enrolled server; Docker images and exact-revision Dockerfile builds share that path. Automatic scheduling, registry credential management, distributed build caching, and Compose execution are not implemented.
 
 Provider credentials are handled separately: GitHub App secrets remain process configuration, while Cloudflare API and tunnel tokens use authenticated encryption at rest. See [GitHub integration](docs/integrations/github.md) and [Cloudflare integration](docs/integrations/cloudflare.md).
 

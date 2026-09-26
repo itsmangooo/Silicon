@@ -32,9 +32,16 @@ Milestone 1 expressly stops before workload execution.
 
 Automated encryption-key rotation, registry credential management, and zero-downtime fixed-port replacement remain future hardening work. No general remote shell was introduced.
 
-## Candidate Milestone 3 — managed server agent
+## Managed server Agent and production installer increment
 
-Mutually authenticated agent enrollment, typed capabilities, replay protection, resource reporting, health and log transport. The agent must not become an unrestricted command-execution service.
+- Outbound authenticated TLS WebSocket Agent for Linux amd64/arm64
+- Short-lived one-time enrollment and revocable per-machine credentials
+- Real Docker, CPU, memory, disk, uptime, version, capability, and disconnect state
+- Explicit application target selection plus remote Docker image and exact-revision Dockerfile deployment through `RuntimeProvider`
+- Remote status, health, logs, start, stop, restart, and removal with ownership checks
+- Idempotent production installer/update path with generated secrets and private PostgreSQL
+
+Registry credentials, automatic scheduling, durable offline command queues, distributed build caching, and Agent auto-update remain future work.
 
 ## Later milestones
 
