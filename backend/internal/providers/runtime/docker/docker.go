@@ -221,7 +221,7 @@ func (p Provider) managedInspect(ctx context.Context, id string) (inspectResult,
 	if strings.TrimSpace(id) == "" {
 		return inspectResult{}, errors.New("runtime instance ID is required")
 	}
-	const inspectFormat = `{"Id":{{json .Id}},"Created":{{json .Created}},"Config":{"Image":{{json .Config.Image}},"Labels":{{json .Config.Labels}}},"State":{"Status":{{json .State.Status}},"Running":{{json .State.Running}},"StartedAt":{{json .State.StartedAt}},"FinishedAt":{{json .State.FinishedAt}},"Health":{{if .State.Health}}{"Status":{{json .State.Health.Status}}}{{else}}null{{end}}},"NetworkSettings":{"Ports":{{json .NetworkSettings.Ports}}}}`
+	const inspectFormat = `{"Id":{{json .Id}},"Created":{{json .Created}},"Config":{"Image":{{json .Config.Image}},"Labels":{{json .Config.Labels}}},"State":{"Status":{{json .State.Status}},"Running":{{json .State.Running}},"StartedAt":{{json .State.StartedAt}},"FinishedAt":{{json .State.FinishedAt}},"Health":{{with (index .State "Health")}}{"Status":{{json .Status}}}{{else}}null{{end}}},"NetworkSettings":{"Ports":{{json .NetworkSettings.Ports}}}}`
 	output, err := p.output(ctx, "inspect", "--format", inspectFormat, "--", id)
 	if err != nil {
 		return inspectResult{}, fmt.Errorf("inspect container: %w", err)
