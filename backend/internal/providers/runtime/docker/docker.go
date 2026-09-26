@@ -2,19 +2,19 @@ package docker
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
-	"os"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/itsmangooo/Silicon/backend/internal/providers/connection"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 )
 
@@ -31,6 +31,7 @@ type Provider struct {
 	Binary         string
 	HealthTimeout  time.Duration
 	OrganizationID string
+	Executor       connection.CommandExecutor
 }
 
 func (p Provider) Deploy(ctx context.Context, spec runtimeprovider.DeploymentSpec) (runtimeprovider.InstanceStatus, error) {
@@ -38,7 +39,7 @@ func (p Provider) Deploy(ctx context.Context, spec runtimeprovider.DeploymentSpe
 		return runtimeprovider.InstanceStatus{}, err
 	}
 	if p.OrganizationID != "" && spec.OrganizationID != p.OrganizationID {
-		return runtimeprovider.InstanceStatus{}, errors.New("deployment organization does not match this Agent")
+		return runtimeprovider.InstanceStatus{}, errors.New("deployment organization does not match this runtime target")
 	}
 	if spec.PullImage {
 		if err := p.run(ctx, "pull", "--", spec.Image); err != nil {
@@ -52,11 +53,11 @@ func (p Provider) Deploy(ctx context.Context, spec runtimeprovider.DeploymentSpe
 		"--label", applicationLabel + "=" + spec.ApplicationID,
 		"--label", deploymentLabel + "=" + spec.DeploymentID,
 	}
-	envPath, cleanup, err := environmentFile(spec.Environment)
+	envPath, cleanup, err := p.environmentFile(ctx, spec.Environment)
 	if err != nil {
 		return runtimeprovider.InstanceStatus{}, err
 	}
-	defer cleanup()
+	defer cleanup(context.Background())
 	if envPath != "" {
 		args = append(args, "--env-file", envPath)
 	}
@@ -138,27 +139,19 @@ func (p Provider) Logs(ctx context.Context, id string, request runtimeprovider.L
 		args = append(args, "--since", request.Since.UTC().Format(time.RFC3339Nano))
 	}
 	args = append(args, "--", id)
-	command := exec.CommandContext(ctx, p.binary(), args...)
-	stdout, err := command.StdoutPipe()
+	stream, err := p.executor().Start(ctx, p.binary(), args...)
 	if err != nil {
-		return nil, err
-	}
-	stderr, err := command.StderrPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err = command.Start(); err != nil {
 		return nil, redactError(err)
 	}
 	lines := make(chan runtimeprovider.LogLine, 64)
 	go func() {
 		defer close(lines)
 		done := make(chan struct{}, 2)
-		go scanLogs(ctx, stdout, "stdout", lines, done)
-		go scanLogs(ctx, stderr, "stderr", lines, done)
+		go scanLogs(ctx, stream.Stdout, "stdout", lines, done)
+		go scanLogs(ctx, stream.Stderr, "stderr", lines, done)
 		<-done
 		<-done
-		_ = command.Wait()
+		_ = stream.Wait()
 	}()
 	return lines, nil
 }
@@ -313,20 +306,11 @@ func validateSpec(spec runtimeprovider.DeploymentSpec) error {
 	return nil
 }
 
-func environmentFile(values map[string]string) (string, func(), error) {
+func (p Provider) environmentFile(ctx context.Context, values map[string]string) (string, func(context.Context) error, error) {
 	if len(values) == 0 {
-		return "", func() {}, nil
+		return "", func(context.Context) error { return nil }, nil
 	}
-	file, err := os.CreateTemp("", "silicon-env-*")
-	if err != nil {
-		return "", func() {}, err
-	}
-	cleanup := func() { _ = os.Remove(file.Name()) }
-	if err = file.Chmod(0600); err != nil {
-		file.Close()
-		cleanup()
-		return "", func() {}, err
-	}
+	var body bytes.Buffer
 	names := make([]string, 0, len(values))
 	for name := range values {
 		names = append(names, name)
@@ -334,21 +318,21 @@ func environmentFile(values map[string]string) (string, func(), error) {
 	sort.Strings(names)
 	for _, name := range names {
 		if !validEnvironmentName(name) || strings.ContainsAny(values[name], "\x00\r\n") {
-			file.Close()
-			cleanup()
-			return "", func() {}, fmt.Errorf("invalid environment variable %q", name)
+			return "", func(context.Context) error { return nil }, fmt.Errorf("invalid environment variable %q", name)
 		}
-		if _, err = fmt.Fprintf(file, "%s=%s\n", name, values[name]); err != nil {
-			file.Close()
-			cleanup()
-			return "", func() {}, err
+		if _, err := fmt.Fprintf(&body, "%s=%s\n", name, values[name]); err != nil {
+			return "", func(context.Context) error { return nil }, err
 		}
 	}
-	if err = file.Close(); err != nil {
-		cleanup()
-		return "", func() {}, err
+	content := append([]byte(nil), body.Bytes()...)
+	path, cleanup, err := p.executor().WriteFile(ctx, "silicon-env", content, 0600)
+	for index := range content {
+		content[index] = 0
 	}
-	return file.Name(), cleanup, nil
+	if err != nil {
+		return "", func(context.Context) error { return nil }, err
+	}
+	return path, cleanup, nil
 }
 
 func validEnvironmentName(value string) bool {
@@ -392,61 +376,23 @@ func scanLogs(ctx context.Context, reader io.Reader, stream string, output chan<
 }
 
 func (p Provider) output(ctx context.Context, args ...string) (string, error) {
-	command := exec.CommandContext(ctx, p.binary(), args...)
-	stdout, stderr := &boundedBuffer{limit: 1 << 20}, &boundedBuffer{limit: 1 << 20}
-	command.Stdout, command.Stderr = stdout, stderr
-	err := command.Run()
-	if stdout.exceeded || stderr.exceeded {
-		return "", errors.New("Docker output exceeded one MiB")
-	}
+	output, err := p.executor().Output(ctx, nil, p.binary(), args...)
 	if err != nil {
-		message := strings.TrimSpace(stderr.String())
-		if message == "" {
-			message = strings.TrimSpace(stdout.String())
-		}
-		if message == "" {
-			message = err.Error()
-		}
-		return "", redactError(errors.New(message))
+		return "", redactError(err)
 	}
-	return stdout.String(), nil
+	return output, nil
 }
 
 func (p Provider) run(ctx context.Context, args ...string) error {
-	command := exec.CommandContext(ctx, p.binary(), args...)
-	stderr := &boundedBuffer{limit: 1 << 20}
-	command.Stdout, command.Stderr = io.Discard, stderr
-	if err := command.Run(); err != nil {
-		message := strings.TrimSpace(stderr.String())
-		if message == "" {
-			message = err.Error()
-		}
-		return redactError(errors.New(message))
-	}
-	return nil
+	return redactError(p.executor().Run(ctx, nil, p.binary(), args...))
 }
 
-type boundedBuffer struct {
-	data     []byte
-	limit    int
-	exceeded bool
-}
-
-func (b *boundedBuffer) Write(value []byte) (int, error) {
-	remaining := b.limit - len(b.data)
-	if remaining > 0 {
-		if remaining > len(value) {
-			remaining = len(value)
-		}
-		b.data = append(b.data, value[:remaining]...)
+func (p Provider) executor() connection.CommandExecutor {
+	if p.Executor != nil {
+		return p.Executor
 	}
-	if remaining < len(value) {
-		b.exceeded = true
-	}
-	return len(value), nil
+	return connection.LocalExecutor{}
 }
-
-func (b *boundedBuffer) String() string { return string(b.data) }
 
 func (p Provider) binary() string {
 	if strings.TrimSpace(p.Binary) == "" {

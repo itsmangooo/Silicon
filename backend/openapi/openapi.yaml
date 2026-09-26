@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
   title: Silicon Control Plane API
-  version: 0.4.0
+  version: 0.5.0
   description: >-
     Silicon control-plane API with local authentication, organization-scoped
     records, GitHub push automation, Cloudflare DNS/tunnel integration, and a
-    local and outbound-Agent Docker runtime providers.
+    local and SSH-connected Docker runtime providers.
 servers:
   - url: http://localhost:8080/api/v1
 tags:
@@ -15,7 +15,6 @@ tags:
   - name: Applications
   - name: Deployments
   - name: Servers
-  - name: Agent
   - name: Identity
   - name: Audit
   - name: GitHub
@@ -395,33 +394,44 @@ paths:
       parameters: [{$ref: '#/components/parameters/CSRFToken'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ServerInput'}}}}
       responses:
-        '201': {description: Created with a one-time enrollment command, content: {application/json: {schema: {type: object, properties: {server: {$ref: '#/components/schemas/Server'}, enrollment: {$ref: '#/components/schemas/Enrollment'}}}}}}
+        '201': {description: Server connection record created, content: {application/json: {schema: {$ref: '#/components/schemas/Server'}}}}
   /organizations/{organizationID}/servers/{serverID}:
     parameters:
       - {$ref: '#/components/parameters/OrganizationID'}
       - {name: serverID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
     get:
       tags: [Servers]
-      summary: Read real Agent-reported server state
+      summary: Read the most recent active server connection check
       responses: {'200': {description: Server, content: {application/json: {schema: {$ref: '#/components/schemas/Server'}}}}}
-  /organizations/{organizationID}/servers/{serverID}/enrollment-token:
+  /organizations/{organizationID}/servers/{serverID}/connection:
     parameters:
       - {$ref: '#/components/parameters/OrganizationID'}
       - {name: serverID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
     post:
-      tags: [Agent]
-      summary: Create a short-lived single-use enrollment command
+      tags: [Servers]
+      summary: Replace local or SSH connection configuration
       parameters: [{$ref: '#/components/parameters/CSRFToken'}]
-      responses: {'201': {description: Enrollment, content: {application/json: {schema: {$ref: '#/components/schemas/Enrollment'}}}}}
-  /organizations/{organizationID}/servers/{serverID}/agent/revoke:
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ServerConnectionInput'}}}}
+      responses: {'200': {description: Connection updated, content: {application/json: {schema: {$ref: '#/components/schemas/Server'}}}}}
+  /organizations/{organizationID}/servers/{serverID}/check:
     parameters:
       - {$ref: '#/components/parameters/OrganizationID'}
       - {name: serverID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
     post:
-      tags: [Agent]
-      summary: Revoke the active machine credential and disconnect the Agent
+      tags: [Servers]
+      summary: Actively verify reachability, host identity, and Docker
       parameters: [{$ref: '#/components/parameters/CSRFToken'}]
-      responses: {'204': {description: Revoked}}
+      responses: {'200': {description: Connection verified}, '409': {description: SSH host key requires explicit trust or changed unexpectedly}, '422': {description: Authentication or Docker check failed}}
+  /organizations/{organizationID}/servers/{serverID}/trust-host-key:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: serverID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    post:
+      tags: [Servers]
+      summary: Explicitly trust the exact SSH host-key fingerprint currently presented
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [fingerprint], properties: {fingerprint: {type: string, pattern: '^SHA256:'}}}}}}
+      responses: {'200': {description: Host identity trusted and checked}, '422': {description: Fingerprint verification failed}}
   /organizations/{organizationID}/applications/{applicationID}/server:
     parameters:
       - {$ref: '#/components/parameters/OrganizationID'}
@@ -432,26 +442,6 @@ paths:
       parameters: [{$ref: '#/components/parameters/CSRFToken'}]
       requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, properties: {serverId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}}}}}}
       responses: {'200': {description: Updated application, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}}
-  /agent/enroll:
-    post:
-      tags: [Agent]
-      security: []
-      summary: Exchange an enrollment token for a machine credential over TLS
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentEnrollmentInput'}}}}
-      responses: {'201': {description: Credential returned once, content: {application/json: {schema: {$ref: '#/components/schemas/AgentEnrollmentResult'}}}}, '401': {$ref: '#/components/responses/UnauthorizedError'}}
-  /agent/connect:
-    get:
-      tags: [Agent]
-      summary: Upgrade an authenticated outbound Agent connection to WebSocket
-      description: Requires TLS, an Authorization Bearer machine credential, and X-Silicon-Agent-ID.
-      security: []
-      responses: {'101': {description: WebSocket protocol upgrade}, '401': {$ref: '#/components/responses/UnauthorizedError'}}
-  /agent/check:
-    get:
-      tags: [Agent]
-      summary: Verify machine credential and active command connection
-      security: []
-      responses: {'200': {description: Connected}, '401': {$ref: '#/components/responses/UnauthorizedError'}, '503': {description: Authenticated but disconnected}}
   /organizations/{organizationID}/identity-providers:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}]
     get:
@@ -545,10 +535,13 @@ paths:
   /organizations/{organizationID}/integrations/cloudflare/tunnels:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}]
     get: {tags: [Cloudflare], summary: List configured tunnel records, responses: {'200': {description: Tunnels}}}
-    post: {tags: [Cloudflare], summary: Create or import an optional remotely-managed tunnel, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'201': {description: Tunnel configured}}}
+    post: {tags: [Cloudflare], summary: Create or import an optional tunnel bound to a target server, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TunnelInput'}}}}, responses: {'201': {description: Tunnel configured}}}
+  /organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/install:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/TunnelID'}]
+    post: {tags: [Cloudflare], summary: Retry official cloudflared installation on the selected server, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'200': {description: Installed}, '409': {description: Tunnel is external or has no installable credential}}}
   /organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/routes:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/TunnelID'}]
-    post: {tags: [Cloudflare], summary: Add a hostname route and reconcile its tunnel CNAME, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'201': {description: Route configured}}}
+    post: {tags: [Cloudflare], summary: Add a provider-resolved hostname route and reconcile its tunnel CNAME, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [domainId], properties: {domainId: {$ref: '#/components/schemas/UUID'}}}}}}, responses: {'201': {description: Route configured}}}
 components:
   securitySchemes:
     sessionCookie:
@@ -745,13 +738,29 @@ components:
     ServerInput:
       type: object
       additionalProperties: false
-      required: [name, hostname]
+      required: [name, connectionType]
       properties:
         name: {type: string}
-        hostname: {type: string}
-        operatingSystem: {type: string}
-        architecture: {type: string}
+        connectionType: {type: string, enum: [local, ssh]}
+        host: {type: string}
+        port: {type: integer, minimum: 1, maximum: 65535, default: 22}
+        username: {type: string}
+        privateKey: {type: string, writeOnly: true, format: password}
+        hostKeyFingerprint: {type: string, pattern: '^SHA256:'}
+        publicAddress: {type: string}
         connectivityType: {type: string, enum: [public, self_hosted, private], default: public}
+    ServerConnectionInput:
+      type: object
+      additionalProperties: false
+      required: [connectionType, host]
+      properties:
+        connectionType: {type: string, enum: [local, ssh]}
+        host: {type: string}
+        port: {type: integer, minimum: 1, maximum: 65535, default: 22}
+        username: {type: string}
+        privateKey: {type: string, writeOnly: true, format: password}
+        hostKeyFingerprint: {type: string, pattern: '^SHA256:'}
+        publicAddress: {type: string}
     Server:
       allOf:
         - {$ref: '#/components/schemas/ServerInput'}
@@ -760,7 +769,10 @@ components:
             id: {$ref: '#/components/schemas/UUID'}
             organizationId: {$ref: '#/components/schemas/UUID'}
             runtime: {type: string}
-            connectionStatus: {type: string, enum: [unknown, connected, disconnected, degraded, docker_unavailable]}
+            hostname: {type: string}
+            operatingSystem: {type: string}
+            architecture: {type: string}
+            connectionStatus: {type: string, enum: [connection_not_configured, connected, unreachable, docker_unavailable, authentication_failed, host_key_changed]}
             health: {type: string, enum: [unknown, healthy, degraded, unhealthy]}
             connectivityType: {type: string, enum: [public, self_hosted, private]}
             dockerAvailable: {type: boolean}
@@ -772,35 +784,15 @@ components:
             diskTotalBytes: {type: [integer, 'null'], format: int64}
             diskUsedBytes: {type: [integer, 'null'], format: int64}
             uptimeSeconds: {type: [integer, 'null'], format: int64}
-            agentId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
-            agentVersion: {type: string}
-            agentCompatibility: {type: string, enum: [unknown, compatible, outdated, incompatible]}
-            agentCapabilities: {type: array, items: {type: string}}
-            lastSeenAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+            connectionType: {type: string, enum: [unconfigured, local, ssh]}
+            publicAddress: {type: string}
+            sshPort: {type: integer}
+            sshUsername: {type: string}
+            credentialConfigured: {type: boolean}
+            sshHostKeyFingerprint: {type: string}
+            connectionError: {type: string}
+            lastCheckedAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
             createdAt: {$ref: '#/components/schemas/Timestamp'}
-    Enrollment:
-      type: object
-      properties:
-        expiresAt: {$ref: '#/components/schemas/Timestamp'}
-        command: {type: string, description: Contains a secret that is displayed only once}
-    AgentEnrollmentInput:
-      type: object
-      additionalProperties: false
-      required: [serverId, token, protocolVersion, agentVersion]
-      properties:
-        serverId: {$ref: '#/components/schemas/UUID'}
-        token: {type: string, writeOnly: true}
-        protocolVersion: {type: integer, minimum: 1}
-        agentVersion: {type: string}
-        capabilities: {type: array, items: {type: string}}
-    AgentEnrollmentResult:
-      type: object
-      properties:
-        agentId: {$ref: '#/components/schemas/UUID'}
-        serverId: {$ref: '#/components/schemas/UUID'}
-        organizationId: {$ref: '#/components/schemas/UUID'}
-        credential: {type: string, writeOnly: true}
-        protocolVersion: {type: integer}
     IdentityProviderInput:
       type: object
       additionalProperties: false
@@ -850,12 +842,21 @@ components:
     DomainInput:
       type: object
       additionalProperties: false
-      required: [hostname, targetPort, recordType, content, proxied]
-      properties: {hostname: {type: string}, targetPort: {type: integer, minimum: 1, maximum: 65535}, recordType: {type: string, enum: [A, AAAA, CNAME]}, content: {type: string}, proxied: {type: boolean}}
+      required: [hostname, targetPort, protocol, routingMode]
+      properties: {hostname: {type: string}, targetPort: {type: integer, minimum: 1, maximum: 65535}, protocol: {type: string, enum: [http, https, tcp]}, routingMode: {type: string, enum: [dns_only, cloudflare_proxied, cloudflare_tunnel]}}
     DomainUpdateInput:
       type: object
       additionalProperties: false
-      required: [targetPort, recordType, content, proxied]
-      properties: {targetPort: {type: integer, minimum: 1, maximum: 65535}, recordType: {type: string, enum: [A, AAAA, CNAME]}, content: {type: string}, proxied: {type: boolean}}
+      required: [targetPort, protocol, routingMode]
+      properties: {targetPort: {type: integer, minimum: 1, maximum: 65535}, protocol: {type: string, enum: [http, https, tcp]}, routingMode: {type: string, enum: [dns_only, cloudflare_proxied, cloudflare_tunnel]}}
+    TunnelInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string}
+        providerTunnelId: {type: string}
+        ownership: {type: string, enum: [imported, external]}
+        serverId: {$ref: '#/components/schemas/UUID'}
 security:
   - sessionCookie: []

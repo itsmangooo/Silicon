@@ -5,20 +5,8 @@ RUN cd backend && go mod download
 COPY backend ./backend
 RUN cd backend && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/silicon ./cmd/silicon
 
-COPY services/agent/go.mod services/agent/go.sum ./services/agent/
-RUN cd services/agent && go mod download
-COPY services/agent ./services/agent
-RUN cd services/agent && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/silicon-agent-linux-amd64 .
-RUN cd services/agent && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /out/silicon-agent-linux-arm64 .
-RUN cd /out && sha256sum silicon-agent-linux-amd64 > silicon-agent-linux-amd64.sha256 && sha256sum silicon-agent-linux-arm64 > silicon-agent-linux-arm64.sha256
-
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/silicon /usr/local/bin/silicon
-COPY --from=build /out/silicon-agent-linux-amd64 /usr/local/share/silicon/agents/silicon-agent-linux-amd64
-COPY --from=build /out/silicon-agent-linux-amd64.sha256 /usr/local/share/silicon/agents/silicon-agent-linux-amd64.sha256
-COPY --from=build /out/silicon-agent-linux-arm64 /usr/local/share/silicon/agents/silicon-agent-linux-arm64
-COPY --from=build /out/silicon-agent-linux-arm64.sha256 /usr/local/share/silicon/agents/silicon-agent-linux-arm64.sha256
-COPY services/agent/install.sh /usr/local/share/silicon/agents/install.sh
 USER nonroot:nonroot
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=5s --retries=12 CMD ["/usr/local/bin/silicon", "healthcheck"]

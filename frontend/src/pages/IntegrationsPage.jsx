@@ -13,19 +13,20 @@ export function IntegrationsPage() {
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
   const resource = useResource(async () => {
-    if (!organizationId) return { github: null, cloudflare: null, applications: [], repositories: [], zones: [], tunnels: [] }
+    if (!organizationId) return { github: null, cloudflare: null, applications: [], servers: [], repositories: [], zones: [], tunnels: [] }
     const root = organizationPath(organizationId)
-    const [github, cloudflare, applications] = await Promise.all([
+    const [github, cloudflare, applications, servers] = await Promise.all([
       optional(`${root}/integrations/github`),
       optional(`${root}/integrations/cloudflare`),
       api(`${root}/applications`),
+      api(`${root}/servers`),
     ])
     const [repositories, zones, tunnels] = await Promise.all([
       github?.status === 'connected' ? api(`${root}/integrations/github/repositories`).catch(() => ({ repositories: [] })) : { repositories: [] },
       cloudflare?.status === 'connected' ? api(`${root}/integrations/cloudflare/zones`).catch(() => ({ zones: [] })) : { zones: [] },
       cloudflare?.status === 'connected' ? api(`${root}/integrations/cloudflare/tunnels`).catch(() => ({ tunnels: [] })) : { tunnels: [] },
     ])
-    return { github, cloudflare, applications: applications.applications, repositories: repositories.repositories, zones: zones.zones, tunnels: tunnels.tunnels }
+    return { github, cloudflare, applications: applications.applications, servers: servers.servers, repositories: repositories.repositories, zones: zones.zones, tunnels: tunnels.tunnels }
   }, [organizationId])
 
   const run = async (work) => {
@@ -49,6 +50,7 @@ export function IntegrationsPage() {
   const createTunnel = (event) => {
     event.preventDefault(); const values = Object.fromEntries(new FormData(event.currentTarget))
     if (!values.providerTunnelId) delete values.providerTunnelId
+    if (!values.serverId) delete values.serverId
     run(() => api(organizationPath(organizationId, '/integrations/cloudflare/tunnels'), { method: 'POST', body: values }))
     event.currentTarget.reset()
   }
@@ -70,8 +72,8 @@ export function IntegrationsPage() {
         {resource.data.cloudflare && <>
           <div className="toolbar"><button className="button ghost" onClick={() => run(() => api(organizationPath(organizationId, '/integrations/cloudflare/zones')))} disabled={busy}><ArrowClockwiseIcon size={16} /><span>Refresh zones</span></button></div>
           <table><thead><tr><th>Zone</th><th>Provider ID</th><th>Status</th><th>Matching</th></tr></thead><tbody>{resource.data.zones.length ? resource.data.zones.map((zone) => <tr key={zone.id}><td data-label="Zone">{zone.name}</td><td data-label="Provider ID"><Mono>{zone.providerZoneId}</Mono></td><td data-label="Status"><Status value={zone.status} /></td><td data-label="Matching"><button className="button ghost compact" disabled={busy} onClick={() => toggleZone(zone)}>{zone.selected ? 'Enabled' : 'Disabled'}</button></td></tr>) : <tr><td colSpan="4"><EmptyState title="No accessible zones">Check the token scope and account.</EmptyState></td></tr>}</tbody></table>
-          <form className="form-grid" onSubmit={createTunnel}><Field label="Tunnel name"><input name="name" required /></Field><Field label="Existing tunnel ID" hint="Leave empty to create a new Silicon-owned tunnel."><input name="providerTunnelId" className="mono" /></Field><Field label="Existing tunnel ownership"><select name="ownership" defaultValue="imported"><option value="imported">Imported / Silicon may manage routes</option><option value="external">External / read-only</option></select></Field><div className="form-actions"><button className="button secondary" disabled={busy}><PlusIcon size={16} /><span>Create or import tunnel</span></button></div></form>
-          <table><thead><tr><th>Tunnel</th><th>Ownership</th><th>Status</th></tr></thead><tbody>{resource.data.tunnels.length ? resource.data.tunnels.map((item) => <tr key={item.id}><td data-label="Tunnel">{item.name}</td><td data-label="Ownership">{item.ownership}</td><td data-label="Status"><Status value={item.status} /></td></tr>) : <tr><td colSpan="3"><EmptyState title="No tunnels configured">Direct routing remains available; a tunnel is not required.</EmptyState></td></tr>}</tbody></table>
+          <form className="form-grid" onSubmit={createTunnel}><Field label="Tunnel name"><input name="name" required /></Field><Field label="Target server" hint="Required when Silicon creates and runs cloudflared."><select name="serverId" defaultValue=""><option value="">Externally installed / imported</option>{resource.data.servers.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.connectionType}</option>)}</select></Field><Field label="Existing tunnel ID" hint="Leave empty to create a new Silicon-owned tunnel."><input name="providerTunnelId" className="mono" /></Field><Field label="Existing tunnel ownership"><select name="ownership" defaultValue="imported"><option value="imported">Imported / Silicon may manage routes</option><option value="external">External / read-only</option></select></Field><div className="form-actions"><button className="button secondary" disabled={busy}><PlusIcon size={16} /><span>Create or import tunnel</span></button></div></form>
+          <table><thead><tr><th>Tunnel</th><th>Ownership</th><th>Provider</th><th>Installation</th><th>Server</th><th>Action</th></tr></thead><tbody>{resource.data.tunnels.length ? resource.data.tunnels.map((item) => <tr key={item.id}><td data-label="Tunnel">{item.name}</td><td data-label="Ownership">{item.ownership}</td><td data-label="Provider"><Status value={item.status} /></td><td data-label="Installation"><Status value={item.installationStatus} />{item.installationError && <small>{item.installationError}</small>}</td><td data-label="Server">{resource.data.servers.find((server) => server.id === item.serverId)?.name || 'External'}</td><td data-label="Action">{item.ownership === 'silicon' && item.installationStatus !== 'installed' ? <button className="button ghost compact" disabled={busy} onClick={() => run(() => api(organizationPath(organizationId, `/integrations/cloudflare/tunnels/${item.id}/install`), { method: 'POST' }))}><ArrowClockwiseIcon size={16} /><span>Retry install</span></button> : '—'}</td></tr>) : <tr><td colSpan="6"><EmptyState title="No tunnels configured">Direct routing remains available; a tunnel is not required.</EmptyState></td></tr>}</tbody></table>
         </>}
       </>}
     </Section>

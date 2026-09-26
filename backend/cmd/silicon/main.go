@@ -9,9 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/itsmangooo/Silicon/backend/db"
-	"github.com/itsmangooo/Silicon/backend/internal/agent"
 	"github.com/itsmangooo/Silicon/backend/internal/config"
 	"github.com/itsmangooo/Silicon/backend/internal/cryptoenvelope"
 	"github.com/itsmangooo/Silicon/backend/internal/execution"
@@ -20,8 +18,10 @@ import (
 	githubprovider "github.com/itsmangooo/Silicon/backend/internal/providers/git/github"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 	dockerruntime "github.com/itsmangooo/Silicon/backend/internal/providers/runtime/docker"
+	serverruntime "github.com/itsmangooo/Silicon/backend/internal/providers/runtime/server"
 	secretprovider "github.com/itsmangooo/Silicon/backend/internal/providers/secrets"
 	localsecrets "github.com/itsmangooo/Silicon/backend/internal/providers/secrets/local"
+	"github.com/itsmangooo/Silicon/backend/internal/serverconnections"
 	"github.com/itsmangooo/Silicon/backend/internal/store"
 )
 
@@ -63,26 +63,20 @@ func main() {
 	var executor jobs.DeploymentExecutor = jobs.UnavailableExecutor{}
 	var localRuntime runtimeprovider.Provider
 	var secrets secretprovider.Provider
-	if box, boxErr := cryptoenvelope.New(cfg.EncryptionKey); boxErr == nil {
-		secrets = localsecrets.Provider{Pool: pool, Box: box}
+	var box *cryptoenvelope.Box
+	if value, boxErr := cryptoenvelope.New(cfg.EncryptionKey); boxErr == nil {
+		secrets = localsecrets.Provider{Pool: pool, Box: value}
+		box = &value
 	}
 	if cfg.LocalDockerEnabled {
 		localRuntime = dockerruntime.Provider{Binary: cfg.DockerBinary, HealthTimeout: 90 * time.Second}
 		logger.Info("local Docker runtime provider enabled")
 	}
 	repository := store.Repository{Pool: pool}
-	hub := agent.NewHub(logger, func(ctx context.Context, agentID, serverID uuid.UUID, heartbeat agent.Heartbeat) error {
-		return repository.RecordAgentHeartbeat(ctx, agentID, serverID, store.AgentHeartbeat{
-			ProtocolVersion: heartbeat.ProtocolVersion, Version: heartbeat.AgentVersion, Compatibility: agent.Compatibility(heartbeat.ProtocolVersion, heartbeat.AgentVersion, cfg.AgentExpectedVersion), Capabilities: heartbeat.Capabilities,
-			Hostname: heartbeat.Hostname, OperatingSystem: heartbeat.OperatingSystem, Architecture: heartbeat.Architecture, UptimeSeconds: heartbeat.UptimeSeconds,
-			DockerAvailable: heartbeat.DockerAvailable, DockerVersion: heartbeat.DockerVersion, CPUCount: heartbeat.CPUCount, CPUUsagePercent: heartbeat.CPUUsagePercent,
-			MemoryTotal: heartbeat.MemoryTotal, MemoryUsed: heartbeat.MemoryUsed, DiskTotal: heartbeat.DiskTotal, DiskUsed: heartbeat.DiskUsed,
-		})
-	}, cfg.AgentHeartbeatTimeout)
-	runtime := runtimeprovider.Dispatcher{Local: localRuntime, Remote: agent.RemoteRuntimeProvider{Hub: hub}}
+	connections := serverconnections.Manager{Repository: repository, Box: box, LocalEnabled: cfg.LocalDockerEnabled}
+	runtime := runtimeprovider.Dispatcher{Local: localRuntime, Server: serverruntime.Provider{Connections: connections, HealthTimeout: 90 * time.Second}}
 	executor = execution.DockerDeploymentExecutor{Pool: pool, Git: githubprovider.Client{AppID: cfg.GitHubAppID, PrivateKey: cfg.GitHubPrivateKey, BaseURL: cfg.GitHubAPIURL}, Runtime: runtime, Secrets: secrets, DockerBinary: cfg.DockerBinary}
-	api := httpapi.NewWithAgent(cfg, pool, logger, runtime, secrets, hub)
-	go monitorAgents(ctx, repository, cfg.AgentHeartbeatTimeout, logger)
+	api := httpapi.NewWithProviders(cfg, pool, logger, runtime, secrets)
 	runner := jobs.Runner{Pool: pool, Executor: executor, Logger: logger, WorkerID: "silicon-control-plane"}
 	go runner.Run(ctx)
 	server := &http.Server{
@@ -107,20 +101,5 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Error("http server stopped", "error", err)
 		os.Exit(1)
-	}
-}
-
-func monitorAgents(ctx context.Context, repository store.Repository, timeout time.Duration, logger *slog.Logger) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if _, err := repository.MarkDisconnectedAgents(ctx, time.Now().UTC().Add(-timeout)); err != nil {
-				logger.Error("agent status monitor failed", "error", err)
-			}
-		}
 	}
 }

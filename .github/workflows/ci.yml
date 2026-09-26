@@ -42,7 +42,9 @@ jobs:
         working-directory: backend
         run: |
           set +e
-          output=$(go test -count=1 ./... 2>&1)
+          # Database packages share the disposable silicon_test database and
+          # intentionally reset its public schema, so keep package execution serial.
+          output=$(go test -count=1 -p=1 ./... 2>&1)
           status=$?
           printf '%s\n' "$output"
           if [ "$status" -ne 0 ]; then
@@ -58,14 +60,11 @@ jobs:
         run: |
           go vet ./...
           test -z "$(gofmt -l .)"
-      - name: Verify Silicon Agent
-        working-directory: services/agent
+      - name: Verify retired Agent subsystem is absent
         run: |
-          go test ./...
-          go vet ./...
-          test -z "$(gofmt -l .)"
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./...
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./...
+          test ! -d backend/internal/agent
+          test ! -d services/agent
+          test ! -f .github/workflows/release-agent.yml
       - name: Verify frontend
         working-directory: frontend
         run: |
@@ -75,7 +74,7 @@ jobs:
           npm run build
       - name: Verify installers and production Compose
         run: |
-          shellcheck install.sh services/agent/install.sh deploy/tests/install_test.sh
+          shellcheck install.sh deploy/tests/install_test.sh
           sh deploy/tests/install_test.sh
           POSTGRES_DB=silicon POSTGRES_USER=silicon POSTGRES_PASSWORD=test SILICON_ENCRYPTION_KEY=dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1sb25nISEhISE= SILICON_PUBLIC_URL=http://localhost SILICON_COOKIE_SECURE=false SILICON_DATA_DIR=/tmp/silicon-data docker compose -f docker-compose.production.yml config --quiet
 
@@ -104,11 +103,6 @@ jobs:
             echo "::error title=Docker runtime integration failed::$summary"
             exit "$status"
           fi
-      - name: Verify Control Plane to Agent to Docker lifecycle
-        working-directory: backend
-        env:
-          SILICON_AGENT_DOCKER_INTEGRATION: "1"
-        run: go test -count=1 -timeout=6m -run '^TestControlPlaneAgentDockerIntegration$' ./internal/agent
 
   production-install:
     runs-on: ubuntu-latest

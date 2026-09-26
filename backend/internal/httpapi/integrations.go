@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -15,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/itsmangooo/Silicon/backend/internal/cryptoenvelope"
 	cfprovider "github.com/itsmangooo/Silicon/backend/internal/providers/cloudflare"
+	"github.com/itsmangooo/Silicon/backend/internal/providers/connection"
 	dnsprovider "github.com/itsmangooo/Silicon/backend/internal/providers/dns"
 	githubprovider "github.com/itsmangooo/Silicon/backend/internal/providers/git/github"
 	tunnelprovider "github.com/itsmangooo/Silicon/backend/internal/providers/tunnel"
@@ -331,26 +330,33 @@ func (a *API) listDomains(w http.ResponseWriter, r *http.Request) {
 }
 func (a *API) createDomain(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Hostname   string `json:"hostname"`
-		TargetPort int    `json:"targetPort"`
-		RecordType string `json:"recordType"`
-		Content    string `json:"content"`
-		Proxied    bool   `json:"proxied"`
+		Hostname    string `json:"hostname"`
+		TargetPort  int    `json:"targetPort"`
+		Protocol    string `json:"protocol"`
+		RoutingMode string `json:"routingMode"`
 	}
 	if !decode(w, r, &input) {
 		return
 	}
 	input.Hostname = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(input.Hostname), "."))
-	input.RecordType = strings.ToUpper(strings.TrimSpace(input.RecordType))
-	input.Content = strings.TrimSpace(input.Content)
-	if !validDNSName(input.Hostname) || input.TargetPort < 1 || input.TargetPort > 65535 || !validDNSContent(input.RecordType, input.Content) {
-		validation(w, "Provide a hostname, target port, record type, and DNS target.")
+	input.Protocol = strings.ToLower(strings.TrimSpace(input.Protocol))
+	input.RoutingMode = strings.ToLower(strings.TrimSpace(input.RoutingMode))
+	if !validDNSName(input.Hostname) || input.TargetPort < 1 || input.TargetPort > 65535 || !oneOf(input.Protocol, "http", "https", "tcp") || !oneOf(input.RoutingMode, "dns_only", "cloudflare_proxied", "cloudflare_tunnel") {
+		validation(w, "Provide a hostname, target port, protocol, and routing mode.")
+		return
+	}
+	if input.Protocol == "tcp" && input.RoutingMode == "cloudflare_proxied" {
+		validation(w, "TCP origins require DNS-only or Cloudflare Tunnel routing.")
 		return
 	}
 	orgID := pathUUID(r, "organizationID")
-	item, err := a.repo.CreateDomain(r.Context(), orgID, pathUUID(r, "applicationID"), currentUser(r.Context()).ID, input.Hostname, input.TargetPort, input.RecordType, input.Content, input.Proxied, requestID(r.Context()), clientIP(r))
+	item, err := a.repo.CreateDomain(r.Context(), orgID, pathUUID(r, "applicationID"), currentUser(r.Context()).ID, input.Hostname, input.TargetPort, input.Protocol, input.RoutingMode, requestID(r.Context()), clientIP(r))
 	if err != nil {
 		a.persistenceError(w, err)
+		return
+	}
+	if input.RoutingMode == "cloudflare_tunnel" {
+		writeJSON(w, http.StatusCreated, item)
 		return
 	}
 	synced, status := a.reconcileDomain(r, w, item)
@@ -361,20 +367,6 @@ func (a *API) createDomain(w http.ResponseWriter, r *http.Request) {
 }
 
 func validDNSName(value string) bool { return len(value) <= 253 && dnsNamePattern.MatchString(value) }
-func validDNSContent(recordType, value string) bool {
-	switch recordType {
-	case "A":
-		ip := net.ParseIP(value)
-		return ip != nil && ip.To4() != nil
-	case "AAAA":
-		ip := net.ParseIP(value)
-		return ip != nil && ip.To4() == nil
-	case "CNAME":
-		return validDNSName(strings.TrimSuffix(strings.ToLower(value), "."))
-	default:
-		return false
-	}
-}
 func (a *API) syncDomain(w http.ResponseWriter, r *http.Request) {
 	item, err := a.repo.Domain(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "domainID"))
 	if err != nil {
@@ -390,29 +382,36 @@ func (a *API) syncDomain(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) updateDomain(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		TargetPort int    `json:"targetPort"`
-		RecordType string `json:"recordType"`
-		Content    string `json:"content"`
-		Proxied    bool   `json:"proxied"`
+		TargetPort  int    `json:"targetPort"`
+		Protocol    string `json:"protocol"`
+		RoutingMode string `json:"routingMode"`
 	}
 	if !decode(w, r, &input) {
 		return
 	}
-	input.RecordType = strings.ToUpper(strings.TrimSpace(input.RecordType))
-	input.Content = strings.TrimSpace(input.Content)
-	if input.TargetPort < 1 || input.TargetPort > 65535 || !validDNSContent(input.RecordType, input.Content) {
-		validation(w, "Provide a target port, record type, and valid DNS target.")
+	input.Protocol = strings.ToLower(strings.TrimSpace(input.Protocol))
+	input.RoutingMode = strings.ToLower(strings.TrimSpace(input.RoutingMode))
+	if input.TargetPort < 1 || input.TargetPort > 65535 || !oneOf(input.Protocol, "http", "https", "tcp") || !oneOf(input.RoutingMode, "dns_only", "cloudflare_proxied", "cloudflare_tunnel") {
+		validation(w, "Provide a target port, protocol, and routing mode.")
+		return
+	}
+	if input.Protocol == "tcp" && input.RoutingMode == "cloudflare_proxied" {
+		validation(w, "TCP origins require DNS-only or Cloudflare Tunnel routing.")
 		return
 	}
 	orgID := pathUUID(r, "organizationID")
 	domainID := pathUUID(r, "domainID")
-	if err := a.repo.UpdateDomainDesired(r.Context(), orgID, domainID, currentUser(r.Context()).ID, input.TargetPort, input.RecordType, input.Content, input.Proxied, requestID(r.Context()), clientIP(r)); err != nil {
+	if err := a.repo.UpdateDomainDesired(r.Context(), orgID, domainID, currentUser(r.Context()).ID, input.TargetPort, input.Protocol, input.RoutingMode, "A", "", input.RoutingMode == "cloudflare_proxied", requestID(r.Context()), clientIP(r)); err != nil {
 		a.persistenceError(w, err)
 		return
 	}
 	domain, err := a.repo.Domain(r.Context(), orgID, domainID)
 	if err != nil {
 		a.persistenceError(w, err)
+		return
+	}
+	if input.RoutingMode == "cloudflare_tunnel" {
+		writeJSON(w, http.StatusOK, domain)
 		return
 	}
 	synced, ok := a.reconcileDomain(r, w, domain)
@@ -432,6 +431,26 @@ func matchingZone(host string, zones []store.CloudflareZone) (store.CloudflareZo
 	return store.CloudflareZone{}, false
 }
 func (a *API) reconcileDomain(r *http.Request, w http.ResponseWriter, domain store.Domain) (store.Domain, bool) {
+	if domain.RoutingMode != "cloudflare_tunnel" {
+		target, err := a.connections.ResolveOrigin(r.Context(), domain)
+		if err != nil {
+			_ = a.repo.SetDomainSync(r.Context(), domain.OrganizationID, domain.ID, nil, nil, "error", false, "origin target could not be resolved")
+			writeError(w, http.StatusConflict, "origin_unavailable", "The selected application target could not be resolved.")
+			return domain, false
+		}
+		if !target.PublicDNS {
+			_ = a.repo.SetDomainSync(r.Context(), domain.OrganizationID, domain.ID, nil, nil, "error", false, "target has no public DNS address")
+			writeError(w, http.StatusConflict, "public_origin_required", "This server has no public address. Configure one or use Cloudflare Tunnel.")
+			return domain, false
+		}
+		domain.DNSRecordType = target.DNSRecordType
+		domain.DNSContent = target.Address
+		domain.Proxied = domain.RoutingMode == "cloudflare_proxied"
+		if err := a.repo.SetDomainOriginDesired(r.Context(), domain.OrganizationID, domain.ID, domain.DNSRecordType, domain.DNSContent, domain.Proxied); err != nil {
+			a.serverError(w, r, err)
+			return domain, false
+		}
+	}
 	client, _, ok := a.cloudflareClient(r, w, domain.OrganizationID)
 	if !ok {
 		return domain, false
@@ -543,9 +562,10 @@ func (a *API) listTunnels(w http.ResponseWriter, r *http.Request) {
 }
 func (a *API) createTunnel(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Name             string `json:"name"`
-		ProviderTunnelID string `json:"providerTunnelId"`
-		Ownership        string `json:"ownership"`
+		Name             string     `json:"name"`
+		ProviderTunnelID string     `json:"providerTunnelId"`
+		Ownership        string     `json:"ownership"`
+		ServerID         *uuid.UUID `json:"serverId"`
 	}
 	if !decode(w, r, &input) {
 		return
@@ -557,6 +577,13 @@ func (a *API) createTunnel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	orgID := pathUUID(r, "organizationID")
+	if input.ServerID != nil {
+		server, loadErr := a.repo.ServerByID(r.Context(), orgID, *input.ServerID)
+		if loadErr != nil || !oneOf(server.ConnectionType, "local", "ssh") {
+			writeError(w, http.StatusNotFound, "not_found", "Target server not found.")
+			return
+		}
+	}
 	client, integration, ok := a.cloudflareClient(r, w, orgID)
 	if !ok {
 		return
@@ -567,6 +594,10 @@ func (a *API) createTunnel(w http.ResponseWriter, r *http.Request) {
 	var token string
 	var err error
 	if providerID == "" {
+		if input.ServerID == nil || *input.ServerID == uuid.Nil {
+			validation(w, "A target server is required for a Silicon-managed tunnel.")
+			return
+		}
 		ownership = "silicon"
 		created, createdToken, createErr := client.Create(r.Context(), integration.AccountID, input.Name)
 		err = createErr
@@ -576,6 +607,10 @@ func (a *API) createTunnel(w http.ResponseWriter, r *http.Request) {
 	} else {
 		if !oneOf(ownership, "imported", "external") {
 			validation(w, "Existing tunnels must be marked imported or external.")
+			return
+		}
+		if ownership == "imported" && (input.ServerID == nil || *input.ServerID == uuid.Nil) {
+			validation(w, "A target server is required for an imported tunnel whose routes Silicon manages.")
 			return
 		}
 		available, loadErr := client.List(r.Context(), integration.AccountID)
@@ -605,26 +640,82 @@ func (a *API) createTunnel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	item, err := a.repo.SaveTunnel(r.Context(), orgID, integration.ID, providerID, input.Name, ownership, status, encrypted)
+	item, err := a.repo.SaveTunnel(r.Context(), orgID, integration.ID, providerID, input.Name, ownership, status, encrypted, input.ServerID)
 	if err != nil {
 		a.persistenceError(w, err)
 		return
 	}
+	if ownership == "silicon" {
+		tokenBytes := []byte(token)
+		installErr := a.connections.InstallTunnel(r.Context(), orgID, *input.ServerID, connection.TunnelInstallation{Name: input.Name, Token: tokenBytes})
+		for index := range tokenBytes {
+			tokenBytes[index] = 0
+		}
+		if installErr != nil {
+			_ = a.repo.SetTunnelInstallation(r.Context(), orgID, item.ID, "error", "cloudflared installation failed")
+			writeError(w, http.StatusBadGateway, "tunnel_installation_failed", "The tunnel was created, but cloudflared could not be configured on the target server.")
+			return
+		}
+		if err := a.repo.SetTunnelInstallation(r.Context(), orgID, item.ID, "installed", ""); err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		item, _ = a.repo.Tunnel(r.Context(), orgID, item.ID)
+	}
 	writeJSON(w, http.StatusCreated, item)
 }
+
+func (a *API) installTunnel(w http.ResponseWriter, r *http.Request) {
+	organizationID := pathUUID(r, "organizationID")
+	tunnel, err := a.repo.Tunnel(r.Context(), organizationID, pathUUID(r, "tunnelID"))
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	if tunnel.Ownership != "silicon" || tunnel.ServerID == nil || len(tunnel.EncryptedTunnelToken) == 0 {
+		writeError(w, http.StatusConflict, "tunnel_not_installable", "Only a Silicon-created tunnel with a target server can be installed.")
+		return
+	}
+	box, ok := a.requireBox(w)
+	if !ok {
+		return
+	}
+	token, err := box.Open(tunnel.EncryptedTunnelToken, "cloudflare-tunnel:"+organizationID.String()+":"+tunnel.ProviderTunnelID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "credential_unavailable", "The encrypted tunnel credential could not be opened.")
+		return
+	}
+	defer func() {
+		for index := range token {
+			token[index] = 0
+		}
+	}()
+	if err = a.connections.InstallTunnel(r.Context(), organizationID, *tunnel.ServerID, connection.TunnelInstallation{Name: tunnel.Name, Token: token}); err != nil {
+		_ = a.repo.SetTunnelInstallation(r.Context(), organizationID, tunnel.ID, "error", "cloudflared installation failed")
+		writeError(w, http.StatusBadGateway, "tunnel_installation_failed", "cloudflared could not be configured on the target server.")
+		return
+	}
+	if err = a.repo.SetTunnelInstallation(r.Context(), organizationID, tunnel.ID, "installed", ""); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	item, err := a.repo.Tunnel(r.Context(), organizationID, tunnel.ID)
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
 func (a *API) createTunnelRoute(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		DomainID   uuid.UUID `json:"domainId"`
-		ServiceURL string    `json:"serviceUrl"`
-		Proxied    bool      `json:"proxied"`
+		DomainID uuid.UUID `json:"domainId"`
 	}
 	if !decode(w, r, &input) {
 		return
 	}
-	input.ServiceURL = strings.TrimSpace(input.ServiceURL)
-	serviceURL, parseErr := url.ParseRequestURI(input.ServiceURL)
-	if input.DomainID == uuid.Nil || parseErr != nil || serviceURL.Host == "" || serviceURL.User != nil || (serviceURL.Scheme != "http" && serviceURL.Scheme != "https") {
-		validation(w, "Domain and an HTTP(S) internal service URL are required.")
+	if input.DomainID == uuid.Nil {
+		validation(w, "Domain is required.")
 		return
 	}
 	orgID := pathUUID(r, "organizationID")
@@ -637,11 +728,25 @@ func (a *API) createTunnelRoute(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "tunnel_externally_managed", "This tunnel is marked externally managed and cannot be changed by Silicon.")
 		return
 	}
+	if tunnel.ServerID == nil || !oneOf(tunnel.InstallationStatus, "installed", "external") {
+		writeError(w, http.StatusConflict, "tunnel_not_installed", "The tunnel is not installed on a Silicon-managed target server.")
+		return
+	}
 	domain, err := a.repo.Domain(r.Context(), orgID, input.DomainID)
 	if err != nil {
 		a.persistenceError(w, err)
 		return
 	}
+	target, err := a.connections.ResolveOrigin(r.Context(), domain)
+	if err != nil {
+		writeError(w, http.StatusConflict, "origin_unavailable", "The selected application target could not be resolved.")
+		return
+	}
+	if target.ServerID != *tunnel.ServerID || !target.Tunnel {
+		writeError(w, http.StatusConflict, "tunnel_target_mismatch", "The tunnel must be installed on the domain target server.")
+		return
+	}
+	serviceURL := target.ServiceURL()
 	routes, err := a.repo.TunnelRoutes(r.Context(), orgID, tunnel.ID)
 	if err != nil {
 		a.serverError(w, r, err)
@@ -670,23 +775,23 @@ func (a *API) createTunnelRoute(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusConflict, "tunnel_route_conflict", "This tunnel hostname is not owned by Silicon.")
 				return
 			}
-			providerRoutes[index] = tunnelprovider.Route{Hostname: domain.Hostname, Service: input.ServiceURL}
+			providerRoutes[index] = tunnelprovider.Route{Hostname: domain.Hostname, Service: serviceURL}
 			replaced = true
 		}
 	}
 	if !replaced {
-		providerRoutes = append(providerRoutes, tunnelprovider.Route{Hostname: domain.Hostname, Service: input.ServiceURL})
+		providerRoutes = append(providerRoutes, tunnelprovider.Route{Hostname: domain.Hostname, Service: serviceURL})
 	}
 	if err := client.ConfigureRoutes(r.Context(), integration.AccountID, tunnel.ProviderTunnelID, providerRoutes); err != nil {
 		writeError(w, http.StatusBadGateway, "cloudflare_request_failed", "Cloudflare could not configure the tunnel route.")
 		return
 	}
-	route, err := a.repo.SaveTunnelRoute(r.Context(), orgID, tunnel.ID, domain.ID, domain.Hostname, input.ServiceURL)
+	route, err := a.repo.SaveTunnelRoute(r.Context(), orgID, tunnel.ID, domain.ID, domain.Hostname, serviceURL)
 	if err != nil {
 		a.persistenceError(w, err)
 		return
 	}
-	if err := a.repo.UpdateDomainDesired(r.Context(), orgID, domain.ID, currentUser(r.Context()).ID, domain.TargetPort, "CNAME", tunnel.ProviderTunnelID+".cfargotunnel.com", input.Proxied, requestID(r.Context()), clientIP(r)); err != nil {
+	if err := a.repo.UpdateDomainDesired(r.Context(), orgID, domain.ID, currentUser(r.Context()).ID, domain.TargetPort, domain.Protocol, "cloudflare_tunnel", "CNAME", tunnel.ProviderTunnelID+".cfargotunnel.com", true, requestID(r.Context()), clientIP(r)); err != nil {
 		a.persistenceError(w, err)
 		return
 	}

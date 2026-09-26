@@ -17,11 +17,11 @@ func TestValidateSpecAndEnvironmentFile(t *testing.T) {
 	if err := validateSpec(spec); err != nil {
 		t.Fatal(err)
 	}
-	path, cleanup, err := environmentFile(spec.Environment)
+	path, cleanup, err := (Provider{}).environmentFile(context.Background(), spec.Environment)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer cleanup(context.Background())
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestValidateSpecAndEnvironmentFile(t *testing.T) {
 	if err := validateSpec(runtimeprovider.DeploymentSpec{DeploymentID: "d", OrganizationID: "o", ApplicationID: "a", Image: "nginx", HostAddress: "0.0.0.0"}); err == nil {
 		t.Fatal("host binding without explicit ports was accepted")
 	}
-	if _, _, err := environmentFile(map[string]string{"TOKEN": "secret\nleak"}); err == nil {
+	if _, _, err := (Provider{}).environmentFile(context.Background(), map[string]string{"TOKEN": "secret\nleak"}); err == nil {
 		t.Fatal("multiline environment value was accepted")
 	}
 	if got := publishBinding("::1", 32781, 80); got != "[::1]:32781:80" {

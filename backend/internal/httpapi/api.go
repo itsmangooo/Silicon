@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/itsmangooo/Silicon/backend/internal/agent"
 	"github.com/itsmangooo/Silicon/backend/internal/auth"
 	"github.com/itsmangooo/Silicon/backend/internal/authorization"
 	"github.com/itsmangooo/Silicon/backend/internal/config"
@@ -24,19 +23,20 @@ import (
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 	secretprovider "github.com/itsmangooo/Silicon/backend/internal/providers/secrets"
 	localsecrets "github.com/itsmangooo/Silicon/backend/internal/providers/secrets/local"
+	"github.com/itsmangooo/Silicon/backend/internal/serverconnections"
 	"github.com/itsmangooo/Silicon/backend/internal/store"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type API struct {
-	cfg     config.Config
-	repo    store.Repository
-	logger  *slog.Logger
-	box     *cryptoenvelope.Box
-	runtime runtimeprovider.Provider
-	secrets secretprovider.Provider
-	agents  *agent.Hub
+	cfg         config.Config
+	repo        store.Repository
+	logger      *slog.Logger
+	box         *cryptoenvelope.Box
+	runtime     runtimeprovider.Provider
+	secrets     secretprovider.Provider
+	connections serverconnections.Manager
 }
 
 type contextKey string
@@ -55,20 +55,17 @@ func New(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) *API {
 }
 
 func NewWithProviders(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger, runtime runtimeprovider.Provider, secrets secretprovider.Provider) *API {
-	return NewWithAgent(cfg, pool, logger, runtime, secrets, nil)
-}
-
-func NewWithAgent(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger, runtime runtimeprovider.Provider, secrets secretprovider.Provider, agents *agent.Hub) *API {
 	if cfg.RuntimeLogFollowTimeout <= 0 {
 		cfg.RuntimeLogFollowTimeout = 5 * time.Minute
 	}
-	api := &API{cfg: cfg, repo: store.Repository{Pool: pool}, logger: logger, runtime: runtime, secrets: secrets, agents: agents}
+	api := &API{cfg: cfg, repo: store.Repository{Pool: pool}, logger: logger, runtime: runtime, secrets: secrets}
 	if box, err := cryptoenvelope.New(cfg.EncryptionKey); err == nil {
 		api.box = &box
 		if api.secrets == nil {
 			api.secrets = localsecrets.Provider{Pool: pool, Box: box}
 		}
 	}
+	api.connections = serverconnections.Manager{Repository: api.repo, Box: api.box, LocalEnabled: cfg.LocalDockerEnabled}
 	return api
 }
 
@@ -78,12 +75,6 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/register", a.register)
 	mux.HandleFunc("POST /api/v1/auth/login", a.login)
 	mux.HandleFunc("POST /api/v1/webhooks/github", a.githubWebhook)
-	mux.HandleFunc("GET /api/v1/agent/install.sh", a.agentInstaller)
-	mux.HandleFunc("GET /api/v1/agent/download/linux/{arch}", a.downloadAgent)
-	mux.HandleFunc("GET /api/v1/agent/download/linux/{arch}/checksum", a.downloadAgentChecksum)
-	mux.HandleFunc("POST /api/v1/agent/enroll", a.enrollAgent)
-	mux.HandleFunc("GET /api/v1/agent/connect", a.connectAgent)
-	mux.HandleFunc("GET /api/v1/agent/check", a.checkAgent)
 	mux.Handle("GET /api/v1/auth/session", a.auth(http.HandlerFunc(a.session)))
 	mux.Handle("POST /api/v1/auth/logout", a.auth(http.HandlerFunc(a.logout)))
 	mux.Handle("GET /api/v1/organizations", a.auth(http.HandlerFunc(a.listOrganizations)))
@@ -117,8 +108,9 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("GET /api/v1/organizations/{organizationID}/servers", a.org(authorization.ServerRead, http.HandlerFunc(a.listServers)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/servers", a.org(authorization.ServerManage, http.HandlerFunc(a.createServer)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/servers/{serverID}", a.org(authorization.ServerRead, http.HandlerFunc(a.getServer)))
-	mux.Handle("POST /api/v1/organizations/{organizationID}/servers/{serverID}/enrollment-token", a.org(authorization.ServerManage, http.HandlerFunc(a.createServerEnrollment)))
-	mux.Handle("POST /api/v1/organizations/{organizationID}/servers/{serverID}/agent/revoke", a.org(authorization.ServerManage, http.HandlerFunc(a.revokeServerAgent)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/servers/{serverID}/connection", a.org(authorization.ServerManage, http.HandlerFunc(a.updateServerConnection)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/servers/{serverID}/check", a.org(authorization.ServerManage, http.HandlerFunc(a.checkServerConnection)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/servers/{serverID}/trust-host-key", a.org(authorization.ServerManage, http.HandlerFunc(a.trustServerHostKey)))
 	mux.Handle("PUT /api/v1/organizations/{organizationID}/applications/{applicationID}/server", a.org(authorization.ApplicationUpdate, http.HandlerFunc(a.setApplicationServer)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/identity-providers", a.org(authorization.IdentityProviderRead, http.HandlerFunc(a.listIdentityProviders)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/identity-providers", a.org(authorization.IdentityProviderManage, http.HandlerFunc(a.createIdentityProvider)))
@@ -140,6 +132,7 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("DELETE /api/v1/organizations/{organizationID}/domains/{domainID}", a.org(authorization.DomainManage, http.HandlerFunc(a.deleteDomain)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/integrations/cloudflare/tunnels", a.org(authorization.IntegrationRead, http.HandlerFunc(a.listTunnels)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/integrations/cloudflare/tunnels", a.org(authorization.IntegrationManage, http.HandlerFunc(a.createTunnel)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/install", a.org(authorization.IntegrationManage, http.HandlerFunc(a.installTunnel)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/routes", a.org(authorization.DomainManage, http.HandlerFunc(a.createTunnelRoute)))
 
 	return a.recover(a.security(a.cors(a.requestLog(mux))))
@@ -541,35 +534,38 @@ func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
 func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name             string `json:"name"`
-		Hostname         string `json:"hostname"`
-		OperatingSystem  string `json:"operatingSystem"`
-		Architecture     string `json:"architecture"`
 		ConnectivityType string `json:"connectivityType"`
+		serverConnectionInput
 	}
 	if !decode(w, r, &input) {
 		return
 	}
 	input.Name = strings.TrimSpace(input.Name)
-	input.Hostname = strings.TrimSpace(input.Hostname)
 	if input.ConnectivityType == "" {
 		input.ConnectivityType = "public"
 	}
-	if input.Name == "" || input.Hostname == "" || !oneOf(input.ConnectivityType, "public", "self_hosted", "private") {
-		validation(w, "Name and hostname are required.")
+	input.serverConnectionInput = normalizeConnectionInput(input.serverConnectionInput)
+	if input.Name == "" || !oneOf(input.ConnectivityType, "public", "self_hosted", "private") {
+		validation(w, "A valid server name and connectivity type are required.")
+		return
+	}
+	if message := validateConnectionInput(input.serverConnectionInput, input.ConnectionType == "ssh"); message != "" {
+		validation(w, message)
 		return
 	}
 	orgID := pathUUID(r, "organizationID")
-	item, err := a.repo.CreateServer(r.Context(), orgID, currentUser(r.Context()).ID, input.Name, input.Hostname, input.OperatingSystem, input.Architecture, input.ConnectivityType, requestID(r.Context()), clientIP(r))
+	serverID := uuid.New()
+	encrypted, ok := a.encryptSSHKey(w, orgID, serverID, input.PrivateKey)
+	input.PrivateKey = ""
+	if !ok {
+		return
+	}
+	item, err := a.repo.CreateServer(r.Context(), orgID, currentUser(r.Context()).ID, store.ServerInput{ID: serverID, Name: input.Name, Hostname: input.Host, ConnectivityType: input.ConnectivityType, ConnectionType: input.ConnectionType, PublicAddress: input.PublicAddress, SSHPort: input.Port, SSHUsername: input.Username, EncryptedPrivateKey: encrypted, HostKeyFingerprint: input.HostKeyFingerprint}, requestID(r.Context()), clientIP(r))
 	if err != nil {
 		a.persistenceError(w, err)
 		return
 	}
-	enrollment, err := a.issueEnrollment(r.Context(), orgID, item.ID, currentUser(r.Context()).ID, requestID(r.Context()), clientIP(r))
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"server": item, "enrollment": enrollment})
+	writeJSON(w, http.StatusCreated, item)
 }
 
 func (a *API) listIdentityProviders(w http.ResponseWriter, r *http.Request) {

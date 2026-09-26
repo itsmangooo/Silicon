@@ -56,35 +56,43 @@ type CloudflareZone struct {
 	Selected       bool      `json:"selected"`
 }
 type Domain struct {
-	ID               uuid.UUID `json:"id"`
-	OrganizationID   uuid.UUID `json:"organizationId"`
-	EnvironmentID    uuid.UUID `json:"environmentId"`
-	ApplicationID    uuid.UUID `json:"applicationId"`
-	Hostname         string    `json:"hostname"`
-	TargetPort       int       `json:"targetPort"`
-	RoutingProvider  string    `json:"routingProvider"`
-	DNSProvider      string    `json:"dnsProvider"`
-	ProviderZoneID   *string   `json:"providerZoneId"`
-	ProviderRecordID *string   `json:"providerRecordId"`
-	DNSRecordType    string    `json:"dnsRecordType"`
-	DNSContent       string    `json:"dnsContent"`
-	Proxied          bool      `json:"proxied"`
-	DNSState         string    `json:"dnsState"`
-	SiliconManaged   bool      `json:"siliconManaged"`
-	LastSyncError    string    `json:"lastSyncError,omitempty"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	ID                      uuid.UUID  `json:"id"`
+	OrganizationID          uuid.UUID  `json:"organizationId"`
+	EnvironmentID           uuid.UUID  `json:"environmentId"`
+	ApplicationID           uuid.UUID  `json:"applicationId"`
+	TargetType              string     `json:"targetType"`
+	TargetServerID          *uuid.UUID `json:"targetServerId"`
+	TargetRuntimeInstanceID *uuid.UUID `json:"targetRuntimeInstanceId"`
+	Hostname                string     `json:"hostname"`
+	TargetPort              int        `json:"targetPort"`
+	Protocol                string     `json:"protocol"`
+	RoutingMode             string     `json:"routingMode"`
+	RoutingProvider         string     `json:"routingProvider"`
+	DNSProvider             string     `json:"dnsProvider"`
+	ProviderZoneID          *string    `json:"providerZoneId"`
+	ProviderRecordID        *string    `json:"providerRecordId"`
+	DNSRecordType           string     `json:"dnsRecordType"`
+	DNSContent              string     `json:"dnsContent"`
+	Proxied                 bool       `json:"proxied"`
+	DNSState                string     `json:"dnsState"`
+	SiliconManaged          bool       `json:"siliconManaged"`
+	LastSyncError           string     `json:"lastSyncError,omitempty"`
+	CreatedAt               time.Time  `json:"createdAt"`
+	UpdatedAt               time.Time  `json:"updatedAt"`
 }
 type CloudflareTunnel struct {
-	ID                   uuid.UUID `json:"id"`
-	OrganizationID       uuid.UUID `json:"organizationId"`
-	IntegrationID        uuid.UUID `json:"integrationId"`
-	ProviderTunnelID     string    `json:"providerTunnelId"`
-	Name                 string    `json:"name"`
-	Ownership            string    `json:"ownership"`
-	Status               string    `json:"status"`
-	EncryptedTunnelToken []byte    `json:"-"`
-	CreatedAt            time.Time `json:"createdAt"`
+	ID                   uuid.UUID  `json:"id"`
+	OrganizationID       uuid.UUID  `json:"organizationId"`
+	IntegrationID        uuid.UUID  `json:"integrationId"`
+	ProviderTunnelID     string     `json:"providerTunnelId"`
+	Name                 string     `json:"name"`
+	Ownership            string     `json:"ownership"`
+	Status               string     `json:"status"`
+	EncryptedTunnelToken []byte     `json:"-"`
+	ServerID             *uuid.UUID `json:"serverId"`
+	InstallationStatus   string     `json:"installationStatus"`
+	InstallationError    string     `json:"installationError,omitempty"`
+	CreatedAt            time.Time  `json:"createdAt"`
 }
 type TunnelRoute struct {
 	ID             uuid.UUID `json:"id"`
@@ -301,14 +309,14 @@ func (r Repository) SetCloudflareZoneSelected(ctx context.Context, orgID, zoneID
 	return err
 }
 
-func (r Repository) CreateDomain(ctx context.Context, orgID, appID, actorID uuid.UUID, hostname string, targetPort int, recordType, content string, proxied bool, requestID uuid.UUID, ip net.IP) (Domain, error) {
+func (r Repository) CreateDomain(ctx context.Context, orgID, appID, actorID uuid.UUID, hostname string, targetPort int, protocol, routingMode string, requestID uuid.UUID, ip net.IP) (Domain, error) {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return Domain{}, err
 	}
 	defer tx.Rollback(ctx)
 	var d Domain
-	err = tx.QueryRow(ctx, `INSERT INTO domains(organization_id,environment_id,application_id,hostname,target_port,dns_provider,dns_record_type,dns_content,proxied,dns_state) SELECT a.organization_id,a.environment_id,a.id,$3,$4,'cloudflare',$5,$6,$7,'pending' FROM applications a WHERE a.organization_id=$1 AND a.id=$2 RETURNING id,organization_id,environment_id,application_id,hostname,target_port,routing_provider,dns_provider,provider_zone_id,provider_record_id,dns_record_type,dns_content,proxied,dns_state,silicon_managed,last_sync_error,created_at,updated_at`, orgID, appID, hostname, targetPort, recordType, content, proxied).Scan(&d.ID, &d.OrganizationID, &d.EnvironmentID, &d.ApplicationID, &d.Hostname, &d.TargetPort, &d.RoutingProvider, &d.DNSProvider, &d.ProviderZoneID, &d.ProviderRecordID, &d.DNSRecordType, &d.DNSContent, &d.Proxied, &d.DNSState, &d.SiliconManaged, &d.LastSyncError, &d.CreatedAt, &d.UpdatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO domains(organization_id,environment_id,application_id,target_server_id,hostname,target_port,protocol,routing_mode,dns_provider,proxied,dns_state) SELECT a.organization_id,a.environment_id,a.id,a.server_id,$3,$4,$5,$6,'cloudflare',($6='cloudflare_proxied'),'pending' FROM applications a WHERE a.organization_id=$1 AND a.id=$2 AND a.server_id IS NOT NULL RETURNING `+domainColumns, orgID, appID, hostname, targetPort, protocol, routingMode).Scan(domainScan(&d)...)
 	if err != nil {
 		return d, notFound(err)
 	}
@@ -318,7 +326,7 @@ func (r Repository) CreateDomain(ctx context.Context, orgID, appID, actorID uuid
 	return d, tx.Commit(ctx)
 }
 func (r Repository) ListDomains(ctx context.Context, orgID uuid.UUID) ([]Domain, error) {
-	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,environment_id,application_id,hostname,target_port,routing_provider,dns_provider,provider_zone_id,provider_record_id,dns_record_type,dns_content,proxied,dns_state,silicon_managed,last_sync_error,created_at,updated_at FROM domains WHERE organization_id=$1 ORDER BY hostname`, orgID)
+	rows, err := r.Pool.Query(ctx, `SELECT `+domainColumns+` FROM domains WHERE organization_id=$1 ORDER BY hostname`, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +334,7 @@ func (r Repository) ListDomains(ctx context.Context, orgID uuid.UUID) ([]Domain,
 	items := []Domain{}
 	for rows.Next() {
 		var d Domain
-		if err := rows.Scan(&d.ID, &d.OrganizationID, &d.EnvironmentID, &d.ApplicationID, &d.Hostname, &d.TargetPort, &d.RoutingProvider, &d.DNSProvider, &d.ProviderZoneID, &d.ProviderRecordID, &d.DNSRecordType, &d.DNSContent, &d.Proxied, &d.DNSState, &d.SiliconManaged, &d.LastSyncError, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		if err := rows.Scan(domainScan(&d)...); err != nil {
 			return nil, err
 		}
 		items = append(items, d)
@@ -335,8 +343,14 @@ func (r Repository) ListDomains(ctx context.Context, orgID uuid.UUID) ([]Domain,
 }
 func (r Repository) Domain(ctx context.Context, orgID, domainID uuid.UUID) (Domain, error) {
 	var d Domain
-	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,environment_id,application_id,hostname,target_port,routing_provider,dns_provider,provider_zone_id,provider_record_id,dns_record_type,dns_content,proxied,dns_state,silicon_managed,last_sync_error,created_at,updated_at FROM domains WHERE organization_id=$1 AND id=$2`, orgID, domainID).Scan(&d.ID, &d.OrganizationID, &d.EnvironmentID, &d.ApplicationID, &d.Hostname, &d.TargetPort, &d.RoutingProvider, &d.DNSProvider, &d.ProviderZoneID, &d.ProviderRecordID, &d.DNSRecordType, &d.DNSContent, &d.Proxied, &d.DNSState, &d.SiliconManaged, &d.LastSyncError, &d.CreatedAt, &d.UpdatedAt)
+	err := r.Pool.QueryRow(ctx, `SELECT `+domainColumns+` FROM domains WHERE organization_id=$1 AND id=$2`, orgID, domainID).Scan(domainScan(&d)...)
 	return d, notFound(err)
+}
+
+const domainColumns = `id,organization_id,environment_id,application_id,target_type,target_server_id,target_runtime_instance_id,hostname,target_port,protocol,routing_mode,routing_provider,dns_provider,provider_zone_id,provider_record_id,dns_record_type,dns_content,proxied,dns_state,silicon_managed,last_sync_error,created_at,updated_at`
+
+func domainScan(d *Domain) []any {
+	return []any{&d.ID, &d.OrganizationID, &d.EnvironmentID, &d.ApplicationID, &d.TargetType, &d.TargetServerID, &d.TargetRuntimeInstanceID, &d.Hostname, &d.TargetPort, &d.Protocol, &d.RoutingMode, &d.RoutingProvider, &d.DNSProvider, &d.ProviderZoneID, &d.ProviderRecordID, &d.DNSRecordType, &d.DNSContent, &d.Proxied, &d.DNSState, &d.SiliconManaged, &d.LastSyncError, &d.CreatedAt, &d.UpdatedAt}
 }
 func (r Repository) SetDomainSync(ctx context.Context, orgID, domainID uuid.UUID, zoneID, recordID *string, state string, owned bool, syncError string) error {
 	tag, err := r.Pool.Exec(ctx, `UPDATE domains SET provider_zone_id=$3,provider_record_id=$4,dns_state=$5,silicon_managed=$6,last_sync_error=$7,updated_at=now() WHERE organization_id=$1 AND id=$2`, orgID, domainID, zoneID, recordID, state, owned, syncError)
@@ -346,20 +360,28 @@ func (r Repository) SetDomainSync(ctx context.Context, orgID, domainID uuid.UUID
 	return err
 }
 
-func (r Repository) UpdateDomainDesired(ctx context.Context, orgID, domainID, actorID uuid.UUID, targetPort int, recordType, content string, proxied bool, requestID uuid.UUID, ip net.IP) error {
+func (r Repository) SetDomainOriginDesired(ctx context.Context, orgID, domainID uuid.UUID, recordType, content string, proxied bool) error {
+	tag, err := r.Pool.Exec(ctx, `UPDATE domains SET dns_record_type=$3,dns_content=$4,proxied=$5,updated_at=now() WHERE organization_id=$1 AND id=$2`, orgID, domainID, recordType, content, proxied)
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+func (r Repository) UpdateDomainDesired(ctx context.Context, orgID, domainID, actorID uuid.UUID, targetPort int, protocol, routingMode, recordType, content string, proxied bool, requestID uuid.UUID, ip net.IP) error {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	tag, err := tx.Exec(ctx, `UPDATE domains SET target_port=$3,dns_record_type=$4,dns_content=$5,proxied=$6,dns_state='pending',last_sync_error='',updated_at=now() WHERE organization_id=$1 AND id=$2`, orgID, domainID, targetPort, recordType, content, proxied)
+	tag, err := tx.Exec(ctx, `UPDATE domains SET target_port=$3,protocol=$4,routing_mode=$5,dns_record_type=$6,dns_content=$7,proxied=$8,dns_state='pending',last_sync_error='',updated_at=now() WHERE organization_id=$1 AND id=$2`, orgID, domainID, targetPort, protocol, routingMode, recordType, content, proxied)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	if err = insertAudit(ctx, tx, &orgID, &actorID, "domain.changed", "domain", &domainID, requestID, map[string]any{"recordType": recordType, "proxied": proxied, "targetPort": targetPort}, ip); err != nil {
+	if err = insertAudit(ctx, tx, &orgID, &actorID, "domain.changed", "domain", &domainID, requestID, map[string]any{"routingMode": routingMode, "recordType": recordType, "proxied": proxied, "targetPort": targetPort, "protocol": protocol}, ip); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -383,13 +405,13 @@ func (r Repository) DeleteDomainRecord(ctx context.Context, orgID, domainID, act
 	return tx.Commit(ctx)
 }
 
-func (r Repository) SaveTunnel(ctx context.Context, orgID, integrationID uuid.UUID, providerID, name, ownership, status string, encryptedToken []byte) (CloudflareTunnel, error) {
+func (r Repository) SaveTunnel(ctx context.Context, orgID, integrationID uuid.UUID, providerID, name, ownership, status string, encryptedToken []byte, serverID *uuid.UUID) (CloudflareTunnel, error) {
 	var t CloudflareTunnel
-	err := r.Pool.QueryRow(ctx, `INSERT INTO cloudflare_tunnels(organization_id,integration_id,provider_tunnel_id,name,ownership,status,encrypted_tunnel_token) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(organization_id,provider_tunnel_id) DO UPDATE SET name=excluded.name,ownership=excluded.ownership,status=excluded.status,updated_at=now() RETURNING id,organization_id,integration_id,provider_tunnel_id,name,ownership,status,encrypted_tunnel_token,created_at`, orgID, integrationID, providerID, name, ownership, status, encryptedToken).Scan(&t.ID, &t.OrganizationID, &t.IntegrationID, &t.ProviderTunnelID, &t.Name, &t.Ownership, &t.Status, &t.EncryptedTunnelToken, &t.CreatedAt)
+	err := r.Pool.QueryRow(ctx, `INSERT INTO cloudflare_tunnels(organization_id,integration_id,provider_tunnel_id,name,ownership,status,encrypted_tunnel_token,server_id,installation_status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $5 IN ('external','imported') THEN 'external' ELSE 'not_installed' END) ON CONFLICT(organization_id,provider_tunnel_id) DO UPDATE SET name=excluded.name,ownership=excluded.ownership,status=excluded.status,server_id=excluded.server_id,updated_at=now() RETURNING id,organization_id,integration_id,provider_tunnel_id,name,ownership,status,encrypted_tunnel_token,server_id,installation_status,installation_error,created_at`, orgID, integrationID, providerID, name, ownership, status, encryptedToken, serverID).Scan(tunnelScan(&t)...)
 	return t, err
 }
 func (r Repository) ListTunnels(ctx context.Context, orgID uuid.UUID) ([]CloudflareTunnel, error) {
-	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,integration_id,provider_tunnel_id,name,ownership,status,encrypted_tunnel_token,created_at FROM cloudflare_tunnels WHERE organization_id=$1 ORDER BY name`, orgID)
+	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,integration_id,provider_tunnel_id,name,ownership,status,encrypted_tunnel_token,server_id,installation_status,installation_error,created_at FROM cloudflare_tunnels WHERE organization_id=$1 ORDER BY name`, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +419,7 @@ func (r Repository) ListTunnels(ctx context.Context, orgID uuid.UUID) ([]Cloudfl
 	items := []CloudflareTunnel{}
 	for rows.Next() {
 		var t CloudflareTunnel
-		if err := rows.Scan(&t.ID, &t.OrganizationID, &t.IntegrationID, &t.ProviderTunnelID, &t.Name, &t.Ownership, &t.Status, &t.EncryptedTunnelToken, &t.CreatedAt); err != nil {
+		if err := rows.Scan(tunnelScan(&t)...); err != nil {
 			return nil, err
 		}
 		items = append(items, t)
@@ -406,8 +428,20 @@ func (r Repository) ListTunnels(ctx context.Context, orgID uuid.UUID) ([]Cloudfl
 }
 func (r Repository) Tunnel(ctx context.Context, orgID, tunnelID uuid.UUID) (CloudflareTunnel, error) {
 	var t CloudflareTunnel
-	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,integration_id,provider_tunnel_id,name,ownership,status,encrypted_tunnel_token,created_at FROM cloudflare_tunnels WHERE organization_id=$1 AND id=$2`, orgID, tunnelID).Scan(&t.ID, &t.OrganizationID, &t.IntegrationID, &t.ProviderTunnelID, &t.Name, &t.Ownership, &t.Status, &t.EncryptedTunnelToken, &t.CreatedAt)
+	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,integration_id,provider_tunnel_id,name,ownership,status,encrypted_tunnel_token,server_id,installation_status,installation_error,created_at FROM cloudflare_tunnels WHERE organization_id=$1 AND id=$2`, orgID, tunnelID).Scan(tunnelScan(&t)...)
 	return t, notFound(err)
+}
+
+func tunnelScan(t *CloudflareTunnel) []any {
+	return []any{&t.ID, &t.OrganizationID, &t.IntegrationID, &t.ProviderTunnelID, &t.Name, &t.Ownership, &t.Status, &t.EncryptedTunnelToken, &t.ServerID, &t.InstallationStatus, &t.InstallationError, &t.CreatedAt}
+}
+
+func (r Repository) SetTunnelInstallation(ctx context.Context, orgID, tunnelID uuid.UUID, status, installationError string) error {
+	tag, err := r.Pool.Exec(ctx, `UPDATE cloudflare_tunnels SET installation_status=$3,installation_error=$4,updated_at=now() WHERE organization_id=$1 AND id=$2`, orgID, tunnelID, status, installationError)
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
 }
 func (r Repository) SaveTunnelRoute(ctx context.Context, orgID, tunnelID, domainID uuid.UUID, hostname, service string) (TunnelRoute, error) {
 	var route TunnelRoute

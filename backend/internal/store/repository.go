@@ -99,31 +99,54 @@ type Deployment struct {
 }
 
 type Server struct {
-	ID                 uuid.UUID  `json:"id"`
-	OrganizationID     uuid.UUID  `json:"organizationId"`
-	Name               string     `json:"name"`
-	Hostname           string     `json:"hostname"`
-	OperatingSystem    string     `json:"operatingSystem"`
-	Architecture       string     `json:"architecture"`
-	Runtime            string     `json:"runtime"`
-	ConnectionStatus   string     `json:"connectionStatus"`
-	Health             string     `json:"health"`
-	ConnectivityType   string     `json:"connectivityType"`
-	CPUCapacity        *int       `json:"cpuCapacity"`
-	MemoryBytes        *int64     `json:"memoryBytes"`
-	MemoryUsedBytes    *int64     `json:"memoryUsedBytes"`
-	DiskTotalBytes     *int64     `json:"diskTotalBytes"`
-	DiskUsedBytes      *int64     `json:"diskUsedBytes"`
-	CPUUsagePercent    *float64   `json:"cpuUsagePercent"`
-	UptimeSeconds      *int64     `json:"uptimeSeconds"`
-	DockerAvailable    bool       `json:"dockerAvailable"`
-	DockerVersion      string     `json:"dockerVersion"`
-	AgentID            *uuid.UUID `json:"agentId"`
-	AgentVersion       string     `json:"agentVersion"`
-	AgentCompatibility string     `json:"agentCompatibility"`
-	AgentCapabilities  []string   `json:"agentCapabilities"`
-	LastSeenAt         *time.Time `json:"lastSeenAt"`
-	CreatedAt          time.Time  `json:"createdAt"`
+	ID                    uuid.UUID  `json:"id"`
+	OrganizationID        uuid.UUID  `json:"organizationId"`
+	Name                  string     `json:"name"`
+	Hostname              string     `json:"hostname"`
+	OperatingSystem       string     `json:"operatingSystem"`
+	Architecture          string     `json:"architecture"`
+	Runtime               string     `json:"runtime"`
+	ConnectionStatus      string     `json:"connectionStatus"`
+	Health                string     `json:"health"`
+	ConnectivityType      string     `json:"connectivityType"`
+	CPUCapacity           *int       `json:"cpuCapacity"`
+	MemoryBytes           *int64     `json:"memoryBytes"`
+	MemoryUsedBytes       *int64     `json:"memoryUsedBytes"`
+	DiskTotalBytes        *int64     `json:"diskTotalBytes"`
+	DiskUsedBytes         *int64     `json:"diskUsedBytes"`
+	CPUUsagePercent       *float64   `json:"cpuUsagePercent"`
+	UptimeSeconds         *int64     `json:"uptimeSeconds"`
+	DockerAvailable       bool       `json:"dockerAvailable"`
+	DockerVersion         string     `json:"dockerVersion"`
+	ConnectionType        string     `json:"connectionType"`
+	PublicAddress         string     `json:"publicAddress"`
+	SSHPort               int        `json:"sshPort"`
+	SSHUsername           string     `json:"sshUsername"`
+	CredentialConfigured  bool       `json:"credentialConfigured"`
+	SSHHostKeyFingerprint string     `json:"sshHostKeyFingerprint"`
+	ConnectionError       string     `json:"connectionError,omitempty"`
+	LastCheckedAt         *time.Time `json:"lastCheckedAt"`
+	CreatedAt             time.Time  `json:"createdAt"`
+}
+
+type ServerConnection struct {
+	Server
+	EncryptedPrivateKey []byte `json:"-"`
+}
+
+type ServerInput struct {
+	ID                  uuid.UUID
+	Name                string
+	Hostname            string
+	OperatingSystem     string
+	Architecture        string
+	ConnectivityType    string
+	ConnectionType      string
+	PublicAddress       string
+	SSHPort             int
+	SSHUsername         string
+	EncryptedPrivateKey []byte
+	HostKeyFingerprint  string
 }
 
 type IdentityProvider struct {
@@ -552,18 +575,18 @@ func (r Repository) ListServers(ctx context.Context, organizationID uuid.UUID) (
 	return items, rows.Err()
 }
 
-func (r Repository) CreateServer(ctx context.Context, organizationID, actorID uuid.UUID, name, hostname, osName, architecture, connectivityType string, requestID uuid.UUID, ip net.IP) (Server, error) {
+func (r Repository) CreateServer(ctx context.Context, organizationID, actorID uuid.UUID, input ServerInput, requestID uuid.UUID, ip net.IP) (Server, error) {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return Server{}, err
 	}
 	defer tx.Rollback(ctx)
 	var item Server
-	err = tx.QueryRow(ctx, `INSERT INTO servers(organization_id,name,hostname,operating_system,architecture,connectivity_type) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,connectivity_type,cpu_capacity,memory_bytes,memory_used_bytes,disk_total_bytes,disk_used_bytes,cpu_usage_percent,uptime_seconds,docker_available,docker_version,NULL::uuid,agent_version,agent_compatibility,agent_capabilities,last_seen_at,created_at`, organizationID, name, hostname, osName, architecture, connectivityType).Scan(serverScan(&item)...)
+	err = tx.QueryRow(ctx, `INSERT INTO servers(id,organization_id,name,hostname,operating_system,architecture,connectivity_type,connection_type,public_address,ssh_port,ssh_username,ssh_private_key_encrypted,ssh_host_key_fingerprint,connection_status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,CASE WHEN $8='unconfigured' THEN 'connection_not_configured' ELSE 'unreachable' END) RETURNING id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,connectivity_type,cpu_capacity,memory_bytes,memory_used_bytes,disk_total_bytes,disk_used_bytes,cpu_usage_percent,uptime_seconds,docker_available,docker_version,connection_type,public_address,ssh_port,ssh_username,(ssh_private_key_encrypted IS NOT NULL),ssh_host_key_fingerprint,connection_error,last_checked_at,created_at`, input.ID, organizationID, input.Name, input.Hostname, input.OperatingSystem, input.Architecture, input.ConnectivityType, input.ConnectionType, input.PublicAddress, input.SSHPort, input.SSHUsername, input.EncryptedPrivateKey, input.HostKeyFingerprint).Scan(serverScan(&item)...)
 	if err != nil {
 		return Server{}, err
 	}
-	if err = insertAudit(ctx, tx, &organizationID, &actorID, "server.created", "server", &item.ID, requestID, map[string]any{"name": name}, ip); err != nil {
+	if err = insertAudit(ctx, tx, &organizationID, &actorID, "server.created", "server", &item.ID, requestID, map[string]any{"name": input.Name, "connectionType": input.ConnectionType}, ip); err != nil {
 		return Server{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -572,16 +595,70 @@ func (r Repository) CreateServer(ctx context.Context, organizationID, actorID uu
 	return item, nil
 }
 
-const serverSelect = `SELECT s.id,s.organization_id,s.name,s.hostname,s.operating_system,s.architecture,s.runtime,s.connection_status,s.health,s.connectivity_type,s.cpu_capacity,s.memory_bytes,s.memory_used_bytes,s.disk_total_bytes,s.disk_used_bytes,s.cpu_usage_percent,s.uptime_seconds,s.docker_available,s.docker_version,(SELECT a.id FROM server_agents a WHERE a.server_id=s.id AND a.status='active' LIMIT 1),s.agent_version,s.agent_compatibility,s.agent_capabilities,s.last_seen_at,s.created_at FROM servers s`
+const serverColumns = `s.id,s.organization_id,s.name,s.hostname,s.operating_system,s.architecture,s.runtime,s.connection_status,s.health,s.connectivity_type,s.cpu_capacity,s.memory_bytes,s.memory_used_bytes,s.disk_total_bytes,s.disk_used_bytes,s.cpu_usage_percent,s.uptime_seconds,s.docker_available,s.docker_version,s.connection_type,s.public_address,s.ssh_port,s.ssh_username,(s.ssh_private_key_encrypted IS NOT NULL),s.ssh_host_key_fingerprint,s.connection_error,s.last_checked_at,s.created_at`
+const serverSelect = `SELECT ` + serverColumns + ` FROM servers s`
 
 func serverScan(item *Server) []any {
-	return []any{&item.ID, &item.OrganizationID, &item.Name, &item.Hostname, &item.OperatingSystem, &item.Architecture, &item.Runtime, &item.ConnectionStatus, &item.Health, &item.ConnectivityType, &item.CPUCapacity, &item.MemoryBytes, &item.MemoryUsedBytes, &item.DiskTotalBytes, &item.DiskUsedBytes, &item.CPUUsagePercent, &item.UptimeSeconds, &item.DockerAvailable, &item.DockerVersion, &item.AgentID, &item.AgentVersion, &item.AgentCompatibility, &item.AgentCapabilities, &item.LastSeenAt, &item.CreatedAt}
+	return []any{&item.ID, &item.OrganizationID, &item.Name, &item.Hostname, &item.OperatingSystem, &item.Architecture, &item.Runtime, &item.ConnectionStatus, &item.Health, &item.ConnectivityType, &item.CPUCapacity, &item.MemoryBytes, &item.MemoryUsedBytes, &item.DiskTotalBytes, &item.DiskUsedBytes, &item.CPUUsagePercent, &item.UptimeSeconds, &item.DockerAvailable, &item.DockerVersion, &item.ConnectionType, &item.PublicAddress, &item.SSHPort, &item.SSHUsername, &item.CredentialConfigured, &item.SSHHostKeyFingerprint, &item.ConnectionError, &item.LastCheckedAt, &item.CreatedAt}
 }
 
 func (r Repository) ServerByID(ctx context.Context, organizationID, serverID uuid.UUID) (Server, error) {
 	var item Server
 	err := r.Pool.QueryRow(ctx, serverSelect+` WHERE s.organization_id=$1 AND s.id=$2`, organizationID, serverID).Scan(serverScan(&item)...)
 	return item, notFound(err)
+}
+
+func (r Repository) ServerConnection(ctx context.Context, organizationID, serverID uuid.UUID) (ServerConnection, error) {
+	var item ServerConnection
+	err := r.Pool.QueryRow(ctx, `SELECT `+serverColumns+`,s.ssh_private_key_encrypted FROM servers s WHERE s.organization_id=$1 AND s.id=$2`, organizationID, serverID).Scan(append(serverScan(&item.Server), &item.EncryptedPrivateKey)...)
+	return item, notFound(err)
+}
+
+func (r Repository) UpdateServerConnection(ctx context.Context, organizationID, serverID, actorID uuid.UUID, connectionType, host string, port int, username, publicAddress string, encryptedPrivateKey []byte, fingerprint string, clearCredential bool, requestID uuid.UUID, ip net.IP) (Server, error) {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return Server{}, err
+	}
+	defer tx.Rollback(ctx)
+	var item Server
+	err = tx.QueryRow(ctx, `UPDATE servers SET connection_type=$3,hostname=$4,ssh_port=$5,ssh_username=$6,public_address=$7,ssh_private_key_encrypted=CASE WHEN $10 THEN NULL ELSE COALESCE($8::bytea,ssh_private_key_encrypted) END,ssh_host_key_fingerprint=$9,connection_status=CASE WHEN $3='unconfigured' THEN 'connection_not_configured' ELSE 'unreachable' END,connection_error='',docker_available=false,docker_version='',updated_at=now() WHERE organization_id=$1 AND id=$2 RETURNING id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,connectivity_type,cpu_capacity,memory_bytes,memory_used_bytes,disk_total_bytes,disk_used_bytes,cpu_usage_percent,uptime_seconds,docker_available,docker_version,connection_type,public_address,ssh_port,ssh_username,(ssh_private_key_encrypted IS NOT NULL),ssh_host_key_fingerprint,connection_error,last_checked_at,created_at`, organizationID, serverID, connectionType, host, port, username, publicAddress, encryptedPrivateKey, fingerprint, clearCredential).Scan(serverScan(&item)...)
+	if err != nil {
+		return Server{}, notFound(err)
+	}
+	if err = insertAudit(ctx, tx, &organizationID, &actorID, "server.connection_updated", "server", &serverID, requestID, map[string]any{"connectionType": connectionType, "host": host, "port": port}, ip); err != nil {
+		return Server{}, err
+	}
+	return item, tx.Commit(ctx)
+}
+
+func (r Repository) TrustServerHostKey(ctx context.Context, organizationID, serverID, actorID uuid.UUID, fingerprint string, requestID uuid.UUID, ip net.IP) error {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `UPDATE servers SET ssh_host_key_fingerprint=$3,connection_status='unreachable',connection_error='',updated_at=now() WHERE organization_id=$1 AND id=$2 AND connection_type='ssh'`, organizationID, serverID, fingerprint)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrNotFound
+	}
+	if err = insertAudit(ctx, tx, &organizationID, &actorID, "server.host_key_trusted", "server", &serverID, requestID, map[string]any{"fingerprint": fingerprint}, ip); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r Repository) UpdateServerCheck(ctx context.Context, organizationID, serverID uuid.UUID, status, health, osName, architecture, dockerVersion, connectionError string, dockerAvailable bool) error {
+	tag, err := r.Pool.Exec(ctx, `UPDATE servers SET connection_status=$3,health=$4,operating_system=COALESCE(NULLIF($5,''),operating_system),architecture=COALESCE(NULLIF($6,''),architecture),docker_available=$7,docker_version=$8,connection_error=$9,last_checked_at=now(),updated_at=now() WHERE organization_id=$1 AND id=$2`, organizationID, serverID, status, health, osName, architecture, dockerAvailable, dockerVersion, connectionError)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r Repository) SetApplicationServer(ctx context.Context, organizationID, applicationID, actorID uuid.UUID, serverID *uuid.UUID, requestID uuid.UUID, ip net.IP) (Application, error) {

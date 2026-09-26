@@ -9,14 +9,14 @@ import (
 
 type Dispatcher struct {
 	Local  Provider
-	Remote Provider
+	Server Provider
 }
 
 func (d Dispatcher) Build(ctx context.Context, spec BuildSpec, archive io.Reader) (string, error) {
 	if spec.ServerID == "" {
 		return "", errors.New("remote build requires a target server")
 	}
-	builder, ok := d.Remote.(ImageBuilder)
+	builder, ok := d.Server.(ImageBuilder)
 	if !ok {
 		return "", errors.New("remote runtime does not support exact-revision builds")
 	}
@@ -25,10 +25,10 @@ func (d Dispatcher) Build(ctx context.Context, spec BuildSpec, archive io.Reader
 
 func (d Dispatcher) Deploy(ctx context.Context, spec DeploymentSpec) (InstanceStatus, error) {
 	if spec.ServerID != "" {
-		if d.Remote == nil {
-			return InstanceStatus{}, errors.New("remote runtime provider is unavailable")
+		if d.Server == nil {
+			return InstanceStatus{}, errors.New("server runtime provider is unavailable")
 		}
-		return d.Remote.Deploy(ctx, spec)
+		return d.Server.Deploy(ctx, spec)
 	}
 	if d.Local == nil {
 		return InstanceStatus{}, errors.New("local Docker runtime provider is not enabled; select a connected server")
@@ -37,11 +37,11 @@ func (d Dispatcher) Deploy(ctx context.Context, spec DeploymentSpec) (InstanceSt
 }
 
 func (d Dispatcher) provider(id string) (Provider, error) {
-	if strings.HasPrefix(id, "agent:") {
-		if d.Remote == nil {
-			return nil, errors.New("remote runtime provider is unavailable")
+	if strings.HasPrefix(id, "server:") {
+		if d.Server == nil {
+			return nil, errors.New("server runtime provider is unavailable")
 		}
-		return d.Remote, nil
+		return d.Server, nil
 	}
 	if d.Local == nil {
 		return nil, errors.New("local Docker runtime provider is unavailable")

@@ -29,9 +29,11 @@ export async function api(path, options = {}) {
   if (response.status === 204) return null
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    const error = new Error(payload.error?.message || `Request failed (${response.status})`)
-    error.code = payload.error?.code
+    const message = typeof payload.error === 'object' ? payload.error?.message : payload.message
+    const error = new Error(message || `Request failed (${response.status})`)
+    error.code = typeof payload.error === 'object' ? payload.error?.code : payload.error
     error.status = response.status
+    error.payload = payload
     throw error
   }
   return payload

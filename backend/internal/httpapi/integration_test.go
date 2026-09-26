@@ -21,15 +21,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/itsmangooo/Silicon/backend/db"
-	agenttransport "github.com/itsmangooo/Silicon/backend/internal/agent"
 	"github.com/itsmangooo/Silicon/backend/internal/config"
 	"github.com/itsmangooo/Silicon/backend/internal/deployments"
 	"github.com/itsmangooo/Silicon/backend/internal/execution"
 	"github.com/itsmangooo/Silicon/backend/internal/jobs"
+	"github.com/itsmangooo/Silicon/backend/internal/providers/connection"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
-	"github.com/itsmangooo/Silicon/backend/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -47,6 +45,22 @@ type fakeRuntime struct {
 	instances map[string]runtimeprovider.InstanceStatus
 	actions   []string
 	next      int
+}
+
+type fakeConnectionProvider struct{ installations atomic.Int32 }
+
+func (*fakeConnectionProvider) Check(context.Context, connection.Config) (connection.Status, error) {
+	return connection.Status{Reachable: true, DockerAvailable: true, DockerVersion: "28.0.1", OperatingSystem: "linux", Architecture: "amd64", CheckedAt: time.Now().UTC()}, nil
+}
+func (*fakeConnectionProvider) Executor(context.Context, connection.Config) (connection.CommandExecutor, error) {
+	return nil, errors.New("executor is not used by this integration test")
+}
+func (f *fakeConnectionProvider) InstallTunnel(_ context.Context, _ connection.Config, installation connection.TunnelInstallation) error {
+	if installation.Name == "" || len(installation.Token) == 0 {
+		return errors.New("missing tunnel installation data")
+	}
+	f.installations.Add(1)
+	return nil
 }
 
 func (f *fakeRuntime) Deploy(_ context.Context, spec runtimeprovider.DeploymentSpec) (runtimeprovider.InstanceStatus, error) {
@@ -142,11 +156,11 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cloudflareServer, cloudflareState := newCloudflareServer(t)
 	defer cloudflareServer.Close()
-	cfg := config.Config{DatabaseURL: databaseURL, CookieName: "silicon_test_session", SessionTTL: time.Hour, FrontendOrigin: "http://localhost:5173", PublicURL: "http://silicon.test", GitHubWebhookSecret: "webhook-test-secret", EncryptionKey: bytes.Repeat([]byte{5}, 32), CloudflareAPIURL: cloudflareServer.URL, RuntimeLogFollowTimeout: time.Minute, AgentAllowInsecure: true, AgentEnrollmentTTL: 15 * time.Minute, AgentExpectedVersion: "0.1.0"}
+	cfg := config.Config{DatabaseURL: databaseURL, CookieName: "silicon_test_session", SessionTTL: time.Hour, FrontendOrigin: "http://localhost:5173", PublicURL: "http://silicon.test", GitHubWebhookSecret: "webhook-test-secret", EncryptionKey: bytes.Repeat([]byte{5}, 32), CloudflareAPIURL: cloudflareServer.URL, RuntimeLogFollowTimeout: time.Minute, LocalDockerEnabled: true}
 	dockerRuntime := &fakeRuntime{}
-	repository := store.Repository{Pool: pool}
-	hub := agenttransport.NewHub(logger, nil)
-	apiServer := NewWithAgent(cfg, pool, logger, dockerRuntime, nil, hub)
+	apiServer := NewWithProviders(cfg, pool, logger, dockerRuntime, nil)
+	connections := &fakeConnectionProvider{}
+	apiServer.connections.Local = connections
 	server := httptest.NewServer(apiServer.Handler())
 	defer server.Close()
 	owner := newTestClient(t, server.URL)
@@ -159,55 +173,19 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	orgA := stringField(t, organizationA, "id")
 	orgB := stringField(t, organizationB, "id")
 
-	serverResult := owner.post("/organizations/"+orgA+"/servers", map[string]any{"name": "edge-a", "hostname": "pending", "connectivityType": "private"}, http.StatusCreated)
-	serverItem := mapField(t, serverResult, "server")
+	serverItem := owner.post("/organizations/"+orgA+"/servers", map[string]any{"name": "edge-a", "connectionType": "local", "connectivityType": "private", "publicAddress": "203.0.113.10"}, http.StatusCreated)
 	serverID := stringField(t, serverItem, "id")
-	enrollment := mapField(t, serverResult, "enrollment")
-	token := enrollmentToken(t, stringField(t, enrollment, "command"))
-	enrolled := owner.post("/agent/enroll", map[string]any{"serverId": serverID, "token": token, "protocolVersion": 1, "agentVersion": "0.1.0", "capabilities": []string{"docker.runtime", "runtime.logs", "node.metrics"}}, http.StatusCreated)
-	agentID := stringField(t, enrolled, "agentId")
-	credential := stringField(t, enrolled, "credential")
-	owner.post("/agent/enroll", map[string]any{"serverId": serverID, "token": token, "protocolVersion": 1, "agentVersion": "0.1.0"}, http.StatusUnauthorized)
-
-	serverBResult := viewer.post("/organizations/"+orgB+"/servers", map[string]any{"name": "edge-b", "hostname": "pending", "connectivityType": "public"}, http.StatusCreated)
-	serverB := mapField(t, serverBResult, "server")
-	serverBToken := enrollmentToken(t, stringField(t, mapField(t, serverBResult, "enrollment"), "command"))
-	owner.post("/agent/enroll", map[string]any{"serverId": serverID, "token": serverBToken, "protocolVersion": 1, "agentVersion": "0.1.0"}, http.StatusUnauthorized)
-	viewer.post("/agent/enroll", map[string]any{"serverId": stringField(t, serverB, "id"), "token": serverBToken, "protocolVersion": 1, "agentVersion": "0.1.0", "capabilities": []string{"node.metrics"}}, http.StatusCreated)
-
-	expiring := owner.post("/organizations/"+orgA+"/servers/"+serverID+"/enrollment-token", map[string]any{}, http.StatusCreated)
-	expiredToken := enrollmentToken(t, stringField(t, expiring, "command"))
-	if _, err := pool.Exec(ctx, `UPDATE agent_enrollment_tokens SET expires_at=now()-interval '1 second' WHERE server_id=$1 AND used_at IS NULL`, serverID); err != nil {
-		t.Fatal(err)
+	checkedServer := owner.post("/organizations/"+orgA+"/servers/"+serverID+"/check", map[string]any{}, http.StatusOK)
+	checkedServer = mapField(t, checkedServer, "server")
+	if checkedServer["connectionStatus"] != "connected" || checkedServer["dockerVersion"] != "28.0.1" {
+		t.Fatalf("active connection check not reflected: %#v", checkedServer)
 	}
-	owner.post("/agent/enroll", map[string]any{"serverId": serverID, "token": expiredToken, "protocolVersion": 1, "agentVersion": "0.1.0"}, http.StatusUnauthorized)
-
-	parsedAgentID := uuid.MustParse(agentID)
-	parsedServerID := uuid.MustParse(serverID)
-	if err := repository.RecordAgentHeartbeat(ctx, parsedAgentID, parsedServerID, store.AgentHeartbeat{ProtocolVersion: 1, Version: "0.1.0", Compatibility: "compatible", Capabilities: []string{"docker.runtime", "runtime.logs", "node.metrics"}, Hostname: "edge-a.local", OperatingSystem: "Linux", Architecture: "amd64", UptimeSeconds: 300, DockerAvailable: true, DockerVersion: "28.0.1", CPUCount: 4, CPUUsagePercent: 12.5, MemoryTotal: 8 << 30, MemoryUsed: 2 << 30, DiskTotal: 100 << 30, DiskUsed: 25 << 30}); err != nil {
-		t.Fatal(err)
+	serverB := viewer.post("/organizations/"+orgB+"/servers", map[string]any{"name": "edge-b", "connectionType": "local", "connectivityType": "public", "publicAddress": "198.51.100.10"}, http.StatusCreated)
+	updatedServer := owner.put("/organizations/"+orgA+"/servers/"+serverID+"/connection", map[string]any{"connectionType": "local", "host": "localhost", "publicAddress": "203.0.113.11"}, http.StatusOK)
+	if updatedServer["publicAddress"] != "203.0.113.11" || updatedServer["credentialConfigured"] != false {
+		t.Fatalf("server connection update not reflected: %#v", updatedServer)
 	}
-	servers := owner.get("/organizations/"+orgA+"/servers", http.StatusOK)
-	connectedServer := arrayField(t, servers, "servers")[0].(map[string]any)
-	if connectedServer["connectionStatus"] != "connected" || connectedServer["dockerVersion"] != "28.0.1" || len(connectedServer["agentCapabilities"].([]any)) != 3 {
-		t.Fatalf("heartbeat not reflected: %#v", connectedServer)
-	}
-	if _, err := repository.MarkDisconnectedAgents(ctx, time.Now().Add(time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	if status := arrayField(t, owner.get("/organizations/"+orgA+"/servers", http.StatusOK), "servers")[0].(map[string]any)["connectionStatus"]; status != "disconnected" {
-		t.Fatalf("status after timeout=%v", status)
-	}
-	if err := repository.RecordAgentHeartbeat(ctx, parsedAgentID, parsedServerID, store.AgentHeartbeat{ProtocolVersion: 1, Version: "0.1.0", Compatibility: "compatible", Capabilities: []string{"node.metrics"}, Hostname: "edge-a.local", OperatingSystem: "Linux", Architecture: "amd64", DockerAvailable: false, CPUCount: 4}); err != nil {
-		t.Fatal(err)
-	}
-	if status := arrayField(t, owner.get("/organizations/"+orgA+"/servers", http.StatusOK), "servers")[0].(map[string]any)["connectionStatus"]; status != "docker_unavailable" {
-		t.Fatalf("status after reconnect=%v", status)
-	}
-	owner.agentCheck(agentID, "invalid", http.StatusUnauthorized)
-	owner.agentCheck(agentID, credential, http.StatusServiceUnavailable)
-	owner.post("/organizations/"+orgA+"/servers/"+serverID+"/agent/revoke", map[string]any{}, http.StatusNoContent)
-	owner.agentCheck(agentID, credential, http.StatusUnauthorized)
+	viewer.put("/organizations/"+orgB+"/servers/"+serverID+"/connection", map[string]any{"connectionType": "local", "host": "localhost"}, http.StatusNotFound)
 
 	project := owner.post("/organizations/"+orgA+"/projects", map[string]any{"name": "Backend", "slug": "backend", "description": "API workloads"}, http.StatusCreated)
 	projectID := stringField(t, project, "id")
@@ -223,7 +201,6 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	applicationID := stringField(t, application, "id")
 	owner.put("/organizations/"+orgA+"/applications/"+applicationID+"/server", map[string]any{"serverId": serverID}, http.StatusOK)
 	viewer.put("/organizations/"+orgB+"/applications/"+applicationID+"/server", map[string]any{"serverId": stringField(t, serverB, "id")}, http.StatusNotFound)
-	owner.put("/organizations/"+orgA+"/applications/"+applicationID+"/server", map[string]any{"serverId": nil}, http.StatusOK)
 	if _, err := pool.Exec(ctx, `INSERT INTO domains(organization_id,environment_id,application_id,hostname,target_port) VALUES($1,$2,$3,'api.example.test',3000)`, orgA, environmentID, applicationID); err != nil {
 		t.Fatalf("insert scoped domain: %v", err)
 	}
@@ -439,25 +416,29 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	if len(arrayField(t, zones, "zones")) != 1 {
 		t.Fatalf("zones=%v", zones)
 	}
-	domain := owner.post("/organizations/"+orgA+"/applications/"+applicationID+"/domains", map[string]any{"hostname": "api.example.com", "targetPort": 3000, "recordType": "A", "content": "203.0.113.10", "proxied": true}, http.StatusCreated)
+	domain := owner.post("/organizations/"+orgA+"/applications/"+applicationID+"/domains", map[string]any{"hostname": "api.example.com", "targetPort": 3000, "protocol": "http", "routingMode": "cloudflare_proxied"}, http.StatusCreated)
 	if stringField(t, domain, "dnsState") != "active" {
 		t.Fatalf("domain=%v", domain)
 	}
 	domainID := stringField(t, domain, "id")
 	owner.post("/organizations/"+orgA+"/domains/"+domainID+"/sync", map[string]any{}, http.StatusOK)
-	tunnel := owner.post("/organizations/"+orgA+"/integrations/cloudflare/tunnels", map[string]any{"name": "private-network"}, http.StatusCreated)
+	owner.put("/organizations/"+orgA+"/domains/"+domainID, map[string]any{"targetPort": 3000, "protocol": "http", "routingMode": "cloudflare_tunnel"}, http.StatusOK)
+	tunnel := owner.post("/organizations/"+orgA+"/integrations/cloudflare/tunnels", map[string]any{"name": "private-network", "serverId": serverID}, http.StatusCreated)
 	tunnelID := stringField(t, tunnel, "id")
-	owner.post("/organizations/"+orgA+"/integrations/cloudflare/tunnels/"+tunnelID+"/routes", map[string]any{"domainId": domainID, "serviceUrl": "http://api:3000", "proxied": true}, http.StatusCreated)
+	owner.post("/organizations/"+orgA+"/integrations/cloudflare/tunnels/"+tunnelID+"/routes", map[string]any{"domainId": domainID}, http.StatusCreated)
+	if connections.installations.Load() != 1 {
+		t.Fatalf("tunnel installations=%d", connections.installations.Load())
+	}
 	if cloudflareState.routes.Load() != 1 {
 		t.Fatalf("tunnel route calls=%d", cloudflareState.routes.Load())
 	}
 	external := owner.post("/organizations/"+orgA+"/integrations/cloudflare/tunnels", map[string]any{"name": "shared", "providerTunnelId": "shared-1", "ownership": "external"}, http.StatusCreated)
-	owner.post("/organizations/"+orgA+"/integrations/cloudflare/tunnels/"+stringField(t, external, "id")+"/routes", map[string]any{"domainId": domainID, "serviceUrl": "http://api:3000", "proxied": true}, http.StatusConflict)
+	owner.post("/organizations/"+orgA+"/integrations/cloudflare/tunnels/"+stringField(t, external, "id")+"/routes", map[string]any{"domainId": domainID}, http.StatusConflict)
 	owner.delete("/organizations/"+orgA+"/domains/"+domainID, http.StatusNoContent)
 	if cloudflareState.deletes.Load() != 1 {
 		t.Fatalf("managed DNS deletes=%d", cloudflareState.deletes.Load())
 	}
-	owner.post("/organizations/"+orgA+"/applications/"+applicationID+"/domains", map[string]any{"hostname": "conflict.example.com", "targetPort": 3000, "recordType": "A", "content": "203.0.113.20", "proxied": false}, http.StatusConflict)
+	owner.post("/organizations/"+orgA+"/applications/"+applicationID+"/domains", map[string]any{"hostname": "conflict.example.com", "targetPort": 3000, "protocol": "http", "routingMode": "dns_only"}, http.StatusConflict)
 	domainsResult := owner.get("/organizations/"+orgA+"/domains", http.StatusOK)
 	var conflictID string
 	for _, raw := range arrayField(t, domainsResult, "domains") {
@@ -634,24 +615,6 @@ func (c *testClient) delete(path string, status int) map[string]any {
 	return c.request(http.MethodDelete, path, nil, status)
 }
 
-func (c *testClient) agentCheck(agentID, credential string, status int) {
-	request, err := http.NewRequest(http.MethodGet, c.base+"/api/v1/agent/check", nil)
-	if err != nil {
-		c.t.Fatal(err)
-	}
-	request.Header.Set("X-Silicon-Agent-ID", agentID)
-	request.Header.Set("Authorization", "Bearer "+credential)
-	response, err := c.client.Do(request)
-	if err != nil {
-		c.t.Fatal(err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != status {
-		raw, _ := io.ReadAll(response.Body)
-		c.t.Fatalf("agent check status=%d want=%d body=%s", response.StatusCode, status, raw)
-	}
-}
-
 func (c *testClient) request(method, path string, body map[string]any, status int) map[string]any {
 	var reader io.Reader
 	if body != nil {
@@ -712,19 +675,4 @@ func mapField(t *testing.T, value map[string]any, key string) map[string]any {
 		t.Fatalf("field %q is not an object in %#v", key, value)
 	}
 	return result
-}
-
-func enrollmentToken(t *testing.T, command string) string {
-	t.Helper()
-	marker := "--token '"
-	start := strings.Index(command, marker)
-	if start < 0 {
-		t.Fatalf("enrollment command has no token argument: %q", command)
-	}
-	value := command[start+len(marker):]
-	end := strings.IndexByte(value, '\'')
-	if end < 0 {
-		t.Fatalf("enrollment command token is not quoted: %q", command)
-	}
-	return value[:end]
 }
