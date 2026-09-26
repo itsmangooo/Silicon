@@ -1,6 +1,6 @@
 # Docker runtime
 
-Core deployment code depends on `runtime.Provider`. `DockerRuntimeProvider` uses the configured Docker CLI to deploy, start, stop, restart, remove, inspect, query status, and stream logs. A dispatcher selects the explicit local provider or the outbound Agent transport for an application-selected server. Docker-specific labels, commands, health semantics, and ownership checks remain inside the shared adapter.
+Core deployment code depends on `runtime.Provider`. `DockerRuntimeProvider` uses a `CommandExecutor` to deploy, start, stop, restart, remove, inspect, query status, and stream logs. A dispatcher selects the explicit control-plane-local provider or a server runtime backed by the chosen local/SSH `ServerConnectionProvider`. Docker-specific labels, commands, health semantics, and ownership checks remain inside the shared adapter.
 
 ## Deployment paths
 
@@ -30,6 +30,14 @@ Lifecycle endpoints first resolve the current instance through organization- and
 
 Historical logs are limited to 1,000 requested lines. Live follow uses server-sent events and is bounded by `SILICON_RUNTIME_LOG_FOLLOW_TIMEOUT` (default five minutes). Timestamps and stdout/stderr stream identity are retained where Docker exposes them. The UI renders every message as plain text.
 
+## SSH transport
+
+An SSH server stores host, port, username, an encrypted private key, and an optional trusted SHA256 host-key fingerprint. The first connection is blocked until the presented key is explicitly trusted. A changed key is a hard failure until re-trust. Active checks read bounded Linux identity and Docker version data.
+
+Server records preserved from the retired connection model start in `connection_not_configured`. The Servers UI can reconfigure those records in place as local or SSH targets, preserving their application and deployment relationships.
+
+The remote runtime streams exact Git archives to `docker build -`, transfers environment data through mode-`0600` temporary files, and invokes the same Docker lifecycle adapter used locally. Silicon has no general remote-shell endpoint.
+
 ## Current limitations
 
-Docker image and exact-revision Git + Dockerfile workloads can run locally or on a selected enrolled Agent. The production control plane does not mount the Docker socket. Registry credential UI, Compose execution, automatic scheduling, distributed build caching, and general remote shell access are not implemented. Fixed-port replacement is deterministic but not zero downtime.
+Docker image and exact-revision Git + Dockerfile workloads can run on the explicitly enabled control-plane host or a selected local/SSH server. The production control plane does not mount its own Docker socket. Registry credential UI, Compose execution, automatic scheduling, distributed build caching, and general remote shell access are not implemented. Fixed-port replacement is deterministic but not zero downtime.

@@ -32,16 +32,17 @@ Milestone 1 expressly stops before workload execution.
 
 Automated encryption-key rotation, registry credential management, and zero-downtime fixed-port replacement remain future hardening work. No general remote shell was introduced.
 
-## Managed server Agent and production installer increment
+## SSH-connected server and universal Cloudflare routing increment
 
-- Outbound authenticated TLS WebSocket Agent for Linux amd64/arm64
-- Short-lived one-time enrollment and revocable per-machine credentials
-- Real Docker, CPU, memory, disk, uptime, version, capability, and disconnect state
-- Explicit application target selection plus remote Docker image and exact-revision Dockerfile deployment through `RuntimeProvider`
-- Remote status, health, logs, start, stop, restart, and removal with ownership checks
-- Idempotent production installer/update path with generated secrets and private PostgreSQL
+- Local and SSH `ServerConnectionProvider` implementations with active reachability/Docker checks
+- Encrypted organization-scoped SSH keys and explicit SHA256 host-key trust/re-trust
+- Shared Docker lifecycle/build/log behavior over the selected connection
+- Provider-independent application/server origin targets for A, AAAA, CNAME, proxied, DNS-only, and Tunnel routing
+- Official cloudflared deployment as a managed host-network Docker container over local or SSH transport
+- Multiple ownership-safe hostname routes on one tunnel
+- Safe migration of prior server records to `ConnectionNotConfigured`
 
-Registry credentials, automatic scheduling, durable offline command queues, distributed build caching, and Agent auto-update remain future work.
+AWS and Azure connection providers may later implement the same connection/origin contracts through cloud APIs, SSM, cloud-init, or explicitly configured SSH. They are not implemented now.
 
 ## Later milestones
 

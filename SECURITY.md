@@ -1,6 +1,6 @@
 # Security
 
-Security is part of the Milestone 1 design, not a later hardening pass.
+Security is part of Silicon's architecture, not a later hardening pass.
 
 ## Authentication and sessions
 
@@ -24,7 +24,7 @@ The integration test creates two organizations and proves each owner cannot list
 - IDs, enum values, slugs, URLs, ports, lengths, foreign keys, checks, and uniqueness are validated in the API and/or database.
 - Error responses do not expose SQL details.
 - The UI renders workload and audit strings as text through React; it does not inject HTML.
-- Workload logs must be treated as untrusted when live log delivery is implemented.
+- Workload logs are treated as untrusted plain text in both historical and live views.
 
 ## Audit and logging
 
@@ -40,13 +40,15 @@ Cloudflare API and tunnel tokens are encrypted with AES-256-GCM and organization
 
 The optional local Docker provider grants the control plane high privilege over the host Docker daemon. Leave it disabled unless the control-plane host is an intended workload target, restrict host access, and run only reviewed images/repositories. Source archives are bounded, reject links and path traversal, and containers receive no published host port automatically. Lifecycle APIs resolve a tenant-scoped database instance and the provider verifies Silicon ownership labels before every action, including logs and removal.
 
-## Agent security
+## SSH server security
 
-Agent enrollment tokens and permanent credentials use 256 bits of cryptographically secure randomness. Only their SHA-256 hashes are stored. Enrollment tokens are short-lived, single-use, and scoped by server and organization. Re-enrollment revokes the previous active identity; explicit revocation closes the live connection. Token and credential values are never written to audit metadata or structured logs.
+SSH private keys are validated on input, encrypted with AES-256-GCM using organization-and-server authenticated context, omitted from API responses, and never written to logs or audit metadata. Decryption occurs only after an organization-scoped server lookup. Replacing a connection may replace or explicitly clear its credential; normal reads expose only whether one is configured.
 
-Agent traffic requires TLS unless the operator explicitly enables the isolated-development override. Forwarded HTTPS is trusted only when `SILICON_TRUST_FORWARDED_PROTO=true`; that setting requires a trusted proxy boundary and no direct untrusted access to the HTTP listener. A stable Agent UUID plus bearer credential authenticates the WebSocket. Heartbeats cannot change the credential's server or organization scope. The protocol contains an enumerated typed operation set and has no generic command execution. Remote Docker lifecycle operations reuse Silicon-label validation and add organization-label enforcement.
+SSH host-key checking is mandatory. The first check returns the presented SHA256 fingerprint without trusting it. An operator must verify it out-of-band and explicitly trust that exact fingerprint. A later mismatch blocks every check and runtime operation until explicit re-trust. Authentication failures, host-key failures, Docker absence, and network failures are separate server states.
 
-The Agent configuration file contains the permanent credential and is installed with mode `0600`. Docker administrators and root on an Agent host remain inside the trusted boundary because they can inspect containers and their environment. Protect WebSocket upgrade paths and preserve `X-Forwarded-Proto` at the HTTPS ingress.
+Silicon exposes no generic remote-shell API. Internal providers invoke fixed programs with independently quoted arguments, bound command output, and context deadlines. Remote environment/secret files and cloudflared token files are written with mode `0600`, used as Docker env files, and removed. Root and Docker administrators on a target remain inside the trusted boundary because they can inspect container environments.
+
+Official cloudflared runs as a Silicon-labeled, restart-managed Docker container with host networking on the selected target. The token is never placed in a shell command. Shared or external Cloudflare resources remain ownership-protected.
 
 ## External identity
 

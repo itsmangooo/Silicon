@@ -1,6 +1,6 @@
 # Cloudflare integration
 
-Cloudflare is the first implementation of Silicon's `DNSProvider` and `TunnelProvider` boundaries. Core domain records store stable zone, record, and tunnel IDs plus provider-independent desired state; Cloudflare payload types remain in the adapter.
+Cloudflare is the first implementation of Silicon's `DNSProvider` and `TunnelProvider` boundaries. Domains target a normalized application/server origin containing protocol, port, address, direct-DNS capability, and tunnel capability. Cloudflare never branches on local versus SSH and future cloud server types can participate through the same resolver.
 
 ## API token and zones
 
@@ -10,7 +10,7 @@ Silicon verifies the token before saving a connection. The token is encrypted wi
 
 ## DNS reconciliation and ownership
 
-When a domain is created, Silicon chooses the longest matching connected zone, looks up the hostname, and then:
+When a domain is created, Silicon resolves the application's selected server and uses its public address to choose A, AAAA, or CNAME. It then chooses the longest matching connected zone, looks up the hostname, and:
 
 - creates the requested A, AAAA, or CNAME record when none exists;
 - updates a record only when its stored provider record ID is marked Silicon-managed;
@@ -26,6 +26,8 @@ Deleting a Silicon domain deletes the Cloudflare record only when `siliconManage
 
 Cloudflare DNS and Tunnel are separate. Direct routing can use DNS without a tunnel. A user may explicitly create a remotely managed tunnel or import an existing tunnel as `imported` or `external`; Silicon never enables this automatically and never claims it is universally safer.
 
-A tunnel may carry multiple hostname routes. Silicon reads the current Cloudflare ingress configuration, preserves unrelated hostnames, rejects ownership conflicts, writes the merged list plus the required catch-all, then reconciles the hostname to `<tunnel-id>.cfargotunnel.com`. The cloudflared token for a Silicon-created tunnel is encrypted at rest. Running `cloudflared` on the target network remains an operator deployment step; Silicon implements no custom protocol and does not delete shared/external tunnels.
+A tunnel may carry multiple hostname routes. Silicon reads the current Cloudflare ingress configuration, preserves unrelated hostnames, rejects ownership conflicts, writes the merged list plus the required catch-all, then reconciles the hostname to `<tunnel-id>.cfargotunnel.com`.
+
+For a Silicon-created tunnel, the user selects a local or SSH-connected target server. Silicon installs official `cloudflare/cloudflared` as a labeled, restart-managed Docker container using host networking. The encrypted tunnel token is transferred through a mode-`0600` temporary env file and never appears in command arguments. Each route resolves to `protocol://127.0.0.1:port` on that same target. Imported/external tunnels are preserved and are not installed or deleted by Silicon.
 
 Private or self-hosted server records may make a tunnel useful because it avoids direct inbound HTTP/HTTPS exposure, but the choice remains explicit.

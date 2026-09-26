@@ -9,7 +9,11 @@ flowchart LR
     API --> Policy[Authorization policy]
     API --> Platform[Platform records]
     Platform --> Runtime[RuntimeProvider]
+    Runtime --> Connection[ServerConnectionProvider]
+    Connection --> Local[LocalConnectionProvider]
+    Connection --> SSH[SSHConnectionProvider]
     Platform --> Routing[RoutingProvider]
+    Routing --> Origin[Origin target resolver]
     Auth --> Identity[IdentityProvider]
     Platform --> Secret[SecretProvider]
     Platform --> Logs[LogProvider]
@@ -30,8 +34,9 @@ flowchart LR
 | `projects` / platform repository | Organizations, projects, environments, applications, servers and identity-provider records | Resource-oriented repository methods and REST handlers | PostgreSQL, authorization | Feature packages can replace repository grouping as behavior grows | Every query includes organization scope; cross-organization integration tests |
 | `deployments` / `jobs` | State vocabulary, historical rows/events, ordered asynchronous execution | `ValidateTransition`, `DeploymentExecutor` | PostgreSQL, audit | Typed runtime executors | Invalid transitions fail; per-application ordering prevents stale queued revisions replacing newer ones |
 | `execution` | Resolve source/configuration and coordinate ordered replacement | `DockerDeploymentExecutor` | Git, runtime and secret providers | Future source builders/transports | GitHub uses exact commits; fixed-port replacement is explicitly not zero downtime |
-| `providers/runtime` | Typed deploy/lifecycle/inspection/status/log contract, local/remote dispatcher and Docker adapter | `Provider`, `Dispatcher`, `DockerRuntimeProvider` | Docker CLI only in adapter | Additional typed runtimes | Every destructive action verifies complete Silicon ownership labels |
-| `agent` / `services/agent` | Enrollment, machine identity, outbound connection, heartbeat/capabilities and typed remote transport | Versioned envelopes and `RemoteRuntimeProvider` | TLS WebSocket, PostgreSQL, Docker adapter | Durable command handoff in a later HA design | Tokens are single-use; credentials are hashed/revocable; no shell operation exists |
+| `providers/runtime` | Typed deploy/lifecycle/inspection/status/log contract, target dispatcher and shared Docker adapter | `Provider`, `Dispatcher`, `DockerRuntimeProvider` | `ServerConnectionProvider` | Additional typed runtimes | Every destructive action verifies complete Silicon ownership labels |
+| `providers/connection` | Local/SSH reachability, host identity, bounded command transport, protected file transfer and cloudflared installation | `Provider`, `CommandExecutor` | OS process execution or SSH | Future AWS/Azure connection providers | SSH keys are encrypted; host keys are pinned; no command endpoint exists |
+| `serverconnections` | Organization-scoped connection selection and normalized origin resolution | `Check`, `Executor`, `ResolveOrigin` | Repository, encryption envelope, connection providers | Cloud-native connection/resolution adapters | Tenant scope is preserved before credentials are decrypted or targets resolved |
 | `providers/git` | Source-provider boundary and GitHub App adapter | `Provider` | GitHub HTTPS API | Future GitLab adapter | Installation/repository identity and webhook signatures are verified |
 | `providers/dns` | Provider-independent DNS desired state | `Provider` | Cloudflare adapter | Future DNS adapters | Ownership metadata prevents unrelated record overwrite/deletion |
 | `providers/tunnel` | Optional multi-host tunnel routing | `Provider` | Cloudflare adapter | Future tunnel adapters | External/shared ownership is explicit and externally managed tunnels are read-only |

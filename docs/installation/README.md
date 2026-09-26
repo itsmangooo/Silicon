@@ -41,7 +41,7 @@ Set the externally reachable URL before installation when Silicon is behind HTTP
 SILICON_PUBLIC_URL=https://silicon.example.com ./install.sh
 ```
 
-The supplied Compose file serves HTTP. Operators exposing Silicon publicly must provide HTTPS termination and overwrite `X-Forwarded-Proto: https`. For an HTTPS public URL, the installer binds Silicon to `127.0.0.1` and enables forwarded-protocol trust so untrusted clients cannot bypass TLS checks by forging the header. Adjust the bind address only when the trusted proxy runs elsewhere. Agent enrollment and command connections reject plain HTTP. The default `http://localhost` is suitable for local initial setup, not remote Agent enrollment.
+The supplied Compose file serves HTTP. Operators exposing Silicon publicly must provide HTTPS termination and overwrite `X-Forwarded-Proto: https`. For an HTTPS public URL, the installer binds Silicon to `127.0.0.1` and enables forwarded-protocol trust so untrusted clients cannot bypass TLS checks by forging the header. Adjust the bind address only when the trusted proxy runs elsewhere. The default `http://localhost` is suitable only for local initial setup.
 
 ## Updates and releases
 
@@ -66,4 +66,5 @@ Development remains separate: copy `.env.example`, start PostgreSQL with `docker
 - `Docker daemon is unavailable`: ensure the current user can run `docker version` without elevation.
 - `Docker Compose v2 is required`: install the Compose plugin so `docker compose version` succeeds.
 - Readiness timeout: inspect the production Compose service status and logs.
-- Agent enrollment rejected: confirm the public URL is HTTPS, the token has not expired or been used, and the reverse proxy supports WebSocket upgrades.
+- SSH host key is untrusted: verify the displayed SHA256 fingerprint directly on the target, then use the explicit trust action.
+- SSH host key changed: stop and investigate before using explicit re-trust; Silicon blocks the connection by design.

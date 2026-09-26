@@ -1,12 +1,12 @@
 # Silicon
 
-Silicon is a self-hosted infrastructure and application control plane. Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, audit events, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation, Cloudflare DNS/optional Tunnel providers, local Docker, and an outbound Linux Agent for explicitly selected remote Docker hosts are part of the control plane.
+Silicon is a self-hosted infrastructure and application control plane. Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, audit events, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation, Cloudflare DNS/optional Tunnel providers, local Docker, and SSH-connected Linux Docker hosts are part of the control plane.
 
 Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It remains a modular monolith. It does **not** include a custom reverse proxy, automatic TLS, AWS, Azure, or Kubernetes integration.
 
 ## Interface previews
 
-These previews were captured from the running Milestone 1 application at a consistent desktop viewport. Authenticated views use temporary, isolated preview fixtures so the implemented data-backed states are visible; Silicon does not ship with seeded users, organizations, or workload records.
+These previews were captured from the running application at a consistent desktop viewport. Authenticated views use temporary, isolated preview fixtures so the implemented data-backed states are visible; Silicon does not ship with seeded users, organizations, or workload records. The current previews include local/SSH targets and provider-independent Cloudflare routing.
 
 | Login | Register |
 | --- | --- |
@@ -24,17 +24,25 @@ These previews were captured from the running Milestone 1 application at a consi
 | --- | --- |
 | [![Silicon applications page](docs/previews/applications.png)](docs/previews/applications.png) | [![Silicon deployments page](docs/previews/deployments.png)](docs/previews/deployments.png) |
 
-| Servers | Members |
+| Servers | SSH server detail |
 | --- | --- |
-| [![Silicon servers page](docs/previews/servers.png)](docs/previews/servers.png) | [![Silicon members page](docs/previews/members.png)](docs/previews/members.png) |
+| [![Silicon servers page](docs/previews/servers.png)](docs/previews/servers.png) | [![Silicon SSH server detail](docs/previews/server-ssh-detail.png)](docs/previews/server-ssh-detail.png) |
 
-| Access | Identity providers |
+| Domains | Integrations |
 | --- | --- |
-| [![Silicon access page](docs/previews/access.png)](docs/previews/access.png) | [![Silicon identity providers page](docs/previews/identity-providers.png)](docs/previews/identity-providers.png) |
+| [![Silicon domains page](docs/previews/domains.png)](docs/previews/domains.png) | [![Silicon integrations page](docs/previews/integrations.png)](docs/previews/integrations.png) |
 
-| Audit | Settings |
+| Members | Access |
 | --- | --- |
-| [![Silicon audit page](docs/previews/audit.png)](docs/previews/audit.png) | [![Silicon settings page](docs/previews/settings.png)](docs/previews/settings.png) |
+| [![Silicon members page](docs/previews/members.png)](docs/previews/members.png) | [![Silicon access page](docs/previews/access.png)](docs/previews/access.png) |
+
+| Identity providers | Audit |
+| --- | --- |
+| [![Silicon identity providers page](docs/previews/identity-providers.png)](docs/previews/identity-providers.png) | [![Silicon audit page](docs/previews/audit.png)](docs/previews/audit.png) |
+
+| Settings | |
+| --- | --- |
+| [![Silicon settings page](docs/previews/settings.png)](docs/previews/settings.png) | |
 
 ## Repository layout
 
@@ -42,7 +50,7 @@ These previews were captured from the running Milestone 1 application at a consi
 Silicon/
 ├── backend/            Go control-plane API and PostgreSQL migrations
 ├── frontend/           React + Vite JavaScript interface
-├── services/agent/     Linux Agent for typed remote Docker operations
+├── services/           Reserved for justified future independent processes
 ├── docs/               Architecture and operating documentation
 ├── deploy/             Files used to deploy Silicon itself
 ├── docker-compose.yml
@@ -139,15 +147,20 @@ The REST API is rooted at `/api/v1`. Its OpenAPI contract lives at [`backend/ope
 - `/organizations/{organizationID}/applications/{applicationID}/runtime`
 - `/organizations/{organizationID}/applications/{applicationID}/runtime/logs`
 - `/organizations/{organizationID}/servers`
-- `/organizations/{organizationID}/servers/{serverID}/enrollment-token`
+- `/organizations/{organizationID}/servers/{serverID}/connection`
+- `/organizations/{organizationID}/servers/{serverID}/check`
+- `/organizations/{organizationID}/servers/{serverID}/trust-host-key`
 - `/organizations/{organizationID}/applications/{applicationID}/server`
-- `/agent/enroll`, `/agent/connect`, `/agent/check`
 - `/organizations/{organizationID}/members`
 - `/organizations/{organizationID}/identity-providers`
 - `/organizations/{organizationID}/audit-events`
 - `/organizations/{organizationID}/integrations/github`
 - `/organizations/{organizationID}/integrations/cloudflare`
 - `/organizations/{organizationID}/domains`
+- `/organizations/{organizationID}/domains/{domainID}/sync`
+- `/organizations/{organizationID}/integrations/cloudflare/tunnels`
+- `/organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/install`
+- `/organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/routes`
 - `/webhooks/github`
 
 Authentication uses an opaque server-side session in an HTTP-only cookie. Unsafe requests also require a CSRF header. Authorization is always enforced by the backend against the organization in the route.
@@ -160,10 +173,11 @@ Runtime records and control-plane behavior are PostgreSQL-backed. When the local
 - environment variables are readable application configuration; local secrets are AES-256-GCM encrypted, write-only through the API, and require `SILICON_ENCRYPTION_KEY`;
 - ports are never published implicitly; an IP address and host port must both be configured;
 - runtime inspection, lifecycle actions, bounded historical logs, and bounded live SSE logs operate only on persisted Silicon-managed containers;
-- enrolled Linux amd64/arm64 servers connect outbound over an authenticated TLS WebSocket; the Agent exposes typed Docker operations and never exposes a generic shell;
+- Linux servers use organization-scoped SSH credentials encrypted at rest; host identity must be explicitly trusted, and remote Docker operations remain typed with no user-facing shell API;
 - `ExternalRoutingProvider` reports externally managed routing/TLS semantics; it changes no proxy configuration;
 - OIDC/Authentik configuration records are disabled planning records; the OIDC login flow is not activated;
-- applications select either the explicitly enabled local provider or one enrolled server; Docker images and exact-revision Dockerfile builds share that path. Automatic scheduling, registry credential management, distributed build caching, and Compose execution are not implemented.
+- applications select either the explicitly enabled local provider or a configured SSH server; Docker images and exact-revision Dockerfile builds share the Docker adapter. Automatic scheduling, registry credential management, distributed build caching, and Compose execution are not implemented;
+- domains reference normalized application/server origins. Cloudflare resolves A, AAAA, or CNAME records from a server public address, or installs official `cloudflared` as a managed host-network Docker container on the chosen local/SSH target.
 
 Provider credentials are handled separately: GitHub App secrets remain process configuration, while Cloudflare API and tunnel tokens use authenticated encryption at rest. See [GitHub integration](docs/integrations/github.md) and [Cloudflare integration](docs/integrations/cloudflare.md).
 

@@ -14,7 +14,7 @@ Silicon needs clear feature boundaries but has one product team, one primary rel
 
 ## Decision
 
-Use a modular monolith with explicit domain packages and provider contracts. Add an independent process only for a distinct privilege or lifecycle boundary, such as a future managed-server agent.
+Use a modular monolith with explicit domain packages and provider contracts. Add an independent process only when a future feature has a distinct and justified lifecycle boundary.
 
 ## Tradeoffs
 
