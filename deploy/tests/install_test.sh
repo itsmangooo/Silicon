@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-REPOSITORY_ROOT=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
+CDPATH=''
+REPOSITORY_ROOT=$(cd -- "$(dirname "$0")/../.." && pwd)
 TEMP_ROOT=$(mktemp -d)
 trap 'rm -rf "$TEMP_ROOT"' EXIT HUP INT TERM
 FAKE_BIN="$TEMP_ROOT/bin"
