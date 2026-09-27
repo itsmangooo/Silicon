@@ -266,6 +266,10 @@ func (r Repository) SaveAWSInstance(ctx context.Context, organizationID, account
 	if serverID == uuid.Nil {
 		serverID = uuid.New()
 	}
+	securityGroupIDs := item.SecurityGroupIDs
+	if securityGroupIDs == nil {
+		securityGroupIDs = []string{}
+	}
 	address := item.PrivateIP
 	connectivity := "private"
 	if item.PublicIP != "" {
@@ -285,7 +289,7 @@ func (r Repository) SaveAWSInstance(ctx context.Context, organizationID, account
 		return AWSInstance{}, err
 	}
 	var saved AWSInstance
-	err = tx.QueryRow(ctx, `INSERT INTO aws_instances(organization_id,account_id,server_id,provider_instance_id,region,name,state,instance_type,architecture,availability_zone,image_id,private_ip,public_ip,vpc_id,subnet_id,security_group_ids,ownership,connection_method,launched_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id,organization_id,account_id,server_id,provider_instance_id,region,name,state,instance_type,architecture,availability_zone,image_id,private_ip,public_ip,vpc_id,subnet_id,security_group_ids,ownership,connection_method,launched_at`, organizationID, accountID, serverID, item.ID, item.Region, item.Name, item.State, item.InstanceType, item.Architecture, item.AvailabilityZone, item.ImageID, item.PrivateIP, item.PublicIP, item.VPCID, item.SubnetID, item.SecurityGroupIDs, ownership, connectionMethod, item.LaunchedAt).Scan(&saved.ID, &saved.OrganizationID, &saved.AccountID, &saved.ServerID, &saved.ProviderInstanceID, &saved.Region, &saved.Name, &saved.State, &saved.InstanceType, &saved.Architecture, &saved.AvailabilityZone, &saved.ImageID, &saved.PrivateIP, &saved.PublicIP, &saved.VPCID, &saved.SubnetID, &saved.SecurityGroupIDs, &saved.Ownership, &saved.ConnectionMethod, &saved.LaunchedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO aws_instances(organization_id,account_id,server_id,provider_instance_id,region,name,state,instance_type,architecture,availability_zone,image_id,private_ip,public_ip,vpc_id,subnet_id,security_group_ids,ownership,connection_method,launched_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id,organization_id,account_id,server_id,provider_instance_id,region,name,state,instance_type,architecture,availability_zone,image_id,private_ip,public_ip,vpc_id,subnet_id,security_group_ids,ownership,connection_method,launched_at`, organizationID, accountID, serverID, item.ID, item.Region, item.Name, item.State, item.InstanceType, item.Architecture, item.AvailabilityZone, item.ImageID, item.PrivateIP, item.PublicIP, item.VPCID, item.SubnetID, securityGroupIDs, ownership, connectionMethod, item.LaunchedAt).Scan(&saved.ID, &saved.OrganizationID, &saved.AccountID, &saved.ServerID, &saved.ProviderInstanceID, &saved.Region, &saved.Name, &saved.State, &saved.InstanceType, &saved.Architecture, &saved.AvailabilityZone, &saved.ImageID, &saved.PrivateIP, &saved.PublicIP, &saved.VPCID, &saved.SubnetID, &saved.SecurityGroupIDs, &saved.Ownership, &saved.ConnectionMethod, &saved.LaunchedAt)
 	if err != nil {
 		return AWSInstance{}, err
 	}
