@@ -21,6 +21,9 @@ CREATE TABLE aws_accounts (
 );
 CREATE INDEX aws_accounts_organization_idx ON aws_accounts(organization_id, created_at);
 
+ALTER TABLE projects
+    ADD CONSTRAINT projects_id_organization_unique UNIQUE (id, organization_id);
+
 CREATE TABLE aws_resource_ownership (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
