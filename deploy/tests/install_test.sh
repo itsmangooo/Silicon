@@ -43,11 +43,54 @@ expect_failure() {
 
 expect_failure 'unsupported OS' env SILICON_INSTALL_TEST_MODE=true SILICON_TEST_OS=Darwin SILICON_INSTALL_DIR="$TEMP_ROOT/os" sh "$REPOSITORY_ROOT/install.sh"
 export SILICON_TEST_OS=Linux
+
+# Port preflight behavior is tested without opening real listeners so the suite remains deterministic.
+PORT_FREE_DIR="$TEMP_ROOT/port-80-free"
+env SILICON_INSTALL_TEST_MODE=true SILICON_INSTALL_DIR="$PORT_FREE_DIR" sh "$REPOSITORY_ROOT/install.sh" >/dev/null
+grep -q '^SILICON_HTTP_PORT=80$' "$PORT_FREE_DIR/config/silicon.env"
+grep -q '^SILICON_PUBLIC_URL=http://localhost$' "$PORT_FREE_DIR/config/silicon.env"
+
+expect_failure 'occupied default port' env SILICON_INSTALL_TEST_MODE=true SILICON_INSTALL_TEST_PORTS_IN_USE=80 SILICON_INSTALL_DIR="$TEMP_ROOT/port-80-occupied" sh "$REPOSITORY_ROOT/install.sh"
+grep -q 'HTTP port 80 is already occupied' "$TEMP_ROOT/output"
+grep -q -- '--http-port PORT' "$TEMP_ROOT/output"
+
+CUSTOM_FREE_DIR="$TEMP_ROOT/custom-port-free"
+env SILICON_INSTALL_TEST_MODE=true SILICON_INSTALL_DIR="$CUSTOM_FREE_DIR" sh "$REPOSITORY_ROOT/install.sh" --http-port 18080 >/dev/null
+grep -q '^SILICON_HTTP_PORT=18080$' "$CUSTOM_FREE_DIR/config/silicon.env"
+grep -q '^SILICON_PUBLIC_URL=http://localhost:18080$' "$CUSTOM_FREE_DIR/config/silicon.env"
+
+expect_failure 'occupied custom port' env SILICON_INSTALL_TEST_MODE=true SILICON_INSTALL_TEST_PORTS_IN_USE=18081 SILICON_INSTALL_DIR="$TEMP_ROOT/custom-port-occupied" sh "$REPOSITORY_ROOT/install.sh" --http-port 18081
+grep -q 'HTTP port 18081 is already occupied' "$TEMP_ROOT/output"
+
+expect_failure 'mismatched HTTP public URL port' env SILICON_INSTALL_TEST_MODE=true SILICON_INSTALL_DIR="$TEMP_ROOT/mismatched-public-url" sh "$REPOSITORY_ROOT/install.sh" --http-port 18081 --public-url http://localhost:18082
+grep -q -- '--public-url uses HTTP port 18082 but the selected --http-port is 18081' "$TEMP_ROOT/output"
+
+HTTPS_PROXY_DIR="$TEMP_ROOT/https-proxy-port"
+env SILICON_INSTALL_TEST_MODE=true SILICON_INSTALL_DIR="$HTTPS_PROXY_DIR" sh "$REPOSITORY_ROOT/install.sh" --http-port 18081 --public-url https://silicon.example.com >/dev/null
+grep -q '^SILICON_HTTP_PORT=18081$' "$HTTPS_PROXY_DIR/config/silicon.env"
+grep -q '^SILICON_PUBLIC_URL=https://silicon.example.com$' "$HTTPS_PROXY_DIR/config/silicon.env"
+
+INTERACTIVE_DIR="$TEMP_ROOT/interactive-port"
+printf '\n' | env SILICON_INSTALL_TEST_MODE=true SILICON_INSTALL_TEST_INTERACTIVE=true SILICON_INSTALL_TEST_PORTS_IN_USE=80 SILICON_INSTALL_DIR="$INTERACTIVE_DIR" sh "$REPOSITORY_ROOT/install.sh" >/dev/null
+grep -q '^SILICON_HTTP_PORT=8080$' "$INTERACTIVE_DIR/config/silicon.env"
+grep -q '^SILICON_PUBLIC_URL=http://localhost:8080$' "$INTERACTIVE_DIR/config/silicon.env"
+
+PRESERVED_PORT_DIR="$TEMP_ROOT/preserved-port"
+env SILICON_INSTALL_TEST_MODE=true SILICON_INSTALL_DIR="$PRESERVED_PORT_DIR" sh "$REPOSITORY_ROOT/install.sh" --http-port 18082 >/dev/null
+PRESERVED_PORT_HASH=$(sha256sum "$PRESERVED_PORT_DIR/config/silicon.env" | cut -d ' ' -f 1)
+env SILICON_INSTALL_TEST_MODE=true SILICON_INSTALL_DIR="$PRESERVED_PORT_DIR" sh "$REPOSITORY_ROOT/install.sh" >/dev/null
+[ "$PRESERVED_PORT_HASH" = "$(sha256sum "$PRESERVED_PORT_DIR/config/silicon.env" | cut -d ' ' -f 1)" ] || { printf 'repeat install did not preserve the configured port\n' >&2; exit 1; }
+grep -q '^SILICON_HTTP_PORT=18082$' "$PRESERVED_PORT_DIR/config/silicon.env"
+grep -q '^SILICON_PUBLIC_URL=http://localhost:18082$' "$PRESERVED_PORT_DIR/config/silicon.env"
+expect_failure 'repeat install port override' env SILICON_INSTALL_TEST_MODE=true SILICON_INSTALL_DIR="$PRESERVED_PORT_DIR" sh "$REPOSITORY_ROOT/install.sh" --http-port 19000
+grep -q 'existing installation uses HTTP port 18082' "$TEMP_ROOT/output"
+[ "$PRESERVED_PORT_HASH" = "$(sha256sum "$PRESERVED_PORT_DIR/config/silicon.env" | cut -d ' ' -f 1)" ] || { printf 'rejected port override changed existing configuration\n' >&2; exit 1; }
+
 expect_failure 'missing Docker' env PATH="$TEST_PATH" FAKE_DOCKER_MODE=missing SILICON_INSTALL_DIR="$TEMP_ROOT/missing-docker" sh "$REPOSITORY_ROOT/install.sh"
 expect_failure 'missing Compose' env PATH="$TEST_PATH" FAKE_DOCKER_MODE=missing-compose SILICON_INSTALL_DIR="$TEMP_ROOT/missing-compose" sh "$REPOSITORY_ROOT/install.sh"
 
 INSTALL_DIR="$TEMP_ROOT/fresh"
-env PATH="$TEST_PATH" SILICON_INSTALL_DIR="$INSTALL_DIR" SILICON_PUBLIC_URL=http://localhost SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh" >/dev/null
+env PATH="$TEST_PATH" SILICON_INSTALL_DIR="$INSTALL_DIR" SILICON_PUBLIC_URL=http://localhost:18083 SILICON_HTTP_PORT=18083 SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh" >/dev/null
 ENV_FILE="$INSTALL_DIR/config/silicon.env"
 [ -s "$ENV_FILE" ] || { printf 'fresh configuration was not generated\n' >&2; exit 1; }
 BEFORE=$(sha256sum "$ENV_FILE" | cut -d ' ' -f 1)
@@ -59,7 +102,7 @@ AFTER=$(sha256sum "$ENV_FILE" | cut -d ' ' -f 1)
 [ "$BEFORE" != "$AFTER" ] || { printf 'test fixture did not change configuration\n' >&2; exit 1; }
 grep -q '^CUSTOM_SETTING=preserve-me$' "$ENV_FILE"
 
-expect_failure 'startup failure' env PATH="$TEST_PATH" FAKE_DOCKER_MODE=startup SILICON_INSTALL_DIR="$TEMP_ROOT/startup" SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh"
-expect_failure 'readiness failure' env PATH="$TEST_PATH" FAKE_CURL_MODE=fail SILICON_INSTALL_DIR="$TEMP_ROOT/readiness" SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh"
+expect_failure 'startup failure' env PATH="$TEST_PATH" FAKE_DOCKER_MODE=startup SILICON_HTTP_PORT=18084 SILICON_INSTALL_DIR="$TEMP_ROOT/startup" SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh"
+expect_failure 'readiness failure' env PATH="$TEST_PATH" FAKE_CURL_MODE=fail SILICON_HTTP_PORT=18085 SILICON_INSTALL_DIR="$TEMP_ROOT/readiness" SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh"
 
 printf 'installer tests passed\n'
