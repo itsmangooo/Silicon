@@ -11,6 +11,9 @@ func TestRolePermissions(t *testing.T) {
 		{"owner", ProjectDelete, true}, {"admin", MemberManage, true},
 		{"developer", DeploymentCreate, true}, {"developer", ProjectDelete, false},
 		{"viewer", ProjectRead, true}, {"viewer", SecretWrite, false},
+		{"owner", CloudDelete, true}, {"admin", CostRead, true},
+		{"developer", CloudRead, true}, {"developer", CloudProvision, false},
+		{"viewer", BudgetRead, true}, {"viewer", CostRead, false},
 		{"unknown", ProjectRead, false},
 	}
 	for _, test := range tests {

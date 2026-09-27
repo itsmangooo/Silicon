@@ -50,6 +50,16 @@ Silicon exposes no generic remote-shell API. Internal providers invoke fixed pro
 
 Official cloudflared runs as a Silicon-labeled, restart-managed Docker container with host networking on the selected target. The token is never placed in a shell command. Shared or external Cloudflare resources remain ownership-protected.
 
+## AWS security and ownership
+
+AWS connections prefer a scoped IAM role assumed through STS. The control plane keeps only temporary SDK credentials in memory. If static access keys are required to bootstrap AssumeRole, both fields and the role External ID are AES-256-GCM encrypted with organization-and-account authenticated context, omitted from reads, and never included in logs, errors, jobs, or audit metadata. `GetCallerIdentity` must succeed before an account is stored.
+
+Discovered AWS resources are `external` and read-only. Start, stop, reboot, network attachment, storage attachment, and destructive actions all require an explicit managed/imported ownership record. An explicit import changes only Silicon's ownership record to `imported`; it does not claim that Silicon created the resource. Resources created by Silicon are `managed` and receive `silicon:managed`, `silicon:organization`, `silicon:resource`, and applicable project/environment tags. VPC, EIP, EBS, and snapshot deletion/release requires managed ownership. Silicon never infers authority from AWS visibility.
+
+AWS SSM is used only through bounded internal operations; there is no public command or shell endpoint. The initial SSM transport intentionally refuses stdin and secret-bearing file transfer because SSM Run Command parameters are retained by AWS. Use SSH—with mandatory host-key pinning—for exact-revision builds, encrypted application secrets, environment files, and Cloudflare Tunnel token installation. This avoids placing workload credentials in SSM command history.
+
+Cloud-init contains only public package/bootstrap instructions and no permanent AWS or Silicon credential. Security-group helpers do not open ports automatically; a `0.0.0.0/0` rule requires an explicit description. Cost Explorer output is delayed provider data, and estimates are never labeled as actual billing. Per-account cost snapshots prevent organization totals from being overwritten by one account, and tag-scoped budgets remain unevaluated when attribution is unavailable. Budget enforcement can reject only new Silicon provisioning and never stops or terminates running infrastructure.
+
 ## External identity
 
 OIDC execution is not enabled. The provider contract requires a mature library to validate discovery metadata, signature, issuer, audience, expiration, state, and nonce. Authentik must be a generic OIDC preset. External identities link by provider + subject + local user; email equality is never sufficient for an automatic merge.

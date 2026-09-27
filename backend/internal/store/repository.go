@@ -125,6 +125,10 @@ type Server struct {
 	CredentialConfigured  bool       `json:"credentialConfigured"`
 	SSHHostKeyFingerprint string     `json:"sshHostKeyFingerprint"`
 	ConnectionError       string     `json:"connectionError,omitempty"`
+	ProviderType          string     `json:"providerType"`
+	AWSAccountID          *uuid.UUID `json:"awsAccountId,omitempty"`
+	AWSInstanceID         string     `json:"awsInstanceId,omitempty"`
+	AWSRegion             string     `json:"awsRegion,omitempty"`
 	LastCheckedAt         *time.Time `json:"lastCheckedAt"`
 	CreatedAt             time.Time  `json:"createdAt"`
 }
@@ -147,6 +151,10 @@ type ServerInput struct {
 	SSHUsername         string
 	EncryptedPrivateKey []byte
 	HostKeyFingerprint  string
+	ProviderType        string
+	AWSAccountID        *uuid.UUID
+	AWSInstanceID       string
+	AWSRegion           string
 }
 
 type IdentityProvider struct {
@@ -582,7 +590,10 @@ func (r Repository) CreateServer(ctx context.Context, organizationID, actorID uu
 	}
 	defer tx.Rollback(ctx)
 	var item Server
-	err = tx.QueryRow(ctx, `INSERT INTO servers(id,organization_id,name,hostname,operating_system,architecture,connectivity_type,connection_type,public_address,ssh_port,ssh_username,ssh_private_key_encrypted,ssh_host_key_fingerprint,connection_status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,CASE WHEN $8='unconfigured' THEN 'connection_not_configured' ELSE 'unreachable' END) RETURNING id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,connectivity_type,cpu_capacity,memory_bytes,memory_used_bytes,disk_total_bytes,disk_used_bytes,cpu_usage_percent,uptime_seconds,docker_available,docker_version,connection_type,public_address,ssh_port,ssh_username,(ssh_private_key_encrypted IS NOT NULL),ssh_host_key_fingerprint,connection_error,last_checked_at,created_at`, input.ID, organizationID, input.Name, input.Hostname, input.OperatingSystem, input.Architecture, input.ConnectivityType, input.ConnectionType, input.PublicAddress, input.SSHPort, input.SSHUsername, input.EncryptedPrivateKey, input.HostKeyFingerprint).Scan(serverScan(&item)...)
+	if input.ProviderType == "" {
+		input.ProviderType = "generic"
+	}
+	err = tx.QueryRow(ctx, `INSERT INTO servers AS s(id,organization_id,name,hostname,operating_system,architecture,connectivity_type,connection_type,public_address,ssh_port,ssh_username,ssh_private_key_encrypted,ssh_host_key_fingerprint,connection_status,provider_type,aws_account_id,aws_instance_id,aws_region) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,CASE WHEN $8='unconfigured' THEN 'connection_not_configured' ELSE 'unreachable' END,$14,$15,$16,$17) RETURNING `+serverColumns, input.ID, organizationID, input.Name, input.Hostname, input.OperatingSystem, input.Architecture, input.ConnectivityType, input.ConnectionType, input.PublicAddress, input.SSHPort, input.SSHUsername, input.EncryptedPrivateKey, input.HostKeyFingerprint, input.ProviderType, input.AWSAccountID, input.AWSInstanceID, input.AWSRegion).Scan(serverScan(&item)...)
 	if err != nil {
 		return Server{}, err
 	}
@@ -595,11 +606,11 @@ func (r Repository) CreateServer(ctx context.Context, organizationID, actorID uu
 	return item, nil
 }
 
-const serverColumns = `s.id,s.organization_id,s.name,s.hostname,s.operating_system,s.architecture,s.runtime,s.connection_status,s.health,s.connectivity_type,s.cpu_capacity,s.memory_bytes,s.memory_used_bytes,s.disk_total_bytes,s.disk_used_bytes,s.cpu_usage_percent,s.uptime_seconds,s.docker_available,s.docker_version,s.connection_type,s.public_address,s.ssh_port,s.ssh_username,(s.ssh_private_key_encrypted IS NOT NULL),s.ssh_host_key_fingerprint,s.connection_error,s.last_checked_at,s.created_at`
+const serverColumns = `s.id,s.organization_id,s.name,s.hostname,s.operating_system,s.architecture,s.runtime,s.connection_status,s.health,s.connectivity_type,s.cpu_capacity,s.memory_bytes,s.memory_used_bytes,s.disk_total_bytes,s.disk_used_bytes,s.cpu_usage_percent,s.uptime_seconds,s.docker_available,s.docker_version,s.connection_type,s.public_address,s.ssh_port,s.ssh_username,(s.ssh_private_key_encrypted IS NOT NULL),s.ssh_host_key_fingerprint,s.connection_error,s.provider_type,s.aws_account_id,s.aws_instance_id,s.aws_region,s.last_checked_at,s.created_at`
 const serverSelect = `SELECT ` + serverColumns + ` FROM servers s`
 
 func serverScan(item *Server) []any {
-	return []any{&item.ID, &item.OrganizationID, &item.Name, &item.Hostname, &item.OperatingSystem, &item.Architecture, &item.Runtime, &item.ConnectionStatus, &item.Health, &item.ConnectivityType, &item.CPUCapacity, &item.MemoryBytes, &item.MemoryUsedBytes, &item.DiskTotalBytes, &item.DiskUsedBytes, &item.CPUUsagePercent, &item.UptimeSeconds, &item.DockerAvailable, &item.DockerVersion, &item.ConnectionType, &item.PublicAddress, &item.SSHPort, &item.SSHUsername, &item.CredentialConfigured, &item.SSHHostKeyFingerprint, &item.ConnectionError, &item.LastCheckedAt, &item.CreatedAt}
+	return []any{&item.ID, &item.OrganizationID, &item.Name, &item.Hostname, &item.OperatingSystem, &item.Architecture, &item.Runtime, &item.ConnectionStatus, &item.Health, &item.ConnectivityType, &item.CPUCapacity, &item.MemoryBytes, &item.MemoryUsedBytes, &item.DiskTotalBytes, &item.DiskUsedBytes, &item.CPUUsagePercent, &item.UptimeSeconds, &item.DockerAvailable, &item.DockerVersion, &item.ConnectionType, &item.PublicAddress, &item.SSHPort, &item.SSHUsername, &item.CredentialConfigured, &item.SSHHostKeyFingerprint, &item.ConnectionError, &item.ProviderType, &item.AWSAccountID, &item.AWSInstanceID, &item.AWSRegion, &item.LastCheckedAt, &item.CreatedAt}
 }
 
 func (r Repository) ServerByID(ctx context.Context, organizationID, serverID uuid.UUID) (Server, error) {
@@ -621,7 +632,7 @@ func (r Repository) UpdateServerConnection(ctx context.Context, organizationID, 
 	}
 	defer tx.Rollback(ctx)
 	var item Server
-	err = tx.QueryRow(ctx, `UPDATE servers SET connection_type=$3,hostname=$4,ssh_port=$5,ssh_username=$6,public_address=$7,ssh_private_key_encrypted=CASE WHEN $10 THEN NULL ELSE COALESCE($8::bytea,ssh_private_key_encrypted) END,ssh_host_key_fingerprint=$9,connection_status=CASE WHEN $3='unconfigured' THEN 'connection_not_configured' ELSE 'unreachable' END,connection_error='',docker_available=false,docker_version='',updated_at=now() WHERE organization_id=$1 AND id=$2 RETURNING id,organization_id,name,hostname,operating_system,architecture,runtime,connection_status,health,connectivity_type,cpu_capacity,memory_bytes,memory_used_bytes,disk_total_bytes,disk_used_bytes,cpu_usage_percent,uptime_seconds,docker_available,docker_version,connection_type,public_address,ssh_port,ssh_username,(ssh_private_key_encrypted IS NOT NULL),ssh_host_key_fingerprint,connection_error,last_checked_at,created_at`, organizationID, serverID, connectionType, host, port, username, publicAddress, encryptedPrivateKey, fingerprint, clearCredential).Scan(serverScan(&item)...)
+	err = tx.QueryRow(ctx, `UPDATE servers AS s SET connection_type=$3,hostname=$4,ssh_port=$5,ssh_username=$6,public_address=$7,ssh_private_key_encrypted=CASE WHEN $10 THEN NULL ELSE COALESCE($8::bytea,ssh_private_key_encrypted) END,ssh_host_key_fingerprint=$9,connection_status=CASE WHEN $3='unconfigured' THEN 'connection_not_configured' ELSE 'unreachable' END,connection_error='',docker_available=false,docker_version='',updated_at=now() WHERE organization_id=$1 AND id=$2 RETURNING `+serverColumns, organizationID, serverID, connectionType, host, port, username, publicAddress, encryptedPrivateKey, fingerprint, clearCredential).Scan(serverScan(&item)...)
 	if err != nil {
 		return Server{}, notFound(err)
 	}
@@ -741,6 +752,10 @@ func (r Repository) ListAuditEvents(ctx context.Context, organizationID uuid.UUI
 
 func (r Repository) RecordAuthAudit(ctx context.Context, actorID *uuid.UUID, action string, requestID uuid.UUID, ip net.IP, metadata map[string]any) error {
 	return insertAudit(ctx, r.Pool, nil, actorID, action, "session", nil, requestID, metadata, ip)
+}
+
+func (r Repository) RecordOrganizationAudit(ctx context.Context, organizationID, actorID uuid.UUID, action, resourceType string, resourceID *uuid.UUID, requestID uuid.UUID, metadata map[string]any, ip net.IP) error {
+	return insertAudit(ctx, r.Pool, &organizationID, &actorID, action, resourceType, resourceID, requestID, metadata, ip)
 }
 
 func insertAudit(ctx context.Context, q interface {

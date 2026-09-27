@@ -42,14 +42,23 @@ Automated encryption-key rotation, registry credential management, and zero-down
 - Multiple ownership-safe hostname routes on one tunnel
 - Safe migration of prior server records to `ConnectionNotConfigured`
 
-AWS and Azure connection providers may later implement the same connection/origin contracts through cloud APIs, SSM, cloud-init, or explicitly configured SSH. They are not implemented now.
+## AWS hybrid infrastructure increment
+
+- STS AssumeRole-first organization account connections using the official AWS SDK for Go v2
+- Region-scoped EC2, VPC, subnet, security-group, Elastic IP, EBS, snapshot, and current Linux AMI inventory
+- Ownership-safe import, provisioning, lifecycle, network and storage operations with Silicon tags
+- Docker bootstrap through secret-free cloud-init and AWS-backed Silicon servers over SSH or bounded SSM operations
+- Existing Docker deployment/runtime/log and normalized Cloudflare origin behavior for AWS targets
+- Cost Explorer actuals, AWS Pricing estimates, non-destructive Silicon budgets, threshold audit events, and provisioning blocks
+
+SSM secret-safe file transfer is not implemented; SSH remains required for source archives, application secrets, and cloudflared tunnel tokens. RDS, S3 management, Route53, ECS, EKS, Lambda, Auto Scaling Groups, and generic Terraform execution remain out of scope.
 
 ## Later milestones
 
 - Generic OIDC login and secure explicit account linking; Authentik preset
 - Additional routing adapters, including a separately built X3 Gateway
 - Docker Compose deployment sources
-- Cloud and Kubernetes providers only after core boundaries prove stable
+- Azure and Kubernetes providers only after core boundaries prove stable
 - External secrets and logging providers
 
-AWS, Azure, Kubernetes, automatic TLS, Traefik/Nginx adapters, SAML, Kafka, service mesh, and microservice decomposition have no Milestone 1 implementation or implied delivery date.
+Azure, Kubernetes, automatic TLS, Traefik/Nginx adapters, SAML, Kafka, service mesh, and microservice decomposition have no current implementation or implied delivery date.

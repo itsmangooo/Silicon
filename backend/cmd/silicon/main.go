@@ -10,11 +10,14 @@ import (
 	"time"
 
 	"github.com/itsmangooo/Silicon/backend/db"
+	"github.com/itsmangooo/Silicon/backend/internal/awsaccounts"
 	"github.com/itsmangooo/Silicon/backend/internal/config"
 	"github.com/itsmangooo/Silicon/backend/internal/cryptoenvelope"
 	"github.com/itsmangooo/Silicon/backend/internal/execution"
 	"github.com/itsmangooo/Silicon/backend/internal/httpapi"
 	"github.com/itsmangooo/Silicon/backend/internal/jobs"
+	cloudaws "github.com/itsmangooo/Silicon/backend/internal/providers/cloud/aws"
+	awsssmconnection "github.com/itsmangooo/Silicon/backend/internal/providers/connection/awsssm"
 	githubprovider "github.com/itsmangooo/Silicon/backend/internal/providers/git/github"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 	dockerruntime "github.com/itsmangooo/Silicon/backend/internal/providers/runtime/docker"
@@ -73,12 +76,19 @@ func main() {
 		logger.Info("local Docker runtime provider enabled")
 	}
 	repository := store.Repository{Pool: pool}
-	connections := serverconnections.Manager{Repository: repository, Box: box, LocalEnabled: cfg.LocalDockerEnabled}
+	awsFactory := cloudaws.SDKFactory{}
+	awsResolver := awsaccounts.Resolver{Repository: repository, Box: box, Factory: awsFactory}
+	awsConnection := awsssmconnection.Provider{Resolver: awsResolver, Timeout: 5 * time.Minute}
+	connections := serverconnections.Manager{Repository: repository, Box: box, LocalEnabled: cfg.LocalDockerEnabled, AWS: awsConnection}
 	runtime := runtimeprovider.Dispatcher{Local: localRuntime, Server: serverruntime.Provider{Connections: connections, HealthTimeout: 90 * time.Second}}
 	executor = execution.DockerDeploymentExecutor{Pool: pool, Git: githubprovider.Client{AppID: cfg.GitHubAppID, PrivateKey: cfg.GitHubPrivateKey, BaseURL: cfg.GitHubAPIURL}, Runtime: runtime, Secrets: secrets, DockerBinary: cfg.DockerBinary}
 	api := httpapi.NewWithProviders(cfg, pool, logger, runtime, secrets)
+	api.SetAWSFactory(awsFactory)
+	api.SetAWSConnectionProvider(awsConnection)
 	runner := jobs.Runner{Pool: pool, Executor: executor, Logger: logger, WorkerID: "silicon-control-plane"}
 	go runner.Run(ctx)
+	awsRunner := jobs.AWSRunner{Repository: repository, Resolver: awsResolver, Box: box, Logger: logger, WorkerID: "silicon-aws-control-plane"}
+	go awsRunner.Run(ctx)
 	server := &http.Server{
 		Addr:              cfg.Address,
 		Handler:           api.Handler(),

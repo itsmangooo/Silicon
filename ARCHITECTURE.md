@@ -12,6 +12,10 @@ flowchart LR
     Runtime --> Connection[ServerConnectionProvider]
     Connection --> Local[LocalConnectionProvider]
     Connection --> SSH[SSHConnectionProvider]
+    Connection --> SSM[AWS SSM ConnectionProvider]
+    Platform --> Cloud[AWS CloudProvider]
+    Cloud --> EC2[EC2 / VPC / EBS]
+    Cloud --> Billing[Cost Explorer / Pricing]
     Platform --> Routing[RoutingProvider]
     Routing --> Origin[Origin target resolver]
     Auth --> Identity[IdentityProvider]
@@ -35,7 +39,10 @@ flowchart LR
 | `deployments` / `jobs` | State vocabulary, historical rows/events, ordered asynchronous execution | `ValidateTransition`, `DeploymentExecutor` | PostgreSQL, audit | Typed runtime executors | Invalid transitions fail; per-application ordering prevents stale queued revisions replacing newer ones |
 | `execution` | Resolve source/configuration and coordinate ordered replacement | `DockerDeploymentExecutor` | Git, runtime and secret providers | Future source builders/transports | GitHub uses exact commits; fixed-port replacement is explicitly not zero downtime |
 | `providers/runtime` | Typed deploy/lifecycle/inspection/status/log contract, target dispatcher and shared Docker adapter | `Provider`, `Dispatcher`, `DockerRuntimeProvider` | `ServerConnectionProvider` | Additional typed runtimes | Every destructive action verifies complete Silicon ownership labels |
-| `providers/connection` | Local/SSH reachability, host identity, bounded command transport, protected file transfer and cloudflared installation | `Provider`, `CommandExecutor` | OS process execution or SSH | Future AWS/Azure connection providers | SSH keys are encrypted; host keys are pinned; no command endpoint exists |
+| `providers/connection` | Local/SSH/SSM reachability, host identity, bounded command transport, protected file transfer and cloudflared installation | `Provider`, `CommandExecutor` | OS process execution, SSH, or AWS SSM | Future Azure connection providers | SSH keys are encrypted; host keys are pinned; SSM commands remain typed; no command endpoint exists |
+| `providers/cloud/aws` | Normalized AWS identity, regional compute/network/storage inventory, guarded lifecycle, dynamic AMI resolution, actual cost and estimates | `Factory`, `Provider`, `SSMRunner` | Official AWS SDK for Go v2 | Additional cloud capabilities without SDK types leaking into core | Temporary credentials, ownership classification/tags, safe provider errors and mocked tests |
+| `awsaccounts` | Organization-scoped AWS credential resolution and decryption | `OpenAWS` | Repository, encryption envelope, AWS factory | Alternative credential brokers | Credentials are opened only after tenant scope is proven and cleared after client construction |
+| `budgets` | Deterministic threshold crossing and scoped cost policy | `ThresholdsCrossed` | PostgreSQL budget records, per-account monthly cost snapshots, AWS allocation tags | AWS-backed budgets later | Cross-account totals require complete snapshots; unavailable project/environment attribution remains unevaluated; no destructive enforcement |
 | `serverconnections` | Organization-scoped connection selection and normalized origin resolution | `Check`, `Executor`, `ResolveOrigin` | Repository, encryption envelope, connection providers | Cloud-native connection/resolution adapters | Tenant scope is preserved before credentials are decrypted or targets resolved |
 | `providers/git` | Source-provider boundary and GitHub App adapter | `Provider` | GitHub HTTPS API | Future GitLab adapter | Installation/repository identity and webhook signatures are verified |
 | `providers/dns` | Provider-independent DNS desired state | `Provider` | Cloudflare adapter | Future DNS adapters | Ownership metadata prevents unrelated record overwrite/deletion |
@@ -72,6 +79,6 @@ sequenceDiagram
 
 ## Data ownership
 
-Organization is the tenant and security boundary. Projects, environments, applications, deployments, servers, domains, identity-provider records, secrets, and audit events carry an organization reference. Nested resources use composite foreign keys where useful, and repository queries scope by organization even when a globally unique ID is supplied.
+Organization is the tenant and security boundary. Projects, environments, applications, deployments, servers, domains, AWS accounts/resource ownership/budgets, identity-provider records, secrets, and audit events carry an organization reference. Nested resources use composite foreign keys where useful, and repository queries scope by organization even when a globally unique ID is supplied.
 
 See `docs/architecture/` and the ADRs for decision history.

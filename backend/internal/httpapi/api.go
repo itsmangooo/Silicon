@@ -20,6 +20,8 @@ import (
 	"github.com/itsmangooo/Silicon/backend/internal/config"
 	"github.com/itsmangooo/Silicon/backend/internal/cryptoenvelope"
 	"github.com/itsmangooo/Silicon/backend/internal/deployments"
+	cloudaws "github.com/itsmangooo/Silicon/backend/internal/providers/cloud/aws"
+	connectionprovider "github.com/itsmangooo/Silicon/backend/internal/providers/connection"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 	secretprovider "github.com/itsmangooo/Silicon/backend/internal/providers/secrets"
 	localsecrets "github.com/itsmangooo/Silicon/backend/internal/providers/secrets/local"
@@ -37,6 +39,7 @@ type API struct {
 	runtime     runtimeprovider.Provider
 	secrets     secretprovider.Provider
 	connections serverconnections.Manager
+	awsFactory  cloudaws.Factory
 }
 
 type contextKey string
@@ -58,7 +61,7 @@ func NewWithProviders(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger
 	if cfg.RuntimeLogFollowTimeout <= 0 {
 		cfg.RuntimeLogFollowTimeout = 5 * time.Minute
 	}
-	api := &API{cfg: cfg, repo: store.Repository{Pool: pool}, logger: logger, runtime: runtime, secrets: secrets}
+	api := &API{cfg: cfg, repo: store.Repository{Pool: pool}, logger: logger, runtime: runtime, secrets: secrets, awsFactory: cloudaws.SDKFactory{}}
 	if box, err := cryptoenvelope.New(cfg.EncryptionKey); err == nil {
 		api.box = &box
 		if api.secrets == nil {
@@ -67,6 +70,16 @@ func NewWithProviders(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger
 	}
 	api.connections = serverconnections.Manager{Repository: api.repo, Box: api.box, LocalEnabled: cfg.LocalDockerEnabled}
 	return api
+}
+
+func (a *API) SetAWSFactory(factory cloudaws.Factory) {
+	if factory != nil {
+		a.awsFactory = factory
+	}
+}
+
+func (a *API) SetAWSConnectionProvider(provider connectionprovider.Provider) {
+	a.connections.AWS = provider
 }
 
 func (a *API) Handler() http.Handler {
@@ -134,6 +147,38 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("POST /api/v1/organizations/{organizationID}/integrations/cloudflare/tunnels", a.org(authorization.IntegrationManage, http.HandlerFunc(a.createTunnel)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/install", a.org(authorization.IntegrationManage, http.HandlerFunc(a.installTunnel)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/routes", a.org(authorization.DomainManage, http.HandlerFunc(a.createTunnelRoute)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/aws/accounts", a.org(authorization.CloudRead, http.HandlerFunc(a.listAWSAccounts)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts", a.org(authorization.CloudManage, http.HandlerFunc(a.connectAWSAccount)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/aws/accounts/{accountID}", a.org(authorization.CloudManage, http.HandlerFunc(a.disconnectAWSAccount)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/test", a.org(authorization.CloudManage, http.HandlerFunc(a.testAWSAccount)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/regions", a.org(authorization.CloudRead, http.HandlerFunc(a.listAWSRegions)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/inventory", a.org(authorization.CloudRead, http.HandlerFunc(a.getAWSInventory)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/instance-types/{instanceType}", a.org(authorization.CloudRead, http.HandlerFunc(a.getAWSInstanceType)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/estimate", a.org(authorization.CloudProvision, http.HandlerFunc(a.estimateAWSMachine)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/machines", a.org(authorization.CloudProvision, http.HandlerFunc(a.provisionAWSMachine)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/instances/{instanceID}/actions/{action}", a.org(authorization.CloudManage, http.HandlerFunc(a.awsInstanceAction)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/vpcs", a.org(authorization.CloudProvision, http.HandlerFunc(a.createAWSVPC)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/vpcs/{resourceID}", a.org(authorization.CloudDelete, http.HandlerFunc(a.deleteAWSVPC)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/subnets", a.org(authorization.CloudProvision, http.HandlerFunc(a.createAWSSubnet)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/security-groups", a.org(authorization.CloudProvision, http.HandlerFunc(a.createAWSSecurityGroup)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/security-groups/{resourceID}/rules", a.org(authorization.CloudManage, http.HandlerFunc(a.addAWSSecurityRule)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/security-groups/{resourceID}/rules", a.org(authorization.CloudManage, http.HandlerFunc(a.removeAWSSecurityRule)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/instances/{instanceID}/security-groups", a.org(authorization.CloudManage, http.HandlerFunc(a.setAWSInstanceSecurityGroups)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/elastic-ips", a.org(authorization.CloudProvision, http.HandlerFunc(a.allocateAWSElasticIP)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/elastic-ips/{resourceID}/associate", a.org(authorization.CloudManage, http.HandlerFunc(a.associateAWSElasticIP)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/elastic-ips/{resourceID}/disassociate", a.org(authorization.CloudManage, http.HandlerFunc(a.disassociateAWSElasticIP)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/elastic-ips/{resourceID}", a.org(authorization.CloudDelete, http.HandlerFunc(a.releaseAWSElasticIP)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/volumes", a.org(authorization.CloudProvision, http.HandlerFunc(a.createAWSVolume)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/volumes/{resourceID}/attach", a.org(authorization.CloudManage, http.HandlerFunc(a.attachAWSVolume)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/volumes/{resourceID}/detach", a.org(authorization.CloudManage, http.HandlerFunc(a.detachAWSVolume)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/volumes/{resourceID}", a.org(authorization.CloudDelete, http.HandlerFunc(a.deleteAWSVolume)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/snapshots", a.org(authorization.CloudProvision, http.HandlerFunc(a.createAWSSnapshot)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/aws/accounts/{accountID}/snapshots/{resourceID}", a.org(authorization.CloudDelete, http.HandlerFunc(a.deleteAWSSnapshot)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/aws/costs", a.org(authorization.CostRead, http.HandlerFunc(a.getAWSCosts)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/aws/operations", a.org(authorization.CloudRead, http.HandlerFunc(a.listAWSOperations)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/budgets", a.org(authorization.BudgetRead, http.HandlerFunc(a.listBudgets)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/budgets", a.org(authorization.BudgetManage, http.HandlerFunc(a.createBudget)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/budgets/{budgetID}", a.org(authorization.BudgetManage, http.HandlerFunc(a.deleteBudget)))
 
 	return a.recover(a.security(a.cors(a.requestLog(mux))))
 }

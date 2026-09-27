@@ -21,6 +21,7 @@ type Manager struct {
 	Box          *cryptoenvelope.Box
 	Local        connection.Provider
 	SSH          connection.Provider
+	AWS          connection.Provider
 	LocalEnabled bool
 }
 
@@ -33,6 +34,10 @@ func (m Manager) Configuration(ctx context.Context, organizationID, serverID uui
 		ServerID: record.ID.String(), OrganizationID: record.OrganizationID.String(), Type: record.ConnectionType,
 		Host: record.Hostname, Port: record.SSHPort, Username: record.SSHUsername,
 		HostKeyFingerprint: record.SSHHostKeyFingerprint, PublicAddress: record.PublicAddress,
+		AWSInstanceID: record.AWSInstanceID, AWSRegion: record.AWSRegion,
+	}
+	if record.AWSAccountID != nil {
+		config.AWSAccountID = record.AWSAccountID.String()
 	}
 	if record.ConnectionType == "ssh" {
 		if len(record.EncryptedPrivateKey) == 0 || m.Box == nil {
@@ -156,6 +161,11 @@ func (m Manager) provider(connectionType string) (connection.Provider, error) {
 		return connection.LocalProvider{}, nil
 	case "ssh":
 		return m.ssh(), nil
+	case "aws_ssm":
+		if m.AWS == nil {
+			return nil, connection.ErrNotConfigured
+		}
+		return m.AWS, nil
 	default:
 		return nil, connection.ErrNotConfigured
 	}

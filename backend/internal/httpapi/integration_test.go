@@ -26,6 +26,7 @@ import (
 	"github.com/itsmangooo/Silicon/backend/internal/deployments"
 	"github.com/itsmangooo/Silicon/backend/internal/execution"
 	"github.com/itsmangooo/Silicon/backend/internal/jobs"
+	cloudaws "github.com/itsmangooo/Silicon/backend/internal/providers/cloud/aws"
 	"github.com/itsmangooo/Silicon/backend/internal/providers/connection"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 	"github.com/jackc/pgx/v5"
@@ -48,6 +49,37 @@ type fakeRuntime struct {
 }
 
 type fakeConnectionProvider struct{ installations atomic.Int32 }
+
+type fakeAWSFactory struct{ provider *fakeAWSProvider }
+
+func (f fakeAWSFactory) Open(_ context.Context, input cloudaws.AccountConfig) (cloudaws.Provider, error) {
+	if strings.Contains(input.RoleARN, "Denied") {
+		return nil, errors.New("assume role: AWS denied the required permission")
+	}
+	return f.provider, nil
+}
+
+type fakeAWSProvider struct {
+	cloudaws.Provider
+	mu      sync.Mutex
+	actions []string
+}
+
+func (*fakeAWSProvider) Identity(context.Context) (cloudaws.Identity, error) {
+	return cloudaws.Identity{AccountID: "123456789012", ARN: "arn:aws:sts::123456789012:assumed-role/Silicon/test", UserID: "test"}, nil
+}
+func (*fakeAWSProvider) Regions(context.Context) ([]string, error) {
+	return []string{"eu-central-1", "eu-west-1"}, nil
+}
+func (*fakeAWSProvider) Instance(_ context.Context, id string) (cloudaws.Instance, error) {
+	return cloudaws.Instance{ID: id, Name: "existing-ec2", State: "running", InstanceType: "t3.small", Architecture: "x86_64", Region: "eu-central-1", AvailabilityZone: "eu-central-1a", ImageID: "ami-123", PrivateIP: "10.20.1.10", PublicIP: "203.0.113.30", Ownership: cloudaws.OwnershipExternal}, nil
+}
+func (f *fakeAWSProvider) StartInstance(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.actions = append(f.actions, "start:"+id)
+	return nil
+}
 
 func (*fakeConnectionProvider) Check(context.Context, connection.Config) (connection.Status, error) {
 	return connection.Status{Reachable: true, DockerAvailable: true, DockerVersion: "28.0.1", OperatingSystem: "linux", Architecture: "amd64", CheckedAt: time.Now().UTC()}, nil
@@ -159,6 +191,8 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	cfg := config.Config{DatabaseURL: databaseURL, CookieName: "silicon_test_session", SessionTTL: time.Hour, FrontendOrigin: "http://localhost:5173", PublicURL: "http://silicon.test", GitHubWebhookSecret: "webhook-test-secret", EncryptionKey: bytes.Repeat([]byte{5}, 32), CloudflareAPIURL: cloudflareServer.URL, RuntimeLogFollowTimeout: time.Minute, LocalDockerEnabled: true}
 	dockerRuntime := &fakeRuntime{}
 	apiServer := NewWithProviders(cfg, pool, logger, dockerRuntime, nil)
+	fakeAWS := &fakeAWSProvider{}
+	apiServer.SetAWSFactory(fakeAWSFactory{provider: fakeAWS})
 	connections := &fakeConnectionProvider{}
 	apiServer.connections.Local = connections
 	server := httptest.NewServer(apiServer.Handler())
@@ -172,6 +206,38 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	organizationB := viewer.post("/organizations", map[string]any{"name": "Organization B", "slug": "organization-b"}, http.StatusCreated)
 	orgA := stringField(t, organizationA, "id")
 	orgB := stringField(t, organizationB, "id")
+
+	// AWS credentials are verified through the provider, encrypted at rest, and
+	// scoped to the owning organization. Discovered instances remain read-only
+	// until the user explicitly imports them.
+	owner.post("/organizations/"+orgA+"/aws/accounts", map[string]any{"displayName": "Denied account", "accountId": "123456789012", "roleArn": "arn:aws:iam::123456789012:role/Denied", "externalId": "must-not-leak", "defaultRegion": "eu-central-1", "enabledRegions": []string{"eu-central-1"}}, http.StatusBadGateway)
+	awsAccount := owner.post("/organizations/"+orgA+"/aws/accounts", map[string]any{"displayName": "Production AWS", "accountId": "123456789012", "roleArn": "arn:aws:iam::123456789012:role/Silicon", "externalId": "external-id-secret", "accessKeyId": "AKIA_TEST_SECRET", "secretAccessKey": "bootstrap-secret", "defaultRegion": "eu-central-1", "enabledRegions": []string{"eu-central-1", "eu-west-1"}}, http.StatusCreated)
+	awsAccountID := stringField(t, awsAccount, "id")
+	if awsAccount["externalIdConfigured"] != true || awsAccount["staticKeysConfigured"] != true || awsAccount["externalId"] != nil || awsAccount["accessKeyId"] != nil {
+		t.Fatalf("AWS account response exposed or omitted credential state: %#v", awsAccount)
+	}
+	var encryptedExternalID, encryptedAccessKeyID, encryptedAWSSecret []byte
+	if err = pool.QueryRow(ctx, `SELECT encrypted_external_id, encrypted_access_key_id, encrypted_secret_access_key FROM aws_accounts WHERE id=$1`, awsAccountID).Scan(&encryptedExternalID, &encryptedAccessKeyID, &encryptedAWSSecret); err != nil {
+		t.Fatal(err)
+	}
+	for _, ciphertext := range [][]byte{encryptedExternalID, encryptedAccessKeyID, encryptedAWSSecret} {
+		if len(ciphertext) == 0 || bytes.Contains(ciphertext, []byte("secret")) || bytes.Contains(ciphertext, []byte("AKIA")) {
+			t.Fatalf("AWS credential was not envelope encrypted: %q", ciphertext)
+		}
+	}
+	viewer.get("/organizations/"+orgB+"/aws/accounts/"+awsAccountID+"/regions", http.StatusNotFound)
+	instanceID := "i-0123456789abcdef0"
+	owner.post("/organizations/"+orgA+"/aws/accounts/"+awsAccountID+"/instances/"+instanceID+"/actions/start?region=eu-central-1", map[string]any{}, http.StatusConflict)
+	imported := owner.post("/organizations/"+orgA+"/aws/accounts/"+awsAccountID+"/instances/"+instanceID+"/actions/import?region=eu-central-1", map[string]any{"connectionMethod": "aws_ssm"}, http.StatusCreated)
+	if imported["ownership"] != "imported" || imported["connectionMethod"] != "aws_ssm" {
+		t.Fatalf("unexpected imported AWS instance: %#v", imported)
+	}
+	owner.post("/organizations/"+orgA+"/aws/accounts/"+awsAccountID+"/instances/"+instanceID+"/actions/start?region=eu-central-1", map[string]any{}, http.StatusNoContent)
+	fakeAWS.mu.Lock()
+	if len(fakeAWS.actions) != 1 || fakeAWS.actions[0] != "start:"+instanceID {
+		t.Fatalf("unexpected AWS lifecycle calls: %#v", fakeAWS.actions)
+	}
+	fakeAWS.mu.Unlock()
 
 	serverItem := owner.post("/organizations/"+orgA+"/servers", map[string]any{"name": "edge-a", "connectionType": "local", "connectivityType": "private", "publicAddress": "203.0.113.10"}, http.StatusCreated)
 	serverID := stringField(t, serverItem, "id")

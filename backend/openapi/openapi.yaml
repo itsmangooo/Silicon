@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: Silicon Control Plane API
-  version: 0.5.0
+  version: 0.6.0
   description: >-
     Silicon control-plane API with local authentication, organization-scoped
     records, GitHub push automation, Cloudflare DNS/tunnel integration, and a
-    local and SSH-connected Docker runtime providers.
+    local, SSH-connected, and AWS-backed Docker runtime providers, AWS
+    infrastructure inventory, cost reporting, and budgets.
 servers:
   - url: http://localhost:8080/api/v1
 tags:
@@ -22,6 +23,9 @@ tags:
   - name: Domains
   - name: Runtime
   - name: Secrets
+  - name: AWS
+  - name: Costs
+  - name: Budgets
 paths:
   /auth/register:
     post:
@@ -542,6 +546,189 @@ paths:
   /organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/routes:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/TunnelID'}]
     post: {tags: [Cloudflare], summary: Add a provider-resolved hostname route and reconcile its tunnel CNAME, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [domainId], properties: {domainId: {$ref: '#/components/schemas/UUID'}}}}}}, responses: {'201': {description: Route configured}}}
+  /organizations/{organizationID}/aws/accounts:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [AWS]
+      summary: List organization AWS account connections
+      responses:
+        '200': {description: AWS accounts, content: {application/json: {schema: {type: object, properties: {accounts: {type: array, items: {$ref: '#/components/schemas/AWSAccount'}}}}}}}
+    post:
+      tags: [AWS]
+      summary: Verify and connect an AWS account
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AWSAccountInput'}}}}
+      responses:
+        '201': {description: Connected account, content: {application/json: {schema: {$ref: '#/components/schemas/AWSAccount'}}}}
+        '502': {description: STS verification or AssumeRole failure}
+  /organizations/{organizationID}/aws/accounts/{accountID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/AWSAccountID'}
+    delete:
+      tags: [AWS]
+      summary: Disconnect an AWS account with no attached resources
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses: {'204': {description: Disconnected}, '409': {description: Account still owns attached resources}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/test:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}]
+    post:
+      tags: [AWS]
+      summary: Verify AWS identity with STS GetCallerIdentity
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses: {'200': {description: Verified AWS identity}, '502': {description: AWS connection failure}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/regions:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}]
+    get:
+      tags: [AWS]
+      summary: List available and Silicon-enabled AWS regions
+      responses: {'200': {description: Region names}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/inventory:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/AWSAccountID'}
+      - {name: region, in: query, required: true, schema: {type: string}}
+    get:
+      tags: [AWS]
+      summary: Discover regional EC2, VPC, subnet, security group, EIP, EBS, and snapshot inventory
+      responses: {'200': {description: Normalized AWS inventory}, '502': {description: AWS provider failure}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/estimate:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}]
+    post:
+      tags: [Costs]
+      summary: Estimate EC2 compute and configured EBS monthly cost
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AWSMachineInput'}}}}
+      responses: {'200': {description: Clearly labeled pricing estimate, content: {application/json: {schema: {$ref: '#/components/schemas/AWSEstimate'}}}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/instance-types/{instanceType}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/AWSAccountID'}
+      - {$ref: '#/components/parameters/AWSRegion'}
+      - {name: instanceType, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [AWS]
+      summary: Inspect vCPU, memory, and architecture for one regional EC2 instance type
+      responses: {'200': {description: Normalized instance-type capabilities}, '502': {description: Type unavailable or AWS provider failure}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/machines:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}]
+    post:
+      tags: [AWS]
+      summary: Queue an EC2 provisioning operation
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AWSMachineInput'}}}}
+      responses: {'202': {description: Queued, content: {application/json: {schema: {$ref: '#/components/schemas/AWSOperation'}}}}, '409': {description: Budget policy prevents new provisioning}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/instances/{instanceID}/actions/{action}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/AWSAccountID'}
+      - {name: instanceID, in: path, required: true, schema: {type: string, pattern: '^i-'}}
+      - {name: action, in: path, required: true, schema: {type: string, enum: [start, stop, reboot, import, terminate]}}
+      - {name: region, in: query, required: true, schema: {type: string}}
+    post:
+      tags: [AWS]
+      summary: Operate or import an EC2 instance
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses: {'204': {description: Lifecycle action accepted}, '201': {description: Imported as Silicon server}, '202': {description: Destructive action queued}, '409': {description: Ownership protection blocked the action}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/vpcs:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    post:
+      tags: [AWS]
+      summary: Create a tagged, Silicon-managed VPC
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [name, cidr], properties: {name: {type: string}, cidr: {type: string}}}}}}
+      responses: {'201': {description: VPC created}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/vpcs/{resourceID}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSResourceID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    delete: {tags: [AWS], summary: Delete a Silicon-controlled VPC, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: VPC deleted}, '409': {description: External-resource or dependency protection}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/subnets:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    post:
+      tags: [AWS]
+      summary: Create a tagged subnet with explicit public or private intent
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [name, vpcId, cidr], properties: {name: {type: string}, vpcId: {type: string}, cidr: {type: string}, availabilityZone: {type: string}, public: {type: boolean}}}}}}
+      responses: {'201': {description: Subnet created}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/security-groups:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    post:
+      tags: [AWS]
+      summary: Create a tagged security group without implicit ingress
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [name, description, vpcId], properties: {name: {type: string}, description: {type: string}, vpcId: {type: string}}}}}}
+      responses: {'201': {description: Security group created}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/security-groups/{resourceID}/rules:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSResourceID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    post: {tags: [AWS], summary: Add an explicit ingress rule to a Silicon-controlled group, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AWSSecurityRule'}}}}, responses: {'204': {description: Rule added}, '409': {description: External-resource protection}}}
+    delete: {tags: [AWS], summary: Remove an exact ingress rule from a Silicon-controlled group, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AWSSecurityRule'}}}}, responses: {'204': {description: Rule removed}, '409': {description: External-resource protection}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/instances/{instanceID}/security-groups:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {name: instanceID, in: path, required: true, schema: {type: string, pattern: '^i-'}}, {$ref: '#/components/parameters/AWSRegion'}]
+    put: {tags: [AWS], summary: Replace security groups on a Silicon-controlled instance, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [securityGroupIds], properties: {securityGroupIds: {type: array, minItems: 1, items: {type: string}}}}}}}, responses: {'204': {description: Security groups updated}, '409': {description: External-resource protection}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/elastic-ips:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    post: {tags: [AWS], summary: Allocate a Silicon-managed Elastic IP, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'201': {description: Address allocated}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/elastic-ips/{resourceID}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSResourceID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    delete: {tags: [AWS], summary: Release a Silicon-managed unassociated Elastic IP, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: Address released}, '409': {description: Ownership or attachment protection}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/elastic-ips/{resourceID}/associate:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSResourceID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    post: {tags: [AWS], summary: Associate a Silicon-managed Elastic IP to a controlled instance, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [instanceId], properties: {instanceId: {type: string}}}}}}, responses: {'204': {description: Address associated}, '409': {description: Ownership protection}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/elastic-ips/{resourceID}/disassociate:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSResourceID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    post: {tags: [AWS], summary: Disassociate a Silicon-managed Elastic IP, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: Address disassociated}, '409': {description: Ownership protection}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/volumes:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    post: {tags: [AWS], summary: Create an encrypted-by-default tagged EBS volume, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AWSVolumeInput'}}}}, responses: {'201': {description: Volume created}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/volumes/{resourceID}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSResourceID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    delete: {tags: [AWS], summary: Delete a detached Silicon-managed EBS volume, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: Volume deleted}, '409': {description: Ownership or attachment protection}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/volumes/{resourceID}/attach:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSResourceID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    post: {tags: [AWS], summary: Attach a Silicon-managed volume to a controlled instance, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [instanceId, device], properties: {instanceId: {type: string}, device: {type: string}}}}}}, responses: {'204': {description: Attach requested}, '409': {description: Ownership protection}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/volumes/{resourceID}/detach:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSResourceID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    post: {tags: [AWS], summary: Detach a Silicon-managed EBS volume, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: Detach requested}, '409': {description: Ownership protection}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/snapshots:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    post: {tags: [AWS], summary: Snapshot a Silicon-managed EBS volume, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [volumeId], properties: {volumeId: {type: string}, description: {type: string}}}}}}, responses: {'201': {description: Snapshot created}}}
+  /organizations/{organizationID}/aws/accounts/{accountID}/snapshots/{resourceID}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/AWSAccountID'}, {$ref: '#/components/parameters/AWSResourceID'}, {$ref: '#/components/parameters/AWSRegion'}]
+    delete: {tags: [AWS], summary: Delete a Silicon-managed snapshot, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: Snapshot deleted}, '409': {description: Ownership protection}}}
+  /organizations/{organizationID}/aws/operations:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [AWS]
+      summary: List asynchronous AWS infrastructure operations
+      responses: {'200': {description: Operations, content: {application/json: {schema: {type: object, properties: {operations: {type: array, items: {$ref: '#/components/schemas/AWSOperation'}}}}}}}}
+  /organizations/{organizationID}/aws/costs:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: accountId, in: query, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    get:
+      tags: [Costs]
+      summary: Read delayed actual current-month AWS Cost Explorer data
+      responses: {'200': {description: Actual billing report, content: {application/json: {schema: {$ref: '#/components/schemas/AWSCostReport'}}}}, '502': {description: Billing API unavailable or denied}}
+  /organizations/{organizationID}/budgets:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Budgets]
+      summary: List Silicon budget policies
+      responses: {'200': {description: Budgets}}
+    post:
+      tags: [Budgets]
+      summary: Create a non-destructive budget policy
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/BudgetInput'}}}}
+      responses: {'201': {description: Created budget}}
+  /organizations/{organizationID}/budgets/{budgetID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: budgetID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    delete:
+      tags: [Budgets]
+      summary: Delete a Silicon budget policy
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses: {'204': {description: Deleted}}
 components:
   securitySchemes:
     sessionCookie:
@@ -558,6 +745,9 @@ components:
     DomainID: {name: domainID, in: path, required: true, schema: {type: string, format: uuid}}
     TunnelID: {name: tunnelID, in: path, required: true, schema: {type: string, format: uuid}}
     ZoneID: {name: zoneID, in: path, required: true, schema: {type: string, format: uuid}}
+    AWSAccountID: {name: accountID, in: path, required: true, schema: {type: string, format: uuid}}
+    AWSRegion: {name: region, in: query, required: true, schema: {type: string}}
+    AWSResourceID: {name: resourceID, in: path, required: true, schema: {type: string}}
   responses:
     AuthenticationError: {description: Authentication required, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     ForbiddenError: {description: Permission or CSRF check failed, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -784,7 +974,11 @@ components:
             diskTotalBytes: {type: [integer, 'null'], format: int64}
             diskUsedBytes: {type: [integer, 'null'], format: int64}
             uptimeSeconds: {type: [integer, 'null'], format: int64}
-            connectionType: {type: string, enum: [unconfigured, local, ssh]}
+            connectionType: {type: string, enum: [unconfigured, local, ssh, aws_ssm]}
+            providerType: {type: string, enum: [generic, aws]}
+            awsAccountId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+            awsInstanceId: {type: string}
+            awsRegion: {type: string}
             publicAddress: {type: string}
             sshPort: {type: integer}
             sshUsername: {type: string}
@@ -858,5 +1052,147 @@ components:
         providerTunnelId: {type: string}
         ownership: {type: string, enum: [imported, external]}
         serverId: {$ref: '#/components/schemas/UUID'}
+    AWSAccountInput:
+      type: object
+      additionalProperties: false
+      required: [displayName, defaultRegion, enabledRegions]
+      properties:
+        displayName: {type: string, minLength: 1, maxLength: 120}
+        accountId: {type: string, pattern: '^[0-9]{12}$'}
+        roleArn: {type: string, description: Preferred STS AssumeRole target}
+        externalId: {type: string, writeOnly: true, format: password}
+        defaultRegion: {type: string}
+        enabledRegions: {type: array, minItems: 1, items: {type: string}}
+        accessKeyId: {type: string, writeOnly: true, format: password, description: Optional encrypted bootstrap fallback}
+        secretAccessKey: {type: string, writeOnly: true, format: password, description: Optional encrypted bootstrap fallback}
+    AWSAccount:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        organizationId: {$ref: '#/components/schemas/UUID'}
+        displayName: {type: string}
+        accountId: {type: string}
+        roleArn: {type: string}
+        externalIdConfigured: {type: boolean}
+        staticKeysConfigured: {type: boolean}
+        defaultRegion: {type: string}
+        enabledRegions: {type: array, items: {type: string}}
+        status: {type: string, enum: [connected, error, disabled]}
+        lastError: {type: string}
+        lastCheckedAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+    AWSMachineInput:
+      type: object
+      additionalProperties: false
+      required: [name, region, instanceType, connectionMethod]
+      properties:
+        name: {type: string}
+        region: {type: string}
+        availabilityZone: {type: string}
+        distribution: {type: string, enum: [ubuntu, amazon-linux]}
+        architecture: {type: string, enum: [x86_64, arm64]}
+        imageId: {type: string, description: Optional exact AMI override; resolved dynamically when omitted}
+        instanceType: {type: string}
+        subnetId: {type: string}
+        securityGroupIds: {type: array, items: {type: string}}
+        publicIPv4: {type: boolean}
+        elasticIP: {type: boolean}
+        rootDiskGiB: {type: integer, minimum: 8}
+        rootDiskType: {type: string, enum: [gp3, gp2, io2, st1, sc1]}
+        encryptRootDisk: {type: boolean}
+        sshKeyName: {type: string}
+        instanceProfile: {type: string, description: EC2 instance profile name or ARN; required by Silicon when connectionMethod is aws_ssm}
+        connectionMethod: {type: string, enum: [ssh, aws_ssm]}
+        sshUsername: {type: string}
+        privateKey: {type: string, writeOnly: true, format: password}
+        dockerBootstrap: {type: boolean}
+        projectId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+        environmentId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+    AWSEstimate:
+      type: object
+      properties:
+        computeMonthly: {type: number}
+        storageMonthly: {type: number}
+        totalMonthly: {type: number}
+        currency: {type: string}
+        exclusions: {type: array, items: {type: string}}
+        source: {type: string, enum: [AWS public on-demand pricing]}
+    AWSSecurityRule:
+      type: object
+      additionalProperties: false
+      required: [protocol, fromPort, toPort, cidr, description]
+      properties:
+        protocol: {type: string}
+        fromPort: {type: integer, minimum: -1, maximum: 65535}
+        toPort: {type: integer, minimum: -1, maximum: 65535}
+        cidr: {type: string}
+        description: {type: string, minLength: 1}
+    AWSVolumeInput:
+      type: object
+      additionalProperties: false
+      required: [name, availabilityZone, sizeGiB, volumeType]
+      properties:
+        name: {type: string}
+        availabilityZone: {type: string}
+        sizeGiB: {type: integer, minimum: 1}
+        volumeType: {type: string, enum: [gp3, gp2, io1, io2, st1, sc1]}
+        encrypted: {type: boolean, default: true}
+        iops: {type: integer}
+        throughput: {type: integer}
+    AWSCostPoint:
+      type: object
+      properties:
+        start: {$ref: '#/components/schemas/Timestamp'}
+        end: {$ref: '#/components/schemas/Timestamp'}
+        amount: {type: number}
+        unit: {type: string}
+    AWSCostGroup:
+      type: object
+      properties:
+        name: {type: string, description: AWS dimension value; an empty value is unallocated}
+        amount: {type: number}
+        unit: {type: string}
+    AWSCostReport:
+      type: object
+      properties:
+        periodStart: {$ref: '#/components/schemas/Timestamp'}
+        periodEnd: {$ref: '#/components/schemas/Timestamp'}
+        daily: {type: array, items: {$ref: '#/components/schemas/AWSCostPoint'}}
+        services: {type: array, items: {$ref: '#/components/schemas/AWSCostGroup'}}
+        regions: {type: array, items: {$ref: '#/components/schemas/AWSCostGroup'}}
+        projects: {type: array, items: {$ref: '#/components/schemas/AWSCostGroup'}, description: Cost allocation tag groups; Unallocated is explicit}
+        environments: {type: array, items: {$ref: '#/components/schemas/AWSCostGroup'}, description: Cost allocation tag groups; Unallocated is explicit}
+        projectAttributionAvailable: {type: boolean}
+        environmentAttributionAvailable: {type: boolean}
+        total: {type: number, description: Actual unblended cost for the current period}
+        previousPeriodTotal: {type: [number, 'null'], description: Actual unblended cost for the prior calendar period when available}
+        forecast: {type: [number, 'null'], description: 'AWS Cost Explorer forecast, not actual cost'}
+        unit: {type: string}
+        freshness: {type: string}
+    AWSOperation:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        organizationId: {$ref: '#/components/schemas/UUID'}
+        accountId: {$ref: '#/components/schemas/UUID'}
+        operationType: {type: string, enum: [provision_machine, terminate_machine, create_snapshot, prepare_machine]}
+        status: {type: string, enum: [queued, running, waiting_for_aws, waiting_for_connection, succeeded, failed]}
+        resourceType: {type: string}
+        providerResourceId: {type: string}
+        error: {type: string}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+    BudgetInput:
+      type: object
+      additionalProperties: false
+      required: [name, monthlyAmount, thresholds]
+      properties:
+        name: {type: string}
+        accountId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+        projectId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+        environmentId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+        monthlyAmount: {type: number, exclusiveMinimum: 0}
+        currency: {type: string, default: USD}
+        thresholds: {type: array, minItems: 1, items: {type: number, exclusiveMinimum: 0}}
+        preventNewProvisioning: {type: boolean, description: Blocks only new Silicon provisioning; never stops or terminates resources}
+        providerType: {type: string, enum: [silicon], default: silicon, description: AWS-backed budgets are not created by this milestone}
 security:
   - sessionCookie: []

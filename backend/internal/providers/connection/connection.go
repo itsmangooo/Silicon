@@ -24,6 +24,9 @@ type Config struct {
 	PrivateKey         []byte
 	HostKeyFingerprint string
 	PublicAddress      string
+	AWSAccountID       string
+	AWSInstanceID      string
+	AWSRegion          string
 }
 
 type Status struct {
