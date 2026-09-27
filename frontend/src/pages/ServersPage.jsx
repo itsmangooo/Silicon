@@ -22,7 +22,7 @@ export function ServersPage() {
       <table><thead><tr><th>Name</th><th>Connection</th><th>Health</th><th>Last check</th><th>Applications</th><th>Action</th></tr></thead><tbody>
         {resource.loading ? <LoadingRows columns={6} /> : resource.data?.servers.length ? resource.data.servers.map((item) => <tr key={item.id}>
           <td data-label="Name"><button className="button ghost compact table-link" onClick={() => setSelected(item)}><HardDrivesIcon size={16} aria-hidden="true" /><span>{item.name}</span></button></td>
-          <td data-label="Connection"><span className="cell-stack"><span>{item.connectionType}</span><Mono>{item.hostname || '—'}{item.connectionType === 'ssh' ? `:${item.sshPort}` : ''}</Mono></span></td>
+          <td data-label="Connection"><span className="cell-stack"><span>{item.providerType === 'aws' ? `AWS / ${item.connectionType}` : item.connectionType}</span><Mono>{item.providerType === 'aws' ? `${item.awsRegion} · ${item.awsInstanceId}` : `${item.hostname || '—'}${item.connectionType === 'ssh' ? `:${item.sshPort}` : ''}`}</Mono></span></td>
           <td data-label="Health"><span className="cell-stack"><Status value={item.connectionStatus} />{item.dockerAvailable ? <span className="cell-subtle">Docker {item.dockerVersion || 'available'}</span> : <span className="cell-subtle">Docker unavailable</span>}</span></td>
           <td data-label="Last check">{formatDate(item.lastCheckedAt)}</td>
           <td data-label="Applications">{resource.data.applications.filter((application) => application.serverId === item.id).length}</td>

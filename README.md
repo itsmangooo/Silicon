@@ -1,8 +1,8 @@
 # Silicon
 
-Silicon is a self-hosted infrastructure and application control plane. Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, audit events, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation, Cloudflare DNS/optional Tunnel providers, local Docker, and SSH-connected Linux Docker hosts are part of the control plane.
+Silicon is a self-hosted infrastructure and application control plane. Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, audit events, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation, Cloudflare DNS/optional Tunnel providers, local Docker, SSH-connected Linux Docker hosts, and AWS hybrid infrastructure are part of the control plane.
 
-Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It remains a modular monolith. It does **not** include a custom reverse proxy, automatic TLS, AWS, Azure, or Kubernetes integration.
+Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It remains a modular monolith. AWS support is deliberately focused on EC2-hosted Silicon workloads; Silicon does **not** include a custom reverse proxy, automatic TLS, Azure, Kubernetes, or an AWS Console clone.
 
 ## Interface previews
 
@@ -161,6 +161,13 @@ The REST API is rooted at `/api/v1`. Its OpenAPI contract lives at [`backend/ope
 - `/organizations/{organizationID}/integrations/cloudflare/tunnels`
 - `/organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/install`
 - `/organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/routes`
+- `/organizations/{organizationID}/aws/accounts`
+- `/organizations/{organizationID}/aws/accounts/{accountID}/inventory`
+- `/organizations/{organizationID}/aws/accounts/{accountID}/machines`
+- `/organizations/{organizationID}/aws/accounts/{accountID}/instances/{instanceID}/actions/{action}`
+- `/organizations/{organizationID}/aws/costs`
+- `/organizations/{organizationID}/aws/operations`
+- `/organizations/{organizationID}/budgets`
 - `/webhooks/github`
 
 Authentication uses an opaque server-side session in an HTTP-only cookie. Unsafe requests also require a CSRF header. Authorization is always enforced by the backend against the organization in the route.
@@ -174,11 +181,14 @@ Runtime records and control-plane behavior are PostgreSQL-backed. When the local
 - ports are never published implicitly; an IP address and host port must both be configured;
 - runtime inspection, lifecycle actions, bounded historical logs, and bounded live SSE logs operate only on persisted Silicon-managed containers;
 - Linux servers use organization-scoped SSH credentials encrypted at rest; host identity must be explicitly trusted, and remote Docker operations remain typed with no user-facing shell API;
+- AWS account connections prefer STS AssumeRole and temporary credentials. Optional bootstrap access keys are encrypted at rest. Regional inventory and lifecycle operations use the official AWS SDK for Go v2, and external resources stay read-only until imported;
+- managed EC2 machines resolve current Ubuntu LTS or Amazon Linux AMIs through AWS public SSM parameters, preserve the exact AMI, can bootstrap Docker with cloud-init, and become ordinary Silicon servers using SSH or bounded SSM operations;
+- AWS Cost Explorer data is labeled as delayed actual billing data, with current/previous period, daily, service, region, forecast, and allocation-tag breakdowns. Pre-provision estimates use AWS public on-demand pricing and explicitly exclude unpredictable network, public IPv4, snapshot, IOPS, throughput, and tax charges. Silicon-local organization/account/project/environment budget policies may block only new provisioning and never stop workloads;
 - `ExternalRoutingProvider` reports externally managed routing/TLS semantics; it changes no proxy configuration;
 - OIDC/Authentik configuration records are disabled planning records; the OIDC login flow is not activated;
 - applications select either the explicitly enabled local provider or a configured SSH server; Docker images and exact-revision Dockerfile builds share the Docker adapter. Automatic scheduling, registry credential management, distributed build caching, and Compose execution are not implemented;
 - domains reference normalized application/server origins. Cloudflare resolves A, AAAA, or CNAME records from a server public address, or installs official `cloudflared` as a managed host-network Docker container on the chosen local/SSH target.
 
-Provider credentials are handled separately: GitHub App secrets remain process configuration, while Cloudflare API and tunnel tokens use authenticated encryption at rest. See [GitHub integration](docs/integrations/github.md) and [Cloudflare integration](docs/integrations/cloudflare.md).
+Provider credentials are handled separately: GitHub App secrets remain process configuration, while Cloudflare API/tunnel tokens and optional AWS bootstrap credentials use authenticated encryption at rest. See [GitHub integration](docs/integrations/github.md), [Cloudflare integration](docs/integrations/cloudflare.md), and [AWS hybrid infrastructure](docs/integrations/aws.md).
 
 See [ROADMAP.md](ROADMAP.md) for future milestones and [SECURITY.md](SECURITY.md) for the security model.

@@ -16,6 +16,7 @@ import { AuditPage } from './pages/AuditPage.jsx'
 import { SettingsPage } from './pages/SettingsPage.jsx'
 import { IntegrationsPage } from './pages/IntegrationsPage.jsx'
 import { DomainsPage } from './pages/DomainsPage.jsx'
+import { AWSPage } from './pages/AWSPage.jsx'
 
 function ProtectedApp() {
   return (
@@ -47,6 +48,11 @@ export function App() {
         <Route path="audit" element={<AuditPage />} />
 		<Route path="domains" element={<DomainsPage />} />
 		<Route path="integrations" element={<IntegrationsPage />} />
+        <Route path="aws/accounts" element={<AWSPage section="accounts" />} />
+        <Route path="aws/compute" element={<AWSPage section="compute" />} />
+        <Route path="aws/network" element={<AWSPage section="network" />} />
+        <Route path="aws/storage" element={<AWSPage section="storage" />} />
+        <Route path="aws/costs" element={<AWSPage section="costs" />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
