@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
 
 const WorkspaceContext = createContext(null)
@@ -22,13 +22,18 @@ export function WorkspaceProvider({ children }) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  const selectOrganization = (id) => {
+  const selectOrganization = useCallback((id) => {
+    if (!organizations.some((item) => item.id === id)) return
     setOrganizationId(id)
     sessionStorage.setItem('silicon.organization', id)
-  }
+  }, [organizations])
   const organization = organizations.find((item) => item.id === organizationId) || null
-  const value = useMemo(() => ({ organizations, organization, organizationId, selectOrganization, loading, refresh }), [organizations, organization, organizationId, loading, refresh])
+  const value = useMemo(() => ({ organizations, organization, organizationId, selectOrganization, loading, refresh }), [organizations, organization, organizationId, selectOrganization, loading, refresh])
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>
+}
+
+export function TenantScope({ organizationId, children }) {
+  return <Fragment key={organizationId || 'no-organization'}>{children}</Fragment>
 }
 
 export function useWorkspace() {

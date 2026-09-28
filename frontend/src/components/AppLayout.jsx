@@ -21,7 +21,7 @@ import {
 	DesktopTowerIcon,
 } from '@phosphor-icons/react'
 import { useAuth } from '../state/AuthContext.jsx'
-import { useWorkspace } from '../state/WorkspaceContext.jsx'
+import { TenantScope, useWorkspace } from '../state/WorkspaceContext.jsx'
 
 const groups = [
   ['PLATFORM', [['Projects', '/projects', FolderIcon], ['Environments', '/environments', StackIcon], ['Applications', '/applications', CubeIcon], ['Deployments', '/deployments', RocketLaunchIcon], ['Servers', '/servers', HardDrivesIcon]]],
@@ -71,7 +71,7 @@ export function AppLayout() {
           <div className="user-menu"><span>{user.displayName}</span><button className="button ghost compact" onClick={logout}><SignOutIcon size={16} aria-hidden="true" /><span>Sign out</span></button></div>
         </header>
         <main id="main" className="main" tabIndex="-1">
-          {loading ? <div role="status">Loading organization…</div> : <Outlet />}
+          {loading ? <div role="status">Loading organization…</div> : <TenantScope organizationId={organizationId}><Outlet /></TenantScope>}
         </main>
       </div>
     </div>
