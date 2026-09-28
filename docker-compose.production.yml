@@ -45,7 +45,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: .
+      dockerfile: frontend/Dockerfile
     restart: unless-stopped
     ports:
       - ${SILICON_BIND_ADDRESS:-0.0.0.0}:${SILICON_HTTP_PORT:-80}:80
