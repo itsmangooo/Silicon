@@ -131,6 +131,30 @@ paths:
                   role: {$ref: '#/components/schemas/Role'}
                   permissions: {type: array, items: {type: string}}
         '404': {$ref: '#/components/responses/NotFoundError'}
+  /organizations/{organizationID}/search:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Organizations]
+      summary: Search resources in the active organization
+      description: Searches non-secret organization data. Member and budget results are omitted when the active role lacks their read permissions.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: {type: string, minLength: 2, maxLength: 100}
+      responses:
+        '200':
+          description: Organization-scoped results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [query, results]
+                properties:
+                  query: {type: string}
+                  results: {type: array, items: {$ref: '#/components/schemas/SearchResult'}}
+        '404': {$ref: '#/components/responses/NotFoundError'}
+        '422': {$ref: '#/components/responses/ValidationError'}
   /organizations/{organizationID}/members:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}]
     get:
@@ -816,6 +840,17 @@ components:
         displayName: {type: string}
         role: {$ref: '#/components/schemas/Role'}
         createdAt: {$ref: '#/components/schemas/Timestamp'}
+    SearchResult:
+      type: object
+      additionalProperties: false
+      required: [id, type, title, subtitle, route]
+      properties:
+        id: {type: string}
+        type: {type: string, enum: [project, environment, application, deployment, server, domain, aws_account, aws_instance, budget, member]}
+        title: {type: string}
+        subtitle: {type: string}
+        route: {type: string}
+        status: {type: string}
     ProjectInput:
       allOf:
         - {$ref: '#/components/schemas/NamedSlugInput'}

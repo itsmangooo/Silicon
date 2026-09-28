@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   BuildingsIcon,
+  BookOpenTextIcon,
   ClipboardTextIcon,
   CubeIcon,
   FolderIcon,
@@ -22,13 +23,14 @@ import {
 } from '@phosphor-icons/react'
 import { useAuth } from '../state/AuthContext.jsx'
 import { TenantScope, useWorkspace } from '../state/WorkspaceContext.jsx'
+import { GlobalSearch } from './GlobalSearch.jsx'
 
 const groups = [
   ['PLATFORM', [['Projects', '/projects', FolderIcon], ['Environments', '/environments', StackIcon], ['Applications', '/applications', CubeIcon], ['Deployments', '/deployments', RocketLaunchIcon], ['Servers', '/servers', HardDrivesIcon]]],
   ['OPERATIONS', [['Domains', '/domains', CloudIcon]]],
   ['AWS', [['Accounts', '/aws/accounts', CloudIcon], ['Compute', '/aws/compute', DesktopTowerIcon], ['Network', '/aws/network', StackIcon], ['Storage', '/aws/storage', HardDrivesIcon], ['Costs & Budgets', '/aws/costs', CurrencyDollarIcon]]],
   ['ORGANIZATION', [['Members', '/members', UsersIcon], ['Access', '/access', ShieldCheckIcon], ['Identity', '/identity', IdentificationCardIcon], ['Audit', '/audit', ClipboardTextIcon]]],
-  ['SYSTEM', [['Integrations', '/integrations', GitBranchIcon], ['Settings', '/settings', GearSixIcon]]],
+  ['SYSTEM', [['Integrations', '/integrations', GitBranchIcon], ['Docs', '/docs', BookOpenTextIcon], ['Settings', '/settings', GearSixIcon]]],
 ]
 
 function NavigationItem({ to, icon, children, end = false, onClick }) {
@@ -46,6 +48,13 @@ export function AppLayout() {
       <a className="skip-link" href="#main">Skip to content</a>
       <aside className={`sidebar ${open ? 'sidebar-open' : ''}`} aria-label="Primary navigation">
         <div className="brand"><span className="brand-mark">SI</span><span>SILICON</span></div>
+        <label className="sidebar-organization">
+          <span>Organization</span>
+          <span className="sidebar-select"><BuildingsIcon size={16} aria-hidden="true" /><select value={organizationId} onChange={(event) => selectOrganization(event.target.value)} disabled={!organizations.length}>
+            {!organizations.length && <option value="">No organization</option>}
+            {organizations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select></span>
+        </label>
         <nav>
           <NavigationItem end to="/" icon={GaugeIcon} onClick={() => setOpen(false)}>Dashboard</NavigationItem>
           {groups.map(([label, links]) => (
@@ -60,14 +69,7 @@ export function AppLayout() {
       <div className="workspace">
         <header className="topbar">
           <button className="menu-button" aria-label="Open navigation" onClick={() => setOpen(true)}><ListIcon size={19} aria-hidden="true" /><span>Menu</span></button>
-          <label className="organization-select">
-            <span className="sr-only">Organization</span>
-            <BuildingsIcon size={17} aria-hidden="true" />
-            <select value={organizationId} onChange={(event) => selectOrganization(event.target.value)} disabled={!organizations.length}>
-              {!organizations.length && <option value="">No organization</option>}
-              {organizations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-          </label>
+          <GlobalSearch />
           <div className="user-menu"><span>{user.displayName}</span><button className="button ghost compact" onClick={logout}><SignOutIcon size={16} aria-hidden="true" /><span>Sign out</span></button></div>
         </header>
         <main id="main" className="main" tabIndex="-1">

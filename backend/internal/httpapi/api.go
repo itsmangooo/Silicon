@@ -94,6 +94,7 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("POST /api/v1/organizations", a.auth(http.HandlerFunc(a.createOrganization)))
 
 	mux.Handle("GET /api/v1/organizations/{organizationID}/access", a.org(authorization.OrganizationRead, http.HandlerFunc(a.access)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/search", a.org(authorization.OrganizationRead, http.HandlerFunc(a.search)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/members", a.org(authorization.MemberRead, http.HandlerFunc(a.listMembers)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/members", a.org(authorization.MemberManage, http.HandlerFunc(a.addMember)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/projects", a.org(authorization.ProjectRead, http.HandlerFunc(a.listProjects)))

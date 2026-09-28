@@ -558,6 +558,19 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	applicationB := viewer.post("/organizations/"+orgB+"/environments/"+environmentBID+"/applications", map[string]any{"name": "api-b", "sourceType": "docker_image", "image": "example/api-b:1", "internalPort": 8080}, http.StatusCreated)
 	applicationBID := stringField(t, applicationB, "id")
 
+	searchA := owner.get("/organizations/"+orgA+"/search?q=api", http.StatusOK)
+	for _, raw := range arrayField(t, searchA, "results") {
+		item := raw.(map[string]any)
+		if stringField(t, item, "id") == applicationBID || strings.Contains(strings.ToLower(stringField(t, item, "title")), "tenant b") {
+			t.Fatalf("organization A search leaked organization B result: %#v", item)
+		}
+	}
+	searchB := viewer.get("/organizations/"+orgB+"/search?q=tenant-b", http.StatusOK)
+	if results := arrayField(t, searchB, "results"); len(results) != 1 || stringField(t, results[0].(map[string]any), "id") != projectBID {
+		t.Fatalf("organization B search results=%#v, want project %s only", results, projectBID)
+	}
+	viewer.get("/organizations/"+orgB+"/search?q=a", http.StatusUnprocessableEntity)
+
 	viewer.get("/organizations/"+orgB+"/projects/"+projectID+"/environments", http.StatusNotFound)
 	viewer.post("/organizations/"+orgB+"/projects/"+projectID+"/environments", map[string]any{"name": "cross", "slug": "cross"}, http.StatusNotFound)
 	viewer.get("/organizations/"+orgB+"/environments/"+environmentID+"/applications", http.StatusNotFound)
