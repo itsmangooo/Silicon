@@ -3,6 +3,7 @@ import { ArrowClockwiseIcon, CloudIcon, LinkIcon, PlusIcon, PlugsConnectedIcon, 
 import { api, organizationPath } from '../lib/api.js'
 import { useWorkspace } from '../state/WorkspaceContext.jsx'
 import { EmptyState, ErrorNotice, Field, LoadingRows, Mono, Notice, Page, Section, Status, formatDate, useResource } from '../components/ui.jsx'
+import { DocsLink } from '../components/DocsLink.jsx'
 
 async function optional(path) {
   try { return await api(path) } catch (error) { if (error.status === 404) return null; throw error }
@@ -58,14 +59,14 @@ export function IntegrationsPage() {
 
   return <Page title="Integrations" description="Organization-scoped source, DNS, and optional tunnel providers.">
     <ErrorNotice error={resource.error || actionError} />
-    <Section title="GitHub App" description="Repository access is limited to the selected installation.">
+    <Section title="GitHub App" description="Repository access is limited to the selected installation." actions={<DocsLink article="github">GitHub setup</DocsLink>}>
       {resource.loading ? <LoadingRows columns={1} /> : <>
         {resource.data.github ? <div className="key-value"><span>Account</span><strong>{resource.data.github.accountLogin}</strong><span>Installation</span><Mono>{resource.data.github.installationId}</Mono><span>Status</span><Status value={resource.data.github.status} /><span>Connected</span><span>{formatDate(resource.data.github.createdAt)}</span></div> : <EmptyState title="GitHub is not connected">Install the Silicon GitHub App, then enter its installation ID.</EmptyState>}
         <form className="inline-form" onSubmit={connectGitHub}><Field label="Installation ID"><input name="installationId" type="number" min="1" className="mono" required /></Field><button className="button secondary" disabled={busy}><PlugsConnectedIcon size={16} /><span>{resource.data.github ? 'Reconnect' : 'Connect GitHub'}</span></button>{resource.data.github?.status === 'connected' && <button type="button" className="button ghost" disabled={busy} onClick={() => run(() => api(organizationPath(organizationId, '/integrations/github'), { method: 'DELETE' }))}><PlugsIcon size={16} /><span>Disconnect</span></button>}</form>
         {resource.data.github?.status === 'connected' && <form className="form-grid" onSubmit={bindSource}><Field label="Application"><select name="applicationId" required>{resource.data.applications.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Repository"><select name="repositoryId" required>{resource.data.repositories.map((item) => <option key={item.id} value={item.id}>{item.fullName}</option>)}</select></Field><Field label="Branch"><input name="branch" defaultValue="main" className="mono" required /></Field><Field label="Auto deploy"><label className="check-row"><input name="autoDeploy" type="checkbox" defaultChecked /> Deploy verified pushes</label></Field><div className="form-actions"><button className="button primary" disabled={busy || !resource.data.repositories.length}><LinkIcon size={16} /><span>Save source</span></button></div></form>}
       </>}
     </Section>
-    <Section title="Cloudflare" description="DNS and Tunnel are separate; Tunnel remains optional.">
+    <Section title="Cloudflare" description="DNS and Tunnel are separate; Tunnel remains optional." actions={<DocsLink article="cloudflare">Cloudflare setup</DocsLink>}>
       {resource.loading ? <LoadingRows columns={1} /> : <>
         {resource.data.cloudflare ? <div className="key-value"><span>Account ID</span><Mono>{resource.data.cloudflare.accountId}</Mono><span>Status</span><Status value={resource.data.cloudflare.status} /><span>Last checked</span><span>{formatDate(resource.data.cloudflare.lastCheckedAt)}</span></div> : <EmptyState title="Cloudflare is not connected">Use a scoped API token. Silicon encrypts it before storage and never returns it.</EmptyState>}
         <form className="form-grid" onSubmit={connectCloudflare}><Field label="Account ID"><input name="accountId" className="mono" required /></Field><Field label="Scoped API token"><input name="apiToken" type="password" autoComplete="off" required /></Field><div className="form-actions"><button className="button secondary" disabled={busy}><CloudIcon size={16} /><span>{resource.data.cloudflare ? 'Reconnect' : 'Connect Cloudflare'}</span></button></div></form>

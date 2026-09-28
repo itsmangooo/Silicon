@@ -16,6 +16,10 @@ These previews were captured from the running application at a consistent deskto
 | --- | --- |
 | [![Silicon dashboard](docs/previews/dashboard.png)](docs/previews/dashboard.png) | [![Silicon projects page](docs/previews/projects.png)](docs/previews/projects.png) |
 
+| In-panel documentation | Global search |
+| --- | --- |
+| [![Silicon in-panel documentation](docs/previews/documentation.png)](docs/previews/documentation.png) | [![Silicon global search](docs/previews/global-search.png)](docs/previews/global-search.png) |
+
 | Project detail | Environments |
 | --- | --- |
 | [![Silicon project detail page](docs/previews/project-detail.png)](docs/previews/project-detail.png) | [![Silicon environments page](docs/previews/environments.png)](docs/previews/environments.png) |
@@ -107,6 +111,8 @@ npm run dev
 
 Open `http://localhost:5173`, register a local account, create an organization, then create real platform records. Migrations run transactionally at backend startup when `SILICON_AUTO_MIGRATE=true`.
 
+The authenticated interface includes an in-panel [user guide](docs/guide/README.md). Press `Ctrl+K` on Windows/Linux or `Command+K` on macOS to search registered pages, commands, documentation, and permitted resources in the active organization.
+
 To run the full Compose stack instead:
 
 ```sh
@@ -139,6 +145,7 @@ The REST API is rooted at `/api/v1`. Its OpenAPI contract lives at [`backend/ope
 - `/auth/register`, `/auth/login`, `/auth/logout`, `/auth/session`
 - `/organizations`
 - `/organizations/{organizationID}/projects`
+- `/organizations/{organizationID}/search`
 - `/organizations/{organizationID}/projects/{projectID}/environments`
 - `/organizations/{organizationID}/environments/{environmentID}/applications`
 - `/organizations/{organizationID}/applications/{applicationID}/deployments`

@@ -1,4 +1,7 @@
+import { previewResponse } from '../preview/fixtures.js'
+
 const baseUrl = import.meta.env.VITE_API_URL || ''
+const previewMode = import.meta.env.VITE_PREVIEW_FIXTURES === 'true'
 
 export const apiUrl = (path) => `${baseUrl}/api/v1${path}`
 
@@ -12,6 +15,10 @@ function cookie(name) {
 }
 
 export async function api(path, options = {}) {
+  if (previewMode) {
+    const fixture = previewResponse(path, options)
+    if (fixture !== undefined) return Promise.resolve(fixture)
+  }
   const method = options.method || 'GET'
   const headers = { Accept: 'application/json', ...options.headers }
   if (options.body && !(options.body instanceof FormData)) headers['Content-Type'] = 'application/json'

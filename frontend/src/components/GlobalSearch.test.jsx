@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CommandPalette } from './GlobalSearch.jsx'
@@ -49,11 +49,13 @@ describe('CommandPalette', () => {
     expect(screen.getByLabelText('Current path')).toHaveTextContent('/')
   })
 
-  it('closes on Escape without navigating', () => {
+  it('closes on Escape and restores keyboard focus', async () => {
     renderPalette()
-    fireEvent.click(screen.getByRole('button', { name: 'Search Silicon' }))
+    const trigger = screen.getByRole('button', { name: 'Search Silicon' })
+    fireEvent.click(trigger)
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => expect(trigger).toHaveFocus())
   })
 })

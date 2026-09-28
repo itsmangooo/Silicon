@@ -39,6 +39,7 @@ const fuseOptions = {
     { name: 'sections', weight: 0.12 },
     { name: 'route', weight: 0.06 },
     { name: 'subtitle', weight: 0.04 },
+    { name: 'content', weight: 0.02 },
   ],
 }
 

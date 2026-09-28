@@ -3,6 +3,7 @@ import { ArrowClockwiseIcon, GearIcon, HardDrivesIcon, KeyIcon, PlugsConnectedIc
 import { api, organizationPath } from '../lib/api.js'
 import { useWorkspace } from '../state/WorkspaceContext.jsx'
 import { CreateButton, Dialog, EmptyState, ErrorNotice, Field, LoadingRows, Mono, Notice, Page, Section, Status, SubmitRow, formatDate, useResource } from '../components/ui.jsx'
+import { DocsLink } from '../components/DocsLink.jsx'
 
 export function ServersPage() {
   const { organizationId } = useWorkspace()
@@ -18,7 +19,7 @@ export function ServersPage() {
   return <Page title="Servers" description="Local and SSH-connected Docker targets verified by active checks." actions={organizationId && <CreateButton onClick={() => setCreateOpen(true)}>Add server</CreateButton>}>
     {hasPrivate && <Notice>Cloudflare Tunnel can expose a private target without direct inbound HTTP/HTTPS, but it remains optional.</Notice>}
     <ErrorNotice error={resource.error} />
-    <Section title="Server inventory" description="Status reflects the last SSH and Docker check; Silicon does not fabricate online state.">
+    <Section title="Server inventory" description="Status reflects the last SSH and Docker check; Silicon does not fabricate online state." actions={<DocsLink article="servers">SSH trust guide</DocsLink>}>
       <table><thead><tr><th>Name</th><th>Connection</th><th>Health</th><th>Last check</th><th>Applications</th><th>Action</th></tr></thead><tbody>
         {resource.loading ? <LoadingRows columns={6} /> : resource.data?.servers.length ? resource.data.servers.map((item) => <tr key={item.id}>
           <td data-label="Name"><button className="button ghost compact table-link" onClick={() => setSelected(item)}><HardDrivesIcon size={16} aria-hidden="true" /><span>{item.name}</span></button></td>

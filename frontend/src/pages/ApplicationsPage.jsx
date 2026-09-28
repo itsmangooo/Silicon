@@ -3,6 +3,7 @@ import { ArrowClockwiseIcon, GearIcon, KeyIcon, PlayIcon, StopIcon, TerminalWind
 import { api, apiUrl, organizationPath } from '../lib/api.js'
 import { useWorkspace } from '../state/WorkspaceContext.jsx'
 import { CreateButton, Dialog, EmptyState, ErrorNotice, Field, LoadingRows, Mono, Page, Section, Status, SubmitRow, formatDate, useResource } from '../components/ui.jsx'
+import { DocsLink } from '../components/DocsLink.jsx'
 
 async function loadEnvironmentOptions(organizationId) {
   const projects = (await api(organizationPath(organizationId, '/projects'))).projects
@@ -25,7 +26,7 @@ export function ApplicationsPage() {
   const applications = resource.data?.applications || []
   return <Page title="Applications" description="Deployable workloads, runtime configuration, and current Docker state." actions={organizationId && <CreateButton onClick={() => setCreateOpen(true)}>Create application</CreateButton>}>
     <ErrorNotice error={resource.error} />
-    <Section title="Registered applications">
+    <Section title="Registered applications" actions={<DocsLink article="applications">Variables, secrets, and runtime</DocsLink>}>
       <table><thead><tr><th>Name</th><th>Environment / target</th><th>Source</th><th>Port binding</th><th>Created</th><th>Actions</th></tr></thead><tbody>
         {resource.loading ? <LoadingRows columns={6} /> : applications.length ? applications.map((item) => <tr key={item.id}>
           <td data-label="Name"><strong className="table-primary">{item.name}</strong></td><td data-label="Environment / target"><span className="cell-stack"><span>{environmentNames[item.environmentId] || '—'}</span><span className="cell-subtle">{item.serverId ? serverNames[item.serverId] || 'Unknown server' : 'Control plane'}</span></span></td><td data-label="Source"><span className="cell-stack"><span>{item.sourceType}</span><Mono>{item.image || 'Built revision'}</Mono></span></td><td data-label="Port binding"><Mono>{item.publishedPort ? `${item.hostAddress}:${item.publishedPort} → ${item.internalPort}` : item.internalPort ? `internal :${item.internalPort}` : 'none'}</Mono></td><td data-label="Created">{formatDate(item.createdAt)}</td>

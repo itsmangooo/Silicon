@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, organizationPath } from '../lib/api.js'
 import { useWorkspace } from '../state/WorkspaceContext.jsx'
 import { commandSearchEntries, pageSearchEntries, searchEntries } from '../search/registry.js'
+import { docSearchEntries } from '../docs/catalog.js'
 
 const groupNames = {
   project: 'Projects',
@@ -25,6 +26,7 @@ function withGroup(result) {
 export function CommandPalette({ organizations, organizationId, selectOrganization, docs = [] }) {
   const navigate = useNavigate()
   const inputRef = useRef(null)
+  const triggerRef = useRef(null)
   const itemRefs = useRef([])
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -37,9 +39,15 @@ export function CommandPalette({ organizations, organizationId, selectOrganizati
     const shortcut = (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
-        setOpen((current) => !current)
+        setOpen((current) => {
+          if (current) requestAnimationFrame(() => triggerRef.current?.focus())
+          return !current
+        })
       }
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') {
+        setOpen(false)
+        requestAnimationFrame(() => triggerRef.current?.focus())
+      }
     }
     document.addEventListener('keydown', shortcut)
     return () => document.removeEventListener('keydown', shortcut)
@@ -88,7 +96,8 @@ export function CommandPalette({ organizations, organizationId, selectOrganizati
     const normalized = query.trim()
     if (!normalized) return [...commandSearchEntries.slice(0, 4), ...organizationCommands]
     const staticResults = searchEntries(normalized, [...pageSearchEntries, ...commandSearchEntries, ...docs, ...organizationCommands], 24)
-    return [...dynamicResults, ...staticResults].slice(0, 40)
+    const groupedStatic = ['Pages', 'Documentation', 'Commands'].flatMap((group) => staticResults.filter((result) => result.group === group))
+    return [...dynamicResults, ...groupedStatic].slice(0, 40)
   }, [docs, dynamicResults, organizationCommands, query])
 
   useEffect(() => {
@@ -99,7 +108,10 @@ export function CommandPalette({ organizations, organizationId, selectOrganizati
     itemRefs.current[selected]?.scrollIntoView({ block: 'nearest' })
   }, [selected])
 
-  const close = () => setOpen(false)
+  const close = () => {
+    setOpen(false)
+    requestAnimationFrame(() => triggerRef.current?.focus())
+  }
   const choose = (result) => {
     if (result.kind === 'organization') {
       selectOrganization(result.organizationId)
@@ -111,7 +123,7 @@ export function CommandPalette({ organizations, organizationId, selectOrganizati
   }
   const onKeyDown = (event) => {
     if (event.key === 'ArrowDown') {
-      event.preventDefault(); setSelected((current) => Math.min(current + 1, results.length - 1))
+      event.preventDefault(); setSelected((current) => results.length ? Math.min(current + 1, results.length - 1) : 0)
     } else if (event.key === 'ArrowUp') {
       event.preventDefault(); setSelected((current) => Math.max(current - 1, 0))
     } else if (event.key === 'Enter' && results[selected]) {
@@ -121,7 +133,7 @@ export function CommandPalette({ organizations, organizationId, selectOrganizati
 
   let previousGroup = ''
   return <>
-    <button className="search-trigger" type="button" onClick={() => setOpen(true)} aria-label="Search Silicon">
+    <button ref={triggerRef} className="search-trigger" type="button" onClick={() => setOpen(true)} aria-label="Search Silicon">
       <MagnifyingGlassIcon size={17} aria-hidden="true" />
       <span>Search Silicon…</span>
       <kbd>{shortcutLabel}</kbd>
@@ -155,7 +167,7 @@ export function CommandPalette({ organizations, organizationId, selectOrganizati
   </>
 }
 
-export function GlobalSearch({ docs }) {
+export function GlobalSearch() {
   const { organizations, organizationId, selectOrganization } = useWorkspace()
-  return <CommandPalette organizations={organizations} organizationId={organizationId} selectOrganization={selectOrganization} docs={docs} />
+  return <CommandPalette organizations={organizations} organizationId={organizationId} selectOrganization={selectOrganization} docs={docSearchEntries} />
 }

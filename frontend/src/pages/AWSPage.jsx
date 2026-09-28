@@ -3,6 +3,7 @@ import { ArrowClockwiseIcon, CloudArrowUpIcon, CurrencyDollarIcon, DownloadSimpl
 import { api, organizationPath } from '../lib/api.js'
 import { useWorkspace } from '../state/WorkspaceContext.jsx'
 import { CreateButton, Dialog, EmptyState, ErrorNotice, Field, LoadingRows, Mono, Notice, Page, Section, Status, SubmitRow, formatDate, useResource } from '../components/ui.jsx'
+import { DocsLink } from '../components/DocsLink.jsx'
 
 const sectionNames = { accounts: 'Accounts', compute: 'Compute', network: 'Network', storage: 'Storage', costs: 'Costs & budgets' }
 
@@ -42,9 +43,9 @@ export function AWSPage({ section = 'accounts' }) {
     return { projects, environments: groups.flatMap(({ project, environments }) => environments.map((environment) => ({ ...environment, projectId: project.id, projectName: project.name }))) }
   }, [organizationId])
   const run = async (work) => { setBusy(true); setError(''); try { await work(); await Promise.all([base.refresh(), inventory.refresh()]) } catch (requestError) { setError(requestError.message) } finally { setBusy(false) } }
-  const contextActions = section === 'accounts'
+  const contextActions = <><DocsLink article="aws">AWS setup and boundaries</DocsLink>{section === 'accounts'
     ? <CreateButton onClick={() => setAccountOpen(true)}>Connect account</CreateButton>
-    : section === 'compute' && accountId ? <CreateButton onClick={() => setMachineOpen(true)}>New machine</CreateButton> : null
+    : section === 'compute' && accountId ? <CreateButton onClick={() => setMachineOpen(true)}>New machine</CreateButton> : null}</>
 
   return <Page title={`AWS / ${sectionNames[section]}`} description="AWS machines remain normal Silicon deployment targets alongside local and SSH servers." actions={contextActions}>
     <ErrorNotice error={base.error || inventory.error || costs.error || scopes.error || error} />

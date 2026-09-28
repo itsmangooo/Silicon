@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './state/AuthContext.jsx'
 import { WorkspaceProvider } from './state/WorkspaceContext.jsx'
@@ -17,6 +18,8 @@ import { SettingsPage } from './pages/SettingsPage.jsx'
 import { IntegrationsPage } from './pages/IntegrationsPage.jsx'
 import { DomainsPage } from './pages/DomainsPage.jsx'
 import { AWSPage } from './pages/AWSPage.jsx'
+
+const DocsArticlePage = lazy(() => import('./pages/DocsPage.jsx').then((module) => ({ default: module.DocsArticlePage })))
 
 function ProtectedApp() {
   return (
@@ -54,6 +57,8 @@ export function App() {
         <Route path="aws/storage" element={<AWSPage section="storage" />} />
         <Route path="aws/costs" element={<AWSPage section="costs" />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="docs" element={<Navigate replace to="/docs/overview/getting-started" />} />
+        <Route path="docs/:category/:slug" element={<Suspense fallback={<div role="status">Loading documentation…</div>}><DocsArticlePage /></Suspense>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
