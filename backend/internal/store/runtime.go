@@ -55,6 +55,9 @@ func (r Repository) ApplicationByID(ctx context.Context, organizationID, applica
 }
 
 func (r Repository) ListEnvironmentVariables(ctx context.Context, organizationID, applicationID uuid.UUID) ([]EnvironmentVariable, error) {
+	if _, err := r.ApplicationByID(ctx, organizationID, applicationID); err != nil {
+		return nil, err
+	}
 	rows, err := r.Pool.Query(ctx, `SELECT name,value,updated_at FROM application_environment_variables WHERE organization_id=$1 AND application_id=$2 ORDER BY name`, organizationID, applicationID)
 	if err != nil {
 		return nil, err
@@ -101,6 +104,9 @@ func (r Repository) ReplaceEnvironmentVariables(ctx context.Context, organizatio
 }
 
 func (r Repository) ListSecretMetadata(ctx context.Context, organizationID, applicationID uuid.UUID) ([]SecretMetadata, error) {
+	if _, err := r.ApplicationByID(ctx, organizationID, applicationID); err != nil {
+		return nil, err
+	}
 	rows, err := r.Pool.Query(ctx, `SELECT id,name,provider,created_at,updated_at FROM secrets WHERE organization_id=$1 AND application_id=$2 ORDER BY name`, organizationID, applicationID)
 	if err != nil {
 		return nil, err
@@ -131,7 +137,7 @@ func (r Repository) RecordAudit(ctx context.Context, organizationID, actorID uui
 
 func (r Repository) SaveRuntimeInstance(ctx context.Context, organizationID, applicationID, deploymentID uuid.UUID, status runtimeprovider.InstanceStatus, containerPort int) (RuntimeInstance, error) {
 	var item RuntimeInstance
-	err := r.Pool.QueryRow(ctx, `INSERT INTO runtime_instances(organization_id,application_id,deployment_id,provider,server_id,external_id,image,state,health,container_port,host_address,host_port,runtime_created_at,runtime_started_at,runtime_finished_at) VALUES($1,$2,$3,'docker',NULLIF($4,'')::uuid,$5,$6,$7,$8,$9,NULLIF($10,'')::inet,NULLIF($11,0),$12,$13,$14) ON CONFLICT (deployment_id) DO UPDATE SET server_id=EXCLUDED.server_id,external_id=EXCLUDED.external_id,image=EXCLUDED.image,state=EXCLUDED.state,health=EXCLUDED.health,container_port=EXCLUDED.container_port,host_address=EXCLUDED.host_address,host_port=EXCLUDED.host_port,runtime_created_at=EXCLUDED.runtime_created_at,runtime_started_at=EXCLUDED.runtime_started_at,runtime_finished_at=EXCLUDED.runtime_finished_at,last_inspected_at=now(),updated_at=now() RETURNING id,organization_id,application_id,deployment_id,provider,server_id,external_id,image,state,health,container_port,host(host_address),host_port,runtime_created_at,runtime_started_at,runtime_finished_at,last_inspected_at,removed_at,created_at,updated_at`, organizationID, applicationID, deploymentID, status.ServerID, status.InstanceID, status.Image, status.State, status.Health, nullablePort(containerPort), status.HostAddress, status.HostPort, status.CreatedAt, status.StartedAt, status.FinishedAt).Scan(runtimeScan(&item)...)
+	err := r.Pool.QueryRow(ctx, `INSERT INTO runtime_instances(organization_id,application_id,deployment_id,provider,server_id,external_id,image,state,health,container_port,host_address,host_port,runtime_created_at,runtime_started_at,runtime_finished_at) VALUES($1,$2,$3,'docker',NULLIF($4,'')::uuid,$5,$6,$7,$8,$9,NULLIF($10,'')::inet,NULLIF($11,0),$12,$13,$14) ON CONFLICT (deployment_id) DO UPDATE SET server_id=EXCLUDED.server_id,external_id=EXCLUDED.external_id,image=EXCLUDED.image,state=EXCLUDED.state,health=EXCLUDED.health,container_port=EXCLUDED.container_port,host_address=EXCLUDED.host_address,host_port=EXCLUDED.host_port,runtime_created_at=EXCLUDED.runtime_created_at,runtime_started_at=EXCLUDED.runtime_started_at,runtime_finished_at=EXCLUDED.runtime_finished_at,last_inspected_at=now(),updated_at=now() WHERE runtime_instances.organization_id=EXCLUDED.organization_id AND runtime_instances.application_id=EXCLUDED.application_id RETURNING id,organization_id,application_id,deployment_id,provider,server_id,external_id,image,state,health,container_port,host(host_address),host_port,runtime_created_at,runtime_started_at,runtime_finished_at,last_inspected_at,removed_at,created_at,updated_at`, organizationID, applicationID, deploymentID, status.ServerID, status.InstanceID, status.Image, status.State, status.Health, nullablePort(containerPort), status.HostAddress, status.HostPort, status.CreatedAt, status.StartedAt, status.FinishedAt).Scan(runtimeScan(&item)...)
 	return item, err
 }
 

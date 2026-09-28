@@ -153,7 +153,7 @@ func (e DockerDeploymentExecutor) Execute(ctx context.Context, spec jobs.Deploym
 	if !status.Healthy {
 		return fmt.Errorf("Docker reported state %q and health %q", status.State, status.Health)
 	}
-	if _, err = e.Pool.Exec(ctx, `UPDATE deployments SET image=$2,updated_at=now() WHERE id=$1`, spec.DeploymentID, image); err != nil {
+	if _, err = e.Pool.Exec(ctx, `UPDATE deployments SET image=$3,updated_at=now() WHERE organization_id=$1 AND id=$2`, spec.OrganizationID, spec.DeploymentID, image); err != nil {
 		return fmt.Errorf("store deployed image: %w", err)
 	}
 	removed, cleanupErrors := 0, 0

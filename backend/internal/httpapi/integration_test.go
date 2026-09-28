@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/itsmangooo/Silicon/backend/db"
 	"github.com/itsmangooo/Silicon/backend/internal/config"
 	"github.com/itsmangooo/Silicon/backend/internal/deployments"
@@ -341,6 +342,14 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	if githubCount != 1 || storedSHA != sha || trigger != "github_push" {
 		t.Fatalf("github deployments=%d sha=%q trigger=%q", githubCount, storedSHA, trigger)
 	}
+	var deliveryOrganizationID string
+	if err := pool.QueryRow(ctx, `SELECT organization_id FROM github_webhook_deliveries WHERE delivery_id='delivery-1'`).Scan(&deliveryOrganizationID); err != nil || deliveryOrganizationID != orgA {
+		t.Fatalf("GitHub delivery tenant=%q want %q err=%v", deliveryOrganizationID, orgA, err)
+	}
+	var unknownInstallationDeliveries int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM github_webhook_deliveries WHERE delivery_id='delivery-wrong-installation'`).Scan(&unknownInstallationDeliveries); err != nil || unknownInstallationDeliveries != 0 {
+		t.Fatalf("unknown GitHub installation journal rows=%d err=%v", unknownInstallationDeliveries, err)
+	}
 	var jobCount int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM jobs WHERE job_type='deploy_application' AND payload->>'commitSha'=$1`, sha).Scan(&jobCount); err != nil || jobCount != 1 {
 		t.Fatalf("pipeline jobs=%d err=%v", jobCount, err)
@@ -482,6 +491,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	if len(arrayField(t, zones, "zones")) != 1 {
 		t.Fatalf("zones=%v", zones)
 	}
+	cloudflareZoneAID := stringField(t, arrayField(t, zones, "zones")[0].(map[string]any), "id")
 	domain := owner.post("/organizations/"+orgA+"/applications/"+applicationID+"/domains", map[string]any{"hostname": "api.example.com", "targetPort": 3000, "protocol": "http", "routingMode": "cloudflare_proxied"}, http.StatusCreated)
 	if stringField(t, domain, "dnsState") != "active" {
 		t.Fatalf("domain=%v", domain)
@@ -537,6 +547,106 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	owner.post("/organizations/"+orgA+"/members", map[string]any{"email": "viewer@example.com", "role": "viewer"}, http.StatusCreated)
 	viewer.post("/organizations/"+orgA+"/projects", map[string]any{"name": "Forbidden", "slug": "forbidden"}, http.StatusForbidden)
 	viewer.get("/organizations/"+orgA+"/projects", http.StatusOK)
+
+	// Membership in both tenants must not make resource identifiers portable
+	// between them. The same user is a viewer in A and owner in B for these
+	// representative nested-resource and provider checks.
+	projectB := viewer.post("/organizations/"+orgB+"/projects", map[string]any{"name": "Tenant B", "slug": "tenant-b"}, http.StatusCreated)
+	projectBID := stringField(t, projectB, "id")
+	environmentB := viewer.post("/organizations/"+orgB+"/projects/"+projectBID+"/environments", map[string]any{"name": "production", "slug": "production"}, http.StatusCreated)
+	environmentBID := stringField(t, environmentB, "id")
+	applicationB := viewer.post("/organizations/"+orgB+"/environments/"+environmentBID+"/applications", map[string]any{"name": "api-b", "sourceType": "docker_image", "image": "example/api-b:1", "internalPort": 8080}, http.StatusCreated)
+	applicationBID := stringField(t, applicationB, "id")
+
+	viewer.get("/organizations/"+orgB+"/projects/"+projectID+"/environments", http.StatusNotFound)
+	viewer.post("/organizations/"+orgB+"/projects/"+projectID+"/environments", map[string]any{"name": "cross", "slug": "cross"}, http.StatusNotFound)
+	viewer.get("/organizations/"+orgB+"/environments/"+environmentID+"/applications", http.StatusNotFound)
+	viewer.post("/organizations/"+orgB+"/environments/"+environmentID+"/applications", map[string]any{"name": "cross", "sourceType": "docker_image", "image": "example/cross:1"}, http.StatusNotFound)
+	viewer.put("/organizations/"+orgB+"/applications/"+applicationBID+"/server", map[string]any{"serverId": serverID}, http.StatusNotFound)
+	viewer.get("/organizations/"+orgB+"/applications/"+runtimeApplicationID+"/secrets", http.StatusNotFound)
+	viewer.put("/organizations/"+orgB+"/applications/"+runtimeApplicationID+"/secrets/CROSS_TENANT", map[string]any{"value": "forbidden"}, http.StatusNotFound)
+	viewer.post("/organizations/"+orgB+"/applications/"+applicationID+"/domains", map[string]any{"hostname": "cross.example.com", "targetPort": 3000, "protocol": "http", "routingMode": "dns_only"}, http.StatusNotFound)
+	viewer.get("/organizations/"+orgB+"/applications/"+applicationID+"/git-source", http.StatusNotFound)
+	viewer.post("/organizations/"+orgB+"/applications/"+applicationID+"/deployments", map[string]any{}, http.StatusNotFound)
+	viewer.get("/organizations/"+orgB+"/applications/"+applicationID+"/deployments", http.StatusNotFound)
+	viewer.get("/organizations/"+orgB+"/applications/"+runtimeApplicationID+"/runtime", http.StatusNotFound)
+	viewer.get("/organizations/"+orgB+"/aws/accounts/"+awsAccountID+"/regions", http.StatusNotFound)
+	viewer.post("/organizations/"+orgB+"/budgets", map[string]any{"projectId": projectID, "name": "Cross tenant", "monthlyAmount": 100, "currency": "USD", "thresholds": []float64{80}}, http.StatusNotFound)
+
+	if _, err := pool.Exec(ctx, `INSERT INTO environments(organization_id,project_id,name,slug) VALUES($1,$2,'cross-tenant','cross-tenant')`, orgB, projectID); err == nil {
+		t.Fatal("cross-organization project/environment relation was accepted")
+	}
+	var githubIntegrationBID string
+	if err := pool.QueryRow(ctx, `INSERT INTO github_integrations(organization_id,installation_id,account_login,connected_by) VALUES($1,456,'tenant-b',NULL) RETURNING id`, orgB).Scan(&githubIntegrationBID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO application_git_sources(application_id,organization_id,integration_id,repository_id,repository_full_name,branch,auto_deploy) VALUES($1,$2,$3,199,'tenant-b/cross','main',true)`, runtimeApplicationID, orgB, githubIntegrationBID); err == nil {
+		t.Fatal("cross-organization GitHub application relation was accepted")
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO aws_resource_ownership(organization_id,account_id,region,resource_type,provider_resource_id,ownership) VALUES($1,$2,'eu-central-1','instance','i-cross-tenant','managed')`, orgB, awsAccountID); err == nil {
+		t.Fatal("cross-organization AWS account/resource relation was accepted")
+	}
+
+	viewer.post("/organizations/"+orgB+"/integrations/cloudflare", map[string]any{"accountId": "account-1", "apiToken": "scoped-secret-token"}, http.StatusCreated)
+	viewer.get("/organizations/"+orgB+"/integrations/cloudflare/zones", http.StatusOK)
+	viewer.put("/organizations/"+orgB+"/integrations/cloudflare/zones/"+cloudflareZoneAID, map[string]any{"selected": false}, http.StatusNotFound)
+
+	var crossTenantOperationID, tenantBJobID string
+	if err := pool.QueryRow(ctx, `INSERT INTO aws_operations(organization_id,account_id,operation_type) VALUES($1,$2,'prepare_machine') RETURNING id`, orgA, awsAccountID).Scan(&crossTenantOperationID); err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := json.Marshal(map[string]string{"operationId": crossTenantOperationID})
+	if err := pool.QueryRow(ctx, `INSERT INTO jobs(organization_id,job_type,payload) VALUES($1,'prepare_aws_machine',$2) RETURNING id`, orgB, payload).Scan(&tenantBJobID); err != nil {
+		t.Fatal(err)
+	}
+	awsRunner := jobs.AWSRunner{Repository: apiServer.repo, Logger: logger, WorkerID: "tenant-isolation-test"}
+	if err := awsRunner.RunOnce(ctx); err == nil {
+		t.Fatal("cross-organization AWS job payload unexpectedly reached its operation")
+	}
+	var operationStatus, jobStatus string
+	if err := pool.QueryRow(ctx, `SELECT status FROM aws_operations WHERE id=$1`, crossTenantOperationID).Scan(&operationStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT status FROM jobs WHERE id=$1`, tenantBJobID).Scan(&jobStatus); err != nil {
+		t.Fatal(err)
+	}
+	if operationStatus != "queued" || jobStatus != "failed" {
+		t.Fatalf("cross-tenant AWS job mutated wrong records: operation=%q job=%q", operationStatus, jobStatus)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE aws_operations SET job_id=$1 WHERE id=$2`, tenantBJobID, crossTenantOperationID); err == nil {
+		t.Fatal("cross-organization AWS operation/job relation was accepted")
+	}
+
+	_, err = apiServer.repo.SaveRuntimeInstance(ctx, uuid.MustParse(orgB), uuid.MustParse(applicationBID), uuid.MustParse(stringField(t, firstRuntimeDeployment, "id")), runtimeprovider.InstanceStatus{InstanceID: "cross-tenant-runtime", Image: "example/cross:1", State: "running", Health: "running"}, 8080)
+	if err == nil {
+		t.Fatal("cross-organization runtime upsert mutated an existing deployment instance")
+	}
+	var preservedRuntimeID string
+	if err = pool.QueryRow(ctx, `SELECT external_id FROM runtime_instances WHERE deployment_id=$1`, stringField(t, firstRuntimeDeployment, "id")).Scan(&preservedRuntimeID); err != nil || preservedRuntimeID != "managed-container-1" {
+		t.Fatalf("cross-tenant runtime upsert changed existing instance: id=%q err=%v", preservedRuntimeID, err)
+	}
+
+	var crossDeploymentJobID, deploymentStatusBefore string
+	if err = pool.QueryRow(ctx, `SELECT status FROM deployments WHERE id=$1`, deploymentID).Scan(&deploymentStatusBefore); err != nil {
+		t.Fatal(err)
+	}
+	deploymentPayload, _ := json.Marshal(map[string]string{"deploymentId": deploymentID})
+	if err = pool.QueryRow(ctx, `INSERT INTO jobs(organization_id,job_type,payload) VALUES($1,'deploy_application',$2) RETURNING id`, orgB, deploymentPayload).Scan(&crossDeploymentJobID); err != nil {
+		t.Fatal(err)
+	}
+	if err = runner.RunOnce(ctx); err == nil {
+		t.Fatal("cross-organization deployment job payload unexpectedly reached its deployment")
+	}
+	var deploymentStatusAfter, deploymentJobStatus string
+	if err = pool.QueryRow(ctx, `SELECT status FROM deployments WHERE id=$1`, deploymentID).Scan(&deploymentStatusAfter); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT status FROM jobs WHERE id=$1`, crossDeploymentJobID).Scan(&deploymentJobStatus); err != nil {
+		t.Fatal(err)
+	}
+	if deploymentStatusAfter != deploymentStatusBefore || deploymentJobStatus != "failed" {
+		t.Fatalf("cross-tenant deployment job mutated wrong records: before=%q after=%q job=%q", deploymentStatusBefore, deploymentStatusAfter, deploymentJobStatus)
+	}
 
 	audit := owner.get("/organizations/"+orgA+"/audit-events", http.StatusOK)
 	if len(arrayField(t, audit, "auditEvents")) < 5 {

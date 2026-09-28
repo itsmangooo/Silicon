@@ -55,16 +55,13 @@ func (r AWSRunner) RunOnce(ctx context.Context) error {
 		OperationID uuid.UUID `json:"operationId"`
 	}
 	if json.Unmarshal(payload, &reference) != nil || reference.OperationID == uuid.Nil {
-		return r.fail(ctx, jobID, uuid.Nil, errors.New("invalid AWS operation payload"))
+		return r.fail(ctx, organizationID, jobID, uuid.Nil, errors.New("invalid AWS operation payload"))
 	}
-	operation, err := r.Repository.AWSOperationForUpdate(ctx, reference.OperationID)
+	operation, err := r.Repository.AWSOperationForUpdate(ctx, organizationID, reference.OperationID)
 	if err != nil {
-		return r.fail(ctx, jobID, reference.OperationID, err)
+		return r.fail(ctx, organizationID, jobID, uuid.Nil, err)
 	}
-	if operation.OrganizationID != organizationID {
-		return r.fail(ctx, jobID, operation.ID, errors.New("AWS operation organization mismatch"))
-	}
-	_ = r.Repository.UpdateAWSOperation(ctx, operation.ID, "running", "", "", "")
+	_ = r.Repository.UpdateAWSOperation(ctx, organizationID, operation.ID, "running", "", "", "")
 	switch jobType {
 	case "provision_aws_machine":
 		err = r.provision(ctx, operation)
@@ -78,12 +75,12 @@ func (r AWSRunner) RunOnce(ctx context.Context) error {
 		err = errors.New("unsupported AWS operation")
 	}
 	if err != nil {
-		return r.fail(ctx, jobID, operation.ID, err)
+		return r.fail(ctx, organizationID, jobID, operation.ID, err)
 	}
-	if updateErr := r.Repository.UpdateAWSOperation(ctx, operation.ID, "succeeded", operation.ResourceType, operation.ProviderResourceID, ""); updateErr != nil {
-		return r.fail(ctx, jobID, operation.ID, updateErr)
+	if updateErr := r.Repository.UpdateAWSOperation(ctx, organizationID, operation.ID, "succeeded", operation.ResourceType, operation.ProviderResourceID, ""); updateErr != nil {
+		return r.fail(ctx, organizationID, jobID, operation.ID, updateErr)
 	}
-	return r.Repository.CompleteAWSJob(ctx, jobID, "succeeded", "")
+	return r.Repository.CompleteAWSJob(ctx, organizationID, jobID, "succeeded", "")
 }
 
 func (r AWSRunner) provision(ctx context.Context, operation store.AWSOperation) error {
@@ -99,7 +96,7 @@ func (r AWSRunner) provision(ctx context.Context, operation store.AWSOperation) 
 	if err != nil {
 		return err
 	}
-	_ = r.Repository.UpdateAWSOperation(ctx, operation.ID, "waiting_for_aws", "instance", "", "")
+	_ = r.Repository.UpdateAWSOperation(ctx, operation.OrganizationID, operation.ID, "waiting_for_aws", "instance", "", "")
 	instance, err := provider.CreateMachine(ctx, request.Machine)
 	if err != nil {
 		return err
@@ -144,7 +141,7 @@ func (r AWSRunner) provision(ctx context.Context, operation store.AWSOperation) 
 		return err
 	}
 	if request.Machine.ConnectionMethod == "aws_ssm" {
-		_ = r.Repository.UpdateAWSOperation(ctx, operation.ID, "waiting_for_connection", "instance", instance.ID, "")
+		_ = r.Repository.UpdateAWSOperation(ctx, operation.OrganizationID, operation.ID, "waiting_for_connection", "instance", instance.ID, "")
 		runner, ok := provider.(cloudaws.SSMRunner)
 		if !ok {
 			return errors.New("AWS provider does not support SSM readiness checks")
@@ -160,7 +157,7 @@ func (r AWSRunner) provision(ctx context.Context, operation store.AWSOperation) 
 	}
 	operation.ResourceType = "instance"
 	operation.ProviderResourceID = instance.ID
-	return r.Repository.UpdateAWSOperation(ctx, operation.ID, "running", "instance", instance.ID, "")
+	return r.Repository.UpdateAWSOperation(ctx, operation.OrganizationID, operation.ID, "running", "instance", instance.ID, "")
 }
 
 func (r AWSRunner) waitForSSMDocker(ctx context.Context, runner cloudaws.SSMRunner, instanceID string) (string, error) {
@@ -241,14 +238,14 @@ func (r AWSRunner) snapshot(ctx context.Context, operation store.AWSOperation) e
 	}
 	operation.ResourceType = "snapshot"
 	operation.ProviderResourceID = item.ID
-	return r.Repository.UpdateAWSOperation(ctx, operation.ID, "running", "snapshot", item.ID, "")
+	return r.Repository.UpdateAWSOperation(ctx, operation.OrganizationID, operation.ID, "running", "snapshot", item.ID, "")
 }
-func (r AWSRunner) fail(ctx context.Context, jobID, operationID uuid.UUID, cause error) error {
+func (r AWSRunner) fail(ctx context.Context, organizationID, jobID, operationID uuid.UUID, cause error) error {
 	message := safeError(cause)
 	if operationID != uuid.Nil {
-		_ = r.Repository.UpdateAWSOperation(ctx, operationID, "failed", "", "", message)
+		_ = r.Repository.UpdateAWSOperation(ctx, organizationID, operationID, "failed", "", "", message)
 	}
-	_ = r.Repository.CompleteAWSJob(ctx, jobID, "failed", message)
+	_ = r.Repository.CompleteAWSJob(ctx, organizationID, jobID, "failed", message)
 	return cause
 }
 func actor(operation store.AWSOperation) uuid.UUID {

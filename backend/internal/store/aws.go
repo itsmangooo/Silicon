@@ -328,7 +328,7 @@ func (r Repository) CreateAWSOperation(ctx context.Context, organizationID, acco
 		return AWSOperation{}, err
 	}
 	operation.JobID = &jobID
-	if _, err = tx.Exec(ctx, `UPDATE aws_operations SET job_id=$2 WHERE id=$1`, operation.ID, jobID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE aws_operations SET job_id=$3 WHERE id=$1 AND organization_id=$2`, operation.ID, organizationID, jobID); err != nil {
 		return AWSOperation{}, err
 	}
 	if err = insertAudit(ctx, tx, &organizationID, &actorID, "aws.operation_queued", "aws_operation", &operation.ID, requestID, map[string]any{"operationType": operationType}, ip); err != nil {
@@ -526,7 +526,7 @@ func (r Repository) ApplyBudgetCost(ctx context.Context, organizationID, account
 			item.previous = 0
 		}
 		crossed := budgets.ThresholdsCrossed(item.previous, amount, item.limit, item.thresholds)
-		if _, err = tx.Exec(ctx, `UPDATE aws_budgets SET last_evaluated_amount=$2,last_evaluated_at=now(),updated_at=now() WHERE id=$1`, item.id, amount); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE aws_budgets SET last_evaluated_amount=$3,last_evaluated_at=now(),updated_at=now() WHERE id=$1 AND organization_id=$2`, item.id, organizationID, amount); err != nil {
 			return err
 		}
 		for _, threshold := range crossed {
@@ -549,13 +549,16 @@ func costGroupValues(groups []cloudaws.CostGroup) map[string]float64 {
 	return values
 }
 
-func (r Repository) AWSOperationForUpdate(ctx context.Context, operationID uuid.UUID) (AWSOperation, error) {
+func (r Repository) AWSOperationForUpdate(ctx context.Context, organizationID, operationID uuid.UUID) (AWSOperation, error) {
 	var item AWSOperation
-	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,account_id,job_id,operation_type,status,resource_type,provider_resource_id,request,error,created_by,created_at,updated_at,completed_at FROM aws_operations WHERE id=$1`, operationID).Scan(&item.ID, &item.OrganizationID, &item.AccountID, &item.JobID, &item.OperationType, &item.Status, &item.ResourceType, &item.ProviderResourceID, &item.Request, &item.Error, &item.CreatedBy, &item.CreatedAt, &item.UpdatedAt, &item.CompletedAt)
+	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,account_id,job_id,operation_type,status,resource_type,provider_resource_id,request,error,created_by,created_at,updated_at,completed_at FROM aws_operations WHERE organization_id=$1 AND id=$2`, organizationID, operationID).Scan(&item.ID, &item.OrganizationID, &item.AccountID, &item.JobID, &item.OperationType, &item.Status, &item.ResourceType, &item.ProviderResourceID, &item.Request, &item.Error, &item.CreatedBy, &item.CreatedAt, &item.UpdatedAt, &item.CompletedAt)
 	return item, notFound(err)
 }
-func (r Repository) UpdateAWSOperation(ctx context.Context, operationID uuid.UUID, status, resourceType, providerID, errorMessage string) error {
-	_, err := r.Pool.Exec(ctx, `UPDATE aws_operations SET status=$2,resource_type=COALESCE(NULLIF($3,''),resource_type),provider_resource_id=COALESCE(NULLIF($4,''),provider_resource_id),error=$5,updated_at=now(),completed_at=CASE WHEN $2 IN ('succeeded','failed') THEN now() ELSE completed_at END WHERE id=$1`, operationID, status, resourceType, providerID, errorMessage)
+func (r Repository) UpdateAWSOperation(ctx context.Context, organizationID, operationID uuid.UUID, status, resourceType, providerID, errorMessage string) error {
+	tag, err := r.Pool.Exec(ctx, `UPDATE aws_operations SET status=$3,resource_type=COALESCE(NULLIF($4,''),resource_type),provider_resource_id=COALESCE(NULLIF($5,''),provider_resource_id),error=$6,updated_at=now(),completed_at=CASE WHEN $3 IN ('succeeded','failed') THEN now() ELSE completed_at END WHERE organization_id=$1 AND id=$2`, organizationID, operationID, status, resourceType, providerID, errorMessage)
+	if err == nil && tag.RowsAffected() != 1 {
+		return ErrNotFound
+	}
 	return err
 }
 func (r Repository) ClaimAWSJob(ctx context.Context, workerID string) (uuid.UUID, uuid.UUID, json.RawMessage, string, error) {
@@ -565,12 +568,15 @@ func (r Repository) ClaimAWSJob(ctx context.Context, workerID string) (uuid.UUID
 	err := r.Pool.QueryRow(ctx, `WITH candidate AS (SELECT id FROM jobs WHERE status='queued' AND job_type IN ('provision_aws_machine','terminate_aws_machine','create_aws_snapshot','prepare_aws_machine') AND available_at<=now() ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE jobs j SET status='running',locked_at=now(),locked_by=$1,attempts=attempts+1,updated_at=now() FROM candidate WHERE j.id=candidate.id RETURNING j.id,j.organization_id,j.payload,j.job_type`, workerID).Scan(&jobID, &orgID, &payload, &jobType)
 	return jobID, orgID, payload, jobType, err
 }
-func (r Repository) CompleteAWSJob(ctx context.Context, jobID uuid.UUID, status, errorMessage string) error {
-	_, err := r.Pool.Exec(ctx, `UPDATE jobs SET status=$2,last_error=$3,locked_at=NULL,locked_by=NULL,updated_at=now() WHERE id=$1`, jobID, status, errorMessage)
+func (r Repository) CompleteAWSJob(ctx context.Context, organizationID, jobID uuid.UUID, status, errorMessage string) error {
+	tag, err := r.Pool.Exec(ctx, `UPDATE jobs SET status=$3,last_error=$4,locked_at=NULL,locked_by=NULL,updated_at=now() WHERE organization_id=$1 AND id=$2`, organizationID, jobID, status, errorMessage)
+	if err == nil && tag.RowsAffected() != 1 {
+		return ErrNotFound
+	}
 	return err
 }
 
 func (r Repository) MarkAWSInstanceTerminated(ctx context.Context, organizationID, accountID uuid.UUID, region, instanceID string) error {
-	_, err := r.Pool.Exec(ctx, `WITH changed AS (UPDATE aws_instances SET state='terminated',updated_at=now() WHERE organization_id=$1 AND account_id=$2 AND region=$3 AND provider_instance_id=$4 RETURNING server_id) UPDATE servers SET connection_status='unreachable',health='unhealthy',connection_error='AWS instance was terminated.',updated_at=now() WHERE id IN (SELECT server_id FROM changed)`, organizationID, accountID, region, instanceID)
+	_, err := r.Pool.Exec(ctx, `WITH changed AS (UPDATE aws_instances SET state='terminated',updated_at=now() WHERE organization_id=$1 AND account_id=$2 AND region=$3 AND provider_instance_id=$4 RETURNING server_id) UPDATE servers SET connection_status='unreachable',health='unhealthy',connection_error='AWS instance was terminated.',updated_at=now() WHERE organization_id=$1 AND id IN (SELECT server_id FROM changed)`, organizationID, accountID, region, instanceID)
 	return err
 }

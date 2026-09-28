@@ -178,13 +178,21 @@ func (r Repository) AcceptGitHubPush(ctx context.Context, deliveryID string, ins
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `INSERT INTO github_webhook_deliveries(delivery_id,event_type,installation_id,repository_id,payload_sha256) VALUES($1,'push',$2,$3,$4)`, deliveryID, installationID, repoID, payloadHash); err != nil {
+	var organizationID uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT organization_id FROM github_integrations WHERE installation_id=$1 AND status='connected'`, installationID).Scan(&organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return []Deployment{}, tx.Commit(ctx)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO github_webhook_deliveries(delivery_id,organization_id,event_type,installation_id,repository_id,payload_sha256) VALUES($1,$2,'push',$3,$4,$5)`, deliveryID, organizationID, installationID, repoID, payloadHash); err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {
 			return nil, ErrDuplicateDelivery
 		}
 		return nil, err
 	}
-	rows, err := tx.Query(ctx, `SELECT s.application_id,s.organization_id,s.repository_full_name FROM application_git_sources s JOIN github_integrations g ON g.id=s.integration_id AND g.organization_id=s.organization_id WHERE g.installation_id=$1 AND g.status='connected' AND s.repository_id=$2 AND lower(s.repository_full_name)=lower($3) AND s.branch=$4 AND s.auto_deploy`, installationID, repoID, repoName, branch)
+	rows, err := tx.Query(ctx, `SELECT s.application_id,s.organization_id,s.repository_full_name FROM application_git_sources s JOIN github_integrations g ON g.id=s.integration_id AND g.organization_id=s.organization_id WHERE g.organization_id=$1 AND g.installation_id=$2 AND g.status='connected' AND s.repository_id=$3 AND lower(s.repository_full_name)=lower($4) AND s.branch=$5 AND s.auto_deploy`, organizationID, installationID, repoID, repoName, branch)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +219,7 @@ func (r Repository) AcceptGitHubPush(ctx context.Context, deliveryID string, ins
 			return nil, err
 		}
 		var d Deployment
-		err = tx.QueryRow(ctx, `INSERT INTO deployments(organization_id,application_id,number,source,source_revision,status,repository,branch,commit_sha,trigger_type,external_delivery_id,previous_deployment_id) SELECT $1,a.id,COALESCE((SELECT max(number)+1 FROM deployments WHERE application_id=a.id),1),$3,$4,'queued',$3,$5,$4,'github_push',$6,(SELECT id FROM deployments WHERE application_id=a.id ORDER BY number DESC LIMIT 1) FROM applications a WHERE a.organization_id=$1 AND a.id=$2 RETURNING id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type,external_delivery_id,created_at,updated_at`, m.org, m.app, m.repo, commitSHA, branch, deliveryID).Scan(&d.ID, &d.OrganizationID, &d.ApplicationID, &d.Number, &d.Source, &d.SourceRevision, &d.Image, &d.Status, &d.TriggeredBy, &d.PreviousDeploymentID, &d.Repository, &d.Branch, &d.CommitSHA, &d.TriggerType, &d.ExternalDeliveryID, &d.CreatedAt, &d.UpdatedAt)
+		err = tx.QueryRow(ctx, `INSERT INTO deployments(organization_id,application_id,number,source,source_revision,status,repository,branch,commit_sha,trigger_type,external_delivery_id,previous_deployment_id) SELECT $1,a.id,COALESCE((SELECT max(number)+1 FROM deployments WHERE organization_id=$1 AND application_id=a.id),1),$3,$4,'queued',$3,$5,$4,'github_push',$6,(SELECT id FROM deployments WHERE organization_id=$1 AND application_id=a.id ORDER BY number DESC LIMIT 1) FROM applications a WHERE a.organization_id=$1 AND a.id=$2 RETURNING id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type,external_delivery_id,created_at,updated_at`, m.org, m.app, m.repo, commitSHA, branch, deliveryID).Scan(&d.ID, &d.OrganizationID, &d.ApplicationID, &d.Number, &d.Source, &d.SourceRevision, &d.Image, &d.Status, &d.TriggeredBy, &d.PreviousDeploymentID, &d.Repository, &d.Branch, &d.CommitSHA, &d.TriggerType, &d.ExternalDeliveryID, &d.CreatedAt, &d.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -231,7 +239,7 @@ func (r Repository) AcceptGitHubPush(ctx context.Context, deliveryID string, ins
 	if len(matches) == 0 {
 		status = "ignored"
 	}
-	if _, err = tx.Exec(ctx, `UPDATE github_webhook_deliveries SET status=$2,processed_at=now() WHERE delivery_id=$1`, deliveryID, status); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE github_webhook_deliveries SET status=$3,processed_at=now() WHERE delivery_id=$1 AND organization_id=$2`, deliveryID, organizationID, status); err != nil {
 		return nil, err
 	}
 	return result, tx.Commit(ctx)

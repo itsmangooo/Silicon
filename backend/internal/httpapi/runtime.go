@@ -144,6 +144,10 @@ func (a *API) deleteSecret(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) getRuntime(w http.ResponseWriter, r *http.Request) {
 	organizationID, applicationID := pathUUID(r, "organizationID"), pathUUID(r, "applicationID")
+	if _, err := a.repo.ApplicationByID(r.Context(), organizationID, applicationID); err != nil {
+		a.persistenceError(w, err)
+		return
+	}
 	instance, err := a.repo.CurrentRuntimeInstance(r.Context(), organizationID, applicationID)
 	if errors.Is(err, store.ErrNotFound) {
 		writeJSON(w, http.StatusOK, map[string]any{"instance": nil, "providerAvailable": a.runtime != nil})

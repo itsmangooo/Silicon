@@ -392,6 +392,9 @@ func (r Repository) DeleteProject(ctx context.Context, organizationID, projectID
 }
 
 func (r Repository) ListEnvironments(ctx context.Context, organizationID, projectID uuid.UUID) ([]Environment, error) {
+	if _, err := r.GetProject(ctx, organizationID, projectID); err != nil {
+		return nil, err
+	}
 	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,project_id,name,slug,created_at FROM environments WHERE organization_id=$1 AND project_id=$2 ORDER BY name`, organizationID, projectID)
 	if err != nil {
 		return nil, err
@@ -429,6 +432,13 @@ func (r Repository) CreateEnvironment(ctx context.Context, organizationID, proje
 }
 
 func (r Repository) ListApplications(ctx context.Context, organizationID, environmentID uuid.UUID) ([]Application, error) {
+	var exists bool
+	if err := r.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM environments WHERE organization_id=$1 AND id=$2)`, organizationID, environmentID).Scan(&exists); err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrNotFound
+	}
 	rows, err := r.Pool.Query(ctx, `SELECT id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,server_id,created_at FROM applications WHERE organization_id=$1 AND environment_id=$2 ORDER BY name`, organizationID, environmentID)
 	if err != nil {
 		return nil, err
@@ -483,6 +493,11 @@ func (r Repository) CreateApplication(ctx context.Context, organizationID, envir
 }
 
 func (r Repository) ListDeployments(ctx context.Context, organizationID uuid.UUID, applicationID *uuid.UUID) ([]Deployment, error) {
+	if applicationID != nil {
+		if _, err := r.ApplicationByID(ctx, organizationID, *applicationID); err != nil {
+			return nil, err
+		}
+	}
 	query := `SELECT id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type,external_delivery_id,created_at,updated_at FROM deployments WHERE organization_id=$1`
 	args := []any{organizationID}
 	if applicationID != nil {
@@ -516,7 +531,7 @@ func (r Repository) CreateDeployment(ctx context.Context, organizationID, applic
 		return Deployment{}, err
 	}
 	var item Deployment
-	err = tx.QueryRow(ctx, `INSERT INTO deployments(organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type) SELECT $1,a.id,COALESCE((SELECT max(d.number)+1 FROM deployments d WHERE d.application_id=a.id),1),$3,$4,$5,'queued',$6,(SELECT id FROM deployments d WHERE d.application_id=a.id ORDER BY number DESC LIMIT 1),$3,'',$4,'manual' FROM applications a WHERE a.id=$2 AND a.organization_id=$1 RETURNING id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type,external_delivery_id,created_at,updated_at`, organizationID, applicationID, source, revision, image, actorID).Scan(&item.ID, &item.OrganizationID, &item.ApplicationID, &item.Number, &item.Source, &item.SourceRevision, &item.Image, &item.Status, &item.TriggeredBy, &item.PreviousDeploymentID, &item.Repository, &item.Branch, &item.CommitSHA, &item.TriggerType, &item.ExternalDeliveryID, &item.CreatedAt, &item.UpdatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO deployments(organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type) SELECT $1,a.id,COALESCE((SELECT max(d.number)+1 FROM deployments d WHERE d.organization_id=$1 AND d.application_id=a.id),1),$3,$4,$5,'queued',$6,(SELECT id FROM deployments d WHERE d.organization_id=$1 AND d.application_id=a.id ORDER BY number DESC LIMIT 1),$3,'',$4,'manual' FROM applications a WHERE a.id=$2 AND a.organization_id=$1 RETURNING id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type,external_delivery_id,created_at,updated_at`, organizationID, applicationID, source, revision, image, actorID).Scan(&item.ID, &item.OrganizationID, &item.ApplicationID, &item.Number, &item.Source, &item.SourceRevision, &item.Image, &item.Status, &item.TriggeredBy, &item.PreviousDeploymentID, &item.Repository, &item.Branch, &item.CommitSHA, &item.TriggerType, &item.ExternalDeliveryID, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return Deployment{}, notFound(err)
 	}

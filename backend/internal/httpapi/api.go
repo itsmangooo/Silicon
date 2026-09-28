@@ -411,7 +411,7 @@ func (a *API) deleteProject(w http.ResponseWriter, r *http.Request) {
 func (a *API) listEnvironments(w http.ResponseWriter, r *http.Request) {
 	items, err := a.repo.ListEnvironments(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "projectID"))
 	if err != nil {
-		a.serverError(w, r, err)
+		a.persistenceError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"environments": items})
@@ -443,7 +443,7 @@ func (a *API) createEnvironment(w http.ResponseWriter, r *http.Request) {
 func (a *API) listApplications(w http.ResponseWriter, r *http.Request) {
 	items, err := a.repo.ListApplications(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "environmentID"))
 	if err != nil {
-		a.serverError(w, r, err)
+		a.persistenceError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"applications": items})
@@ -514,7 +514,7 @@ func (a *API) listDeployments(w http.ResponseWriter, r *http.Request) {
 	applicationID := pathUUID(r, "applicationID")
 	items, err := a.repo.ListDeployments(r.Context(), pathUUID(r, "organizationID"), &applicationID)
 	if err != nil {
-		a.serverError(w, r, err)
+		a.persistenceError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"deployments": items})
