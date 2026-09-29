@@ -28,6 +28,14 @@ These previews were captured from the running application at a consistent deskto
 | --- | --- |
 | [![Silicon project detail page](docs/previews/project-detail.png)](docs/previews/project-detail.png) | [![Silicon environments page](docs/previews/environments.png)](docs/previews/environments.png) |
 
+| Environment workspace | Application workspace |
+| --- | --- |
+| [![Silicon environment workspace](docs/previews/environment-detail.png)](docs/previews/environment-detail.png) | [![Silicon application workspace](docs/previews/application-detail.png)](docs/previews/application-detail.png) |
+
+| Deployment detail | |
+| --- | --- |
+| [![Silicon deployment detail](docs/previews/deployment-detail.png)](docs/previews/deployment-detail.png) | |
+
 | Applications | Deployments |
 | --- | --- |
 | [![Silicon applications page](docs/previews/applications.png)](docs/previews/applications.png) | [![Silicon deployments page](docs/previews/deployments.png)](docs/previews/deployments.png) |
@@ -156,10 +164,18 @@ The REST API is rooted at `/api/v1`. Its OpenAPI contract lives at [`backend/ope
 - `/organizations/{organizationID}/projects`
 - `/organizations/{organizationID}/search`
 - `/organizations/{organizationID}/projects/{projectID}/environments`
+- `/organizations/{organizationID}/projects/{projectID}/environment-variables`
+- `/organizations/{organizationID}/projects/{projectID}/secrets`
+- `/organizations/{organizationID}/environments/{environmentID}`
+- `/organizations/{organizationID}/environments/{environmentID}/environment-variables`
+- `/organizations/{organizationID}/environments/{environmentID}/secrets`
 - `/organizations/{organizationID}/environments/{environmentID}/applications`
+- `/organizations/{organizationID}/applications/{applicationID}`
 - `/organizations/{organizationID}/applications/{applicationID}/deployments`
+- `/organizations/{organizationID}/deployments/{deploymentID}`
 - `/organizations/{organizationID}/applications/{applicationID}/environment-variables`
 - `/organizations/{organizationID}/applications/{applicationID}/secrets`
+- `/organizations/{organizationID}/applications/{applicationID}/configuration`
 - `/organizations/{organizationID}/applications/{applicationID}/runtime`
 - `/organizations/{organizationID}/applications/{applicationID}/runtime/logs`
 - `/organizations/{organizationID}/servers`
@@ -193,7 +209,7 @@ Authentication uses an opaque server-side session in an HTTP-only cookie. Unsafe
 Runtime records and control-plane behavior are PostgreSQL-backed. When the local provider is enabled, Docker state—not deployment status—is authoritative for a running workload. Current boundaries are:
 
 - Docker image deployment and exact-revision GitHub Dockerfile builds enter the same persistent job runner and `DockerRuntimeProvider`; local execution requires the explicit `SILICON_LOCAL_DOCKER_ENABLED=true` opt-in;
-- environment variables are readable application configuration; local secrets are AES-256-GCM encrypted, write-only through the API, and require `SILICON_ENCRYPTION_KEY`;
+- environment variables and secrets support project defaults, environment overrides, and application overrides resolved dynamically in that order at deployment time; local secrets are AES-256-GCM encrypted, write-only through the API, and require `SILICON_ENCRYPTION_KEY`;
 - ports are never published implicitly; an IP address and host port must both be configured;
 - runtime inspection, lifecycle actions, bounded historical logs, and bounded live SSE logs operate only on persisted Silicon-managed containers;
 - Linux servers use organization-scoped SSH credentials encrypted at rest; host identity must be explicitly trusted, and remote Docker operations remain typed with no user-facing shell API;

@@ -52,6 +52,22 @@ try {
   await page.goto(`${baseUrl}/settings#updates`, { waitUntil: 'networkidle0' })
   await page.waitForSelector('.update-version-grid')
   await page.screenshot({ path: path.join(outputDirectory, 'settings-updates.png') })
+
+  const previews = [
+    ['/projects', 'projects.png'],
+    ['/projects/project-platform', 'project-detail.png'],
+    ['/environments', 'environments.png'],
+    ['/projects/project-platform/environments/environment-production', 'environment-detail.png'],
+    ['/applications', 'applications.png'],
+    ['/projects/project-platform/applications/app-api', 'application-detail.png'],
+    ['/deployments', 'deployments.png'],
+    ['/deployments/deployment-184', 'deployment-detail.png'],
+  ]
+  for (const [route, filename] of previews) {
+    await page.goto(`${baseUrl}${route}`, { waitUntil: 'networkidle0' })
+    await page.waitForSelector('.section')
+    await page.screenshot({ path: path.join(outputDirectory, filename), fullPage: true })
+  }
 } finally {
   await browser?.close()
   server.kill()

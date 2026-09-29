@@ -140,6 +140,15 @@ h3 { font-size: .9rem; font-weight: 500; }
 .page-header { display: flex; justify-content: space-between; gap: var(--space-5); align-items: flex-start; padding-bottom: var(--space-6); }
 .page-header p { max-width: 740px; margin-bottom: 0; color: var(--text-muted); font-size: .9rem; }
 .page-actions, .section-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.workspace-nav { position: sticky; top: 64px; z-index: 10; display: flex; gap: var(--space-5); overflow-x: auto; border-bottom: 1px solid var(--border); background: var(--bg); }
+.workspace-nav a { flex: 0 0 auto; padding: var(--space-3) 0; color: var(--text-muted); font-size: .74rem; font-weight: 500; }
+.workspace-nav a:hover, .workspace-nav a:focus-visible { color: var(--text); text-decoration: none; }
+.workspace-nav + .notice { margin-top: var(--space-5); }
+.resource-group + .resource-group { margin-top: var(--space-6); }
+.resource-group > h3 { margin: 0 0 var(--space-3); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
+.filter-row { display: flex; align-items: end; flex-wrap: wrap; gap: var(--space-3); }
+.filter-row .field { min-width: 160px; }
+.table-filters { margin-bottom: var(--space-5); padding-bottom: var(--space-4); border-bottom: 1px solid var(--border); }
 .section { margin-top: var(--space-7); }
 .page-header + .section, .page-header + .notice, .page-header + .notice + .section { margin-top: 0; }
 .section-header { min-height: 40px; display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
@@ -245,6 +254,11 @@ tbody tr:hover { background: rgba(255,255,255,.018); }
 .split-tables { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); }
 .split-tables h3, .table-subheading { margin: 0 0 var(--space-3); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
 .table-subheading { margin-top: var(--space-6); }
+.configuration-editor td svg { margin-left: var(--space-2); vertical-align: middle; color: var(--text-muted); }
+.event-timeline { list-style: none; margin: 0; padding: 0; }
+.event-timeline li { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: var(--space-4); padding: var(--space-4) 0; border-bottom: 1px solid var(--border); }
+.event-timeline strong { font-size: .8rem; font-weight: 500; }
+.event-timeline p { margin: var(--space-1) 0 0; color: var(--text-muted); font-size: .72rem; }
 
 .dialog-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: var(--space-4); background: rgba(0,0,0,.74); }
 .dialog { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; border: 1px solid var(--border-strong); padding: var(--space-5); background: var(--bg); }

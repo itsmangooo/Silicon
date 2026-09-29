@@ -20,7 +20,7 @@ Organization
             └── Deployment
 ```
 
-Projects group related work. Environments provide configuration boundaries. Applications describe deployable workloads. Deployments preserve immutable history, trigger source, revision, and state transitions.
+Projects are the primary workload workspace. Environments provide configuration boundaries. Applications describe deployable workloads. Deployments preserve immutable history, trigger source, revision, and state transitions. Global environment, application, and deployment pages remain cross-project operational inventories.
 
 ## Servers and providers
 
@@ -30,7 +30,7 @@ GitHub, Cloudflare, AWS, runtime, routing, secrets, logs, and server connections
 
 ## Configuration and secrets
 
-Environment variables are readable application configuration. Secrets are separate, encrypted at rest, write-only through ordinary APIs, omitted from search, and redacted from logs and audit metadata.
+Project defaults, environment overrides, and application overrides are resolved with application > environment > project precedence. Environment variables are readable configuration. Secrets follow the same hierarchy but stay separate, encrypted at rest, write-only through ordinary APIs, omitted from search, and redacted from logs and audit metadata.
 
 ## Honest operational state
 

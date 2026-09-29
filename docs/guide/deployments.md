@@ -18,6 +18,8 @@ Per-application sequencing prevents an older queued deployment from replacing a 
 
 Docker image and exact-revision GitHub Dockerfile work enter the same PostgreSQL-backed job pipeline. A final result comes from the runtime operation; webhook acceptance alone is not reported as a successful deployment.
 
+Start a manual deployment from the application workspace. The global Deployments page is a filtered history across projects and environments. A deployment detail page shows the selected target, exact source revision, timestamps, and ordered persisted events. Runtime logs remain separate because they describe the current container rather than the historical deployment state machine.
+
 ## Troubleshooting a deployment
 
 Check the deployment event sequence first, then runtime status and bounded logs. Confirm that the application has a selected server, explicit publish configuration, and a source supported by the current runtime.

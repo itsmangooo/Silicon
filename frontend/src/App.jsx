@@ -6,9 +6,9 @@ import { AppLayout } from './components/AppLayout.jsx'
 import { LoginPage, RegisterPage } from './pages/AuthPages.jsx'
 import { DashboardPage } from './pages/DashboardPage.jsx'
 import { ProjectsPage, ProjectDetailPage } from './pages/ProjectsPage.jsx'
-import { EnvironmentsPage } from './pages/EnvironmentsPage.jsx'
-import { ApplicationsPage } from './pages/ApplicationsPage.jsx'
-import { DeploymentsPage } from './pages/DeploymentsPage.jsx'
+import { EnvironmentsPage, EnvironmentDetailPage } from './pages/EnvironmentsPage.jsx'
+import { ApplicationsPage, ApplicationDetailPage } from './pages/ApplicationsPage.jsx'
+import { DeploymentsPage, DeploymentDetailPage } from './pages/DeploymentsPage.jsx'
 import { ServersPage } from './pages/ServersPage.jsx'
 import { MembersPage } from './pages/MembersPage.jsx'
 import { AccessPage } from './pages/AccessPage.jsx'
@@ -41,9 +41,14 @@ export function App() {
         <Route index element={<DashboardPage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="projects/:projectId/environments/:environmentId" element={<EnvironmentDetailPage />} />
+        <Route path="projects/:projectId/applications/:applicationId" element={<ApplicationDetailPage />} />
         <Route path="environments" element={<EnvironmentsPage />} />
+        <Route path="environments/:environmentId" element={<EnvironmentDetailPage />} />
         <Route path="applications" element={<ApplicationsPage />} />
+        <Route path="applications/:applicationId" element={<ApplicationDetailPage />} />
         <Route path="deployments" element={<DeploymentsPage />} />
+        <Route path="deployments/:deploymentId" element={<DeploymentDetailPage />} />
         <Route path="servers" element={<ServersPage />} />
         <Route path="members" element={<MembersPage />} />
         <Route path="access" element={<AccessPage />} />
