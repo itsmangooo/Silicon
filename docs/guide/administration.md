@@ -22,4 +22,6 @@ Use Audit to review authentication, membership, role, project, deployment, secre
 
 ## Backups and updates
 
-Back up PostgreSQL and the configured secrets before upgrades. The production installer preserves existing configuration and generated credentials. Review migrations and release notes before updating a critical environment.
+Back up PostgreSQL and the configured secrets before upgrades. **Settings → Updates** shows the compiled installed version/commit, the newest stable `vX.Y.Z` GitHub Release, and its notes. Only an installation-level system administrator can start an update; organization roles remain tenant-scoped and cannot replace Silicon itself.
+
+The production updater verifies the exact release and tag, validates the existing configuration/data layout and Compose file, builds before replacement, runs normal forward migrations, replaces the backend/frontend, and waits for health. The panel reconnects through the short restart. Updates never follow `main`, regenerate secrets, reset PostgreSQL, or remove data volumes. Review migrations and release notes before updating a critical environment; the safe update path does not replace tested backups.

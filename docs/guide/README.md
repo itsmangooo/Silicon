@@ -33,4 +33,8 @@ The panel route for each article is stable and includes generated heading anchor
 | --- | --- |
 | [![Silicon in-panel documentation](../previews/documentation.png)](../previews/documentation.png) | [![Silicon global search](../previews/global-search.png)](../previews/global-search.png) |
 
+| Safe tagged updates |
+| --- |
+| [![Silicon safe tagged update settings](../previews/settings-updates.png)](../previews/settings-updates.png) |
+
 The screenshots use isolated `example.test` preview fixtures. The production application does not seed those identities or resources.

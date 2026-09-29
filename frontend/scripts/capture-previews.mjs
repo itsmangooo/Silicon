@@ -48,6 +48,10 @@ try {
   await page.type('.command-input-row input', 'server')
   await new Promise((resolve) => setTimeout(resolve, 350))
   await page.screenshot({ path: path.join(outputDirectory, 'global-search.png') })
+
+  await page.goto(`${baseUrl}/settings#updates`, { waitUntil: 'networkidle0' })
+  await page.waitForSelector('.update-version-grid')
+  await page.screenshot({ path: path.join(outputDirectory, 'settings-updates.png') })
 } finally {
   await browser?.close()
   server.kill()

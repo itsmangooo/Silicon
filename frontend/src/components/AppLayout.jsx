@@ -24,6 +24,8 @@ import {
 import { useAuth } from '../state/AuthContext.jsx'
 import { TenantScope, useWorkspace } from '../state/WorkspaceContext.jsx'
 import { GlobalSearch } from './GlobalSearch.jsx'
+import { Brand } from './Brand.jsx'
+import { UpdateIndicator } from './UpdateIndicator.jsx'
 
 const groups = [
   ['PLATFORM', [['Projects', '/projects', FolderIcon], ['Environments', '/environments', StackIcon], ['Applications', '/applications', CubeIcon], ['Deployments', '/deployments', RocketLaunchIcon], ['Servers', '/servers', HardDrivesIcon]]],
@@ -47,7 +49,7 @@ export function AppLayout() {
     <div className="shell">
       <a className="skip-link" href="#main">Skip to content</a>
       <aside className={`sidebar ${open ? 'sidebar-open' : ''}`} aria-label="Primary navigation">
-        <div className="brand"><span className="brand-mark">SI</span><span>SILICON</span></div>
+        <Brand />
         <label className="sidebar-organization">
           <span>Organization</span>
           <span className="sidebar-select"><BuildingsIcon size={16} aria-hidden="true" /><select value={organizationId} onChange={(event) => selectOrganization(event.target.value)} disabled={!organizations.length}>
@@ -70,6 +72,7 @@ export function AppLayout() {
         <header className="topbar">
           <button className="menu-button" aria-label="Open navigation" onClick={() => setOpen(true)}><ListIcon size={19} aria-hidden="true" /><span>Menu</span></button>
           <GlobalSearch />
+          <UpdateIndicator />
           <div className="user-menu"><span>{user.displayName}</span><button className="button ghost compact" onClick={logout}><SignOutIcon size={16} aria-hidden="true" /><span>Sign out</span></button></div>
         </header>
         <main id="main" className="main" tabIndex="-1">

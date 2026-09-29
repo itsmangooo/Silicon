@@ -20,6 +20,10 @@ These previews were captured from the running application at a consistent deskto
 | --- | --- |
 | [![Silicon in-panel documentation](docs/previews/documentation.png)](docs/previews/documentation.png) | [![Silicon global search](docs/previews/global-search.png)](docs/previews/global-search.png) |
 
+| Safe tagged updates |
+| --- |
+| [![Silicon safe tagged update settings](docs/previews/settings-updates.png)](docs/previews/settings-updates.png) |
+
 | Project detail | Environments |
 | --- | --- |
 | [![Silicon project detail page](docs/previews/project-detail.png)](docs/previews/project-detail.png) | [![Silicon environments page](docs/previews/environments.png)](docs/previews/environments.png) |
@@ -112,6 +116,11 @@ npm run dev
 Open `http://localhost:5173`, register a local account, create an organization, then create real platform records. Migrations run transactionally at backend startup when `SILICON_AUTO_MIGRATE=true`.
 
 The authenticated interface includes an in-panel [user guide](docs/guide/README.md). Press `Ctrl+K` on Windows/Linux or `Command+K` on macOS to search registered pages, commands, documentation, and permitted resources in the active organization.
+
+Production installations also expose **Settings → Updates**. Silicon compares
+the compiled installed version with stable tagged GitHub Releases, shows release
+notes, and lets an installation administrator apply an exact newer tag through
+the preservation-safe installer flow. It never updates production from `main`.
 
 To run the full Compose stack instead:
 
