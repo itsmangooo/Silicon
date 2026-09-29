@@ -281,6 +281,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	if updatedServer["publicAddress"] != "203.0.113.11" || updatedServer["credentialConfigured"] != false {
 		t.Fatalf("server connection update not reflected: %#v", updatedServer)
 	}
+	owner.post("/organizations/"+orgA+"/servers/"+serverID+"/check", map[string]any{}, http.StatusOK)
 	viewer.put("/organizations/"+orgB+"/servers/"+serverID+"/connection", map[string]any{"connectionType": "local", "host": "localhost"}, http.StatusNotFound)
 
 	project := owner.post("/organizations/"+orgA+"/projects", map[string]any{"name": "Backend", "slug": "backend", "description": "API workloads"}, http.StatusCreated)
@@ -293,6 +294,29 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	owner.delete("/organizations/"+orgA+"/projects/"+stringField(t, temporary, "id"), http.StatusNoContent)
 	environment := owner.post("/organizations/"+orgA+"/projects/"+projectID+"/environments", map[string]any{"name": "production", "slug": "production"}, http.StatusCreated)
 	environmentID := stringField(t, environment, "id")
+	applicationPath := "/organizations/" + orgA + "/environments/" + environmentID + "/applications"
+	assertApplicationValidation := func(name string, input map[string]any, message string) {
+		t.Helper()
+		response := owner.post(applicationPath, input, http.StatusUnprocessableEntity)
+		if response["message"] != message {
+			t.Fatalf("%s validation=%q want %q", name, response["message"], message)
+		}
+	}
+	assertApplicationValidation("published without host", map[string]any{"name": "invalid-binding", "sourceType": "git_dockerfile", "internalPort": 3000, "publishedPort": 8080}, "Host address is required when publishing a host port.")
+	assertApplicationValidation("host without published", map[string]any{"name": "invalid-binding", "sourceType": "git_dockerfile", "internalPort": 3000, "hostAddress": "127.0.0.1"}, "Published host port is required when a host address is provided.")
+	assertApplicationValidation("published without internal", map[string]any{"name": "invalid-binding", "sourceType": "git_dockerfile", "hostAddress": "127.0.0.1", "publishedPort": 8080}, "Published port requires an internal container port.")
+	assertApplicationValidation("invalid host", map[string]any{"name": "invalid-binding", "sourceType": "git_dockerfile", "internalPort": 3000, "hostAddress": "localhost", "publishedPort": 8080}, "Host address must be a valid IP address.")
+	assertApplicationValidation("docker image required", map[string]any{"name": "missing-image", "sourceType": "docker_image"}, "Docker image applications require an image reference.")
+	assertApplicationValidation("compose unsupported", map[string]any{"name": "compose", "sourceType": "compose"}, "Docker Compose applications are not supported yet.")
+	unreachableServer := owner.post("/organizations/"+orgA+"/servers", map[string]any{"name": "unreachable", "connectionType": "local", "connectivityType": "private"}, http.StatusCreated)
+	assertApplicationValidation("unreachable target", map[string]any{"name": "bad-target", "sourceType": "git_dockerfile", "serverId": stringField(t, unreachableServer, "id")}, "Selected server is not connected.")
+	boundApplication := owner.post(applicationPath, map[string]any{"name": "loopback", "sourceType": "git_dockerfile", "internalPort": 3000, "hostAddress": "127.0.0.1", "publishedPort": 8080}, http.StatusCreated)
+	owner.delete("/organizations/"+orgA+"/applications/"+stringField(t, boundApplication, "id"), http.StatusNoContent)
+	apiServer.cfg.LocalDockerEnabled = false
+	assertApplicationValidation("local runtime disabled", map[string]any{"name": "no-target", "sourceType": "git_dockerfile"}, "Local Docker runtime is disabled. Select a connected server.")
+	remoteApplication := owner.post(applicationPath, map[string]any{"name": "remote-target", "sourceType": "git_dockerfile", "serverId": serverID}, http.StatusCreated)
+	owner.delete("/organizations/"+orgA+"/applications/"+stringField(t, remoteApplication, "id"), http.StatusNoContent)
+	apiServer.cfg.LocalDockerEnabled = true
 	application := owner.post("/organizations/"+orgA+"/environments/"+environmentID+"/applications", map[string]any{"name": "api", "sourceType": "docker_image", "image": "example/api:1", "internalPort": 3000}, http.StatusCreated)
 	applicationID := stringField(t, application, "id")
 	owner.put("/organizations/"+orgA+"/applications/"+applicationID+"/server", map[string]any{"serverId": serverID}, http.StatusOK)

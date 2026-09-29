@@ -50,7 +50,7 @@ describe('project-first workflow', () => {
     expect(within(dialog).queryByLabelText('Project')).not.toBeInTheDocument()
     expect(within(dialog).getByLabelText('Environment')).toHaveTextContent('Production')
     fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'backend' } })
-    fireEvent.change(within(dialog).getByLabelText('Image'), { target: { value: 'example/backend:1' } })
+    fireEvent.change(within(dialog).getByLabelText(/^Image/), { target: { value: 'example/backend:1' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create application' }))
     await waitFor(() => expect(apiMock).toHaveBeenCalledWith('/organizations/org-preview/environments/environment-production/applications', expect.objectContaining({ method: 'POST', body: expect.objectContaining({ name: 'backend' }) })))
   })

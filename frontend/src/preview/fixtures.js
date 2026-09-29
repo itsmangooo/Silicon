@@ -57,7 +57,7 @@ export function previewResponse(path, options = {}) {
   if (path === `${root}/projects`) return { projects: previewFixtures.projects }
   if (path === `${root}/applications`) return { applications: previewFixtures.applications }
   if (path === `${root}/deployments`) return { deployments: previewFixtures.deployments }
-  if (path === `${root}/servers`) return { servers: previewFixtures.servers }
+  if (path === `${root}/servers`) return { servers: previewFixtures.servers, localRuntimeAvailable: true }
   if (path === `${root}/domains`) return { domains: previewFixtures.domains }
   const projectMatch = path.match(new RegExp(`^${root}/projects/([^/]+)$`))
   if (projectMatch) return previewFixtures.projects.find((item) => item.id === projectMatch[1])

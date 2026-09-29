@@ -566,20 +566,80 @@ func readApplicationInput(w http.ResponseWriter, r *http.Request) (applicationIn
 	}
 	if input.HostAddress != nil {
 		value := strings.TrimSpace(*input.HostAddress)
-		input.HostAddress = &value
+		if value == "" {
+			input.HostAddress = nil
+		} else {
+			input.HostAddress = &value
+		}
 	}
-	portsInvalid := input.InternalPort != nil && (*input.InternalPort < 1 || *input.InternalPort > 65535) || input.PublishedPort != nil && (*input.PublishedPort < 1 || *input.PublishedPort > 65535)
-	bindingInvalid := (input.HostAddress == nil) != (input.PublishedPort == nil) || input.PublishedPort != nil && input.InternalPort == nil
-	imageInvalid := input.Image != nil && (strings.HasPrefix(*input.Image, "-") || strings.ContainsAny(*input.Image, " \t\r\n\x00"))
-	if input.Name == "" || len(input.Name) > 120 || !oneOf(input.SourceType, "docker_image", "git_dockerfile", "compose") || portsInvalid || bindingInvalid || imageInvalid || input.HostAddress != nil && net.ParseIP(*input.HostAddress) == nil {
-		validation(w, "Provide a valid application name, source type, and internal port.")
-		return input, false
-	}
-	if input.SourceType == "docker_image" && (input.Image == nil || strings.TrimSpace(*input.Image) == "") {
-		validation(w, "Docker image applications require an image reference.")
+	if message := validateApplicationInput(input); message != "" {
+		validation(w, message)
 		return input, false
 	}
 	return input, true
+}
+
+func validateApplicationInput(input applicationInputPayload) string {
+	switch {
+	case input.Name == "":
+		return "Application name is required."
+	case len(input.Name) > 120:
+		return "Application name must be 120 characters or fewer."
+	case input.SourceType == "compose":
+		return "Docker Compose applications are not supported yet."
+	case !oneOf(input.SourceType, "docker_image", "git_dockerfile"):
+		return "Source type must be docker_image or git_dockerfile."
+	case input.SourceType == "docker_image" && (input.Image == nil || *input.Image == ""):
+		return "Docker image applications require an image reference."
+	case input.Image != nil && (len(*input.Image) > 500 || strings.HasPrefix(*input.Image, "-") || strings.ContainsAny(*input.Image, " \t\r\n\x00")):
+		return "Image reference is invalid."
+	case input.InternalPort != nil && (*input.InternalPort < 1 || *input.InternalPort > 65535):
+		return "Internal port must be between 1 and 65535."
+	case input.PublishedPort != nil && (*input.PublishedPort < 1 || *input.PublishedPort > 65535):
+		return "Published port must be between 1 and 65535."
+	case input.PublishedPort != nil && input.InternalPort == nil:
+		return "Published port requires an internal container port."
+	case input.PublishedPort != nil && input.HostAddress == nil:
+		return "Host address is required when publishing a host port."
+	case input.HostAddress != nil && input.PublishedPort == nil:
+		return "Published host port is required when a host address is provided."
+	case input.HostAddress != nil && net.ParseIP(*input.HostAddress) == nil:
+		return "Host address must be a valid IP address."
+	default:
+		return ""
+	}
+}
+
+func (a *API) applicationTargetAvailable(w http.ResponseWriter, r *http.Request, organizationID uuid.UUID, serverID *uuid.UUID) bool {
+	if serverID == nil {
+		if !a.cfg.LocalDockerEnabled {
+			validation(w, "Local Docker runtime is disabled. Select a connected server.")
+			return false
+		}
+		return true
+	}
+	server, err := a.repo.ServerByID(r.Context(), organizationID, *serverID)
+	if err != nil {
+		a.persistenceError(w, err)
+		return false
+	}
+	if server.ConnectionStatus == "docker_unavailable" {
+		validation(w, "Selected server does not have an available Docker runtime.")
+		return false
+	}
+	if server.ConnectionStatus != "connected" {
+		validation(w, "Selected server is not connected.")
+		return false
+	}
+	if !server.DockerAvailable {
+		validation(w, "Selected server does not have an available Docker runtime.")
+		return false
+	}
+	return true
+}
+
+func sameUUID(left, right *uuid.UUID) bool {
+	return left == nil && right == nil || left != nil && right != nil && *left == *right
 }
 
 func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
@@ -588,6 +648,9 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	orgID := pathUUID(r, "organizationID")
+	if !a.applicationTargetAvailable(w, r, orgID, input.ServerID) {
+		return
+	}
 	item, err := a.repo.CreateApplication(r.Context(), orgID, pathUUID(r, "environmentID"), currentUser(r.Context()).ID, input.Name, input.SourceType, input.Image, input.InternalPort, input.HostAddress, input.PublishedPort, input.ServerID, requestID(r.Context()), clientIP(r))
 	if err != nil {
 		a.persistenceError(w, err)
@@ -610,7 +673,16 @@ func (a *API) updateApplication(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	item, err := a.repo.UpdateApplication(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "applicationID"), currentUser(r.Context()).ID, input.Name, input.SourceType, input.Image, input.InternalPort, input.HostAddress, input.PublishedPort, input.ServerID, requestID(r.Context()), clientIP(r))
+	organizationID, applicationID := pathUUID(r, "organizationID"), pathUUID(r, "applicationID")
+	current, err := a.repo.ApplicationByID(r.Context(), organizationID, applicationID)
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	if !sameUUID(current.ServerID, input.ServerID) && !a.applicationTargetAvailable(w, r, organizationID, input.ServerID) {
+		return
+	}
+	item, err := a.repo.UpdateApplication(r.Context(), organizationID, applicationID, currentUser(r.Context()).ID, input.Name, input.SourceType, input.Image, input.InternalPort, input.HostAddress, input.PublishedPort, input.ServerID, requestID(r.Context()), clientIP(r))
 	if err != nil {
 		a.persistenceError(w, err)
 		return
@@ -707,7 +779,7 @@ func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"servers": items})
+	writeJSON(w, http.StatusOK, map[string]any{"servers": items, "localRuntimeAvailable": a.cfg.LocalDockerEnabled})
 }
 
 func (a *API) createServer(w http.ResponseWriter, r *http.Request) {

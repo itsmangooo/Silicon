@@ -609,7 +609,7 @@ paths:
       tags: [Servers]
       summary: List server inventory records
       responses:
-        '200': {description: Servers, content: {application/json: {schema: {type: object, properties: {servers: {type: array, items: {$ref: '#/components/schemas/Server'}}}}}}}
+        '200': {description: Servers and local runtime availability, content: {application/json: {schema: {type: object, required: [servers, localRuntimeAvailable], properties: {servers: {type: array, items: {$ref: '#/components/schemas/Server'}}, localRuntimeAvailable: {type: boolean}}}}}}
     post:
       tags: [Servers]
       summary: Register a server inventory record
@@ -1149,7 +1149,7 @@ components:
       required: [name]
       properties:
         name: {type: string, minLength: 1, maxLength: 120}
-        sourceType: {type: string, enum: [docker_image, git_dockerfile, compose], default: docker_image}
+        sourceType: {type: string, enum: [docker_image, git_dockerfile], default: docker_image, description: Docker Compose workloads are not supported}
         image: {type: string, maxLength: 500}
         internalPort: {type: integer, minimum: 1, maximum: 65535}
         hostAddress: {type: string, description: Explicit IPv4 or IPv6 bind address; omit to publish no host port}

@@ -127,7 +127,16 @@ func (a *API) setApplicationServer(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	item, err := a.repo.SetApplicationServer(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "applicationID"), currentUser(r.Context()).ID, input.ServerID, requestID(r.Context()), clientIP(r))
+	organizationID, applicationID := pathUUID(r, "organizationID"), pathUUID(r, "applicationID")
+	application, err := a.repo.ApplicationByID(r.Context(), organizationID, applicationID)
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	if !sameUUID(application.ServerID, input.ServerID) && !a.applicationTargetAvailable(w, r, organizationID, input.ServerID) {
+		return
+	}
+	item, err := a.repo.SetApplicationServer(r.Context(), organizationID, applicationID, currentUser(r.Context()).ID, input.ServerID, requestID(r.Context()), clientIP(r))
 	if err != nil {
 		a.persistenceError(w, err)
 		return
