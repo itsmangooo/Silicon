@@ -61,21 +61,25 @@ func TestAgentSchemaMigrationPreservesServer(t *testing.T) {
 	if err = pool.QueryRow(ctx, `INSERT INTO servers(organization_id,name,hostname,connection_status) VALUES($1,'legacy','legacy.internal','connected') RETURNING id`, organizationID).Scan(&serverID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(ctx, `
-		INSERT INTO secrets(organization_id,environment_id,application_id,name,encrypted_value) VALUES($1,$2,$3,'DATABASE_PASSWORD',decode('010203','hex'));
-		INSERT INTO application_environment_variables(organization_id,environment_id,application_id,name,value) VALUES($1,$2,$3,'LOG_LEVEL','info');
-		INSERT INTO runtime_instances(organization_id,application_id,deployment_id,provider,external_id,image,state,health,container_port) VALUES($1,$3,$4,'docker','container-preserved','registry.example/api:1','running','healthy',3000);
-		INSERT INTO domains(organization_id,environment_id,application_id,hostname,target_port) VALUES($1,$2,$3,'api.example.test',3000);
-	`, organizationID, environmentID, applicationID, deploymentID); err != nil {
+	if _, err = pool.Exec(ctx, `INSERT INTO secrets(organization_id,environment_id,application_id,name,encrypted_value) VALUES($1,$2,$3,'DATABASE_PASSWORD',decode('010203','hex'))`, organizationID, environmentID, applicationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO application_environment_variables(organization_id,environment_id,application_id,name,value) VALUES($1,$2,$3,'LOG_LEVEL','info')`, organizationID, environmentID, applicationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO runtime_instances(organization_id,application_id,deployment_id,provider,external_id,image,state,health,container_port) VALUES($1,$2,$3,'docker','container-preserved','registry.example/api:1','running','healthy',3000)`, organizationID, applicationID, deploymentID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO domains(organization_id,environment_id,application_id,hostname,target_port) VALUES($1,$2,$3,'api.example.test',3000)`, organizationID, environmentID, applicationID); err != nil {
 		t.Fatal(err)
 	}
 	if err = pool.QueryRow(ctx, `INSERT INTO github_integrations(organization_id,installation_id,account_login) VALUES($1,42,'migration-test') RETURNING id`, organizationID).Scan(&githubIntegrationID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(ctx, `
-		INSERT INTO application_git_sources(application_id,organization_id,integration_id,repository_id,repository_full_name,branch,auto_deploy) VALUES($1,$2,$3,99,'example/preserved','main',true);
-		INSERT INTO cloudflare_integrations(organization_id,account_id,encrypted_api_token) VALUES($2,'account-preserved',decode('040506','hex'));
-	`, applicationID, organizationID, githubIntegrationID); err != nil {
+	if _, err = pool.Exec(ctx, `INSERT INTO application_git_sources(application_id,organization_id,integration_id,repository_id,repository_full_name,branch,auto_deploy) VALUES($1,$2,$3,99,'example/preserved','main',true)`, applicationID, organizationID, githubIntegrationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO cloudflare_integrations(organization_id,account_id,encrypted_api_token) VALUES($1,'account-preserved',decode('040506','hex'))`, organizationID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = pool.Exec(ctx, `INSERT INTO agent_enrollment_tokens(organization_id,server_id,token_hash,expires_at) VALUES($1,$2,'legacy-token',now()+interval '1 hour')`, organizationID, serverID); err != nil {
