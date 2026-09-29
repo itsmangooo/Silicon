@@ -18,11 +18,15 @@ type EnvironmentVariable struct {
 }
 
 type SecretMetadata struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	Provider  string    `json:"provider"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID            uuid.UUID  `json:"id"`
+	Name          string     `json:"name"`
+	Provider      string     `json:"provider"`
+	ProjectID     *uuid.UUID `json:"projectId,omitempty"`
+	EnvironmentID *uuid.UUID `json:"environmentId,omitempty"`
+	ApplicationID *uuid.UUID `json:"applicationId,omitempty"`
+	Scope         string     `json:"scope"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
 }
 
 type RuntimeInstance struct {
@@ -107,7 +111,7 @@ func (r Repository) ListSecretMetadata(ctx context.Context, organizationID, appl
 	if _, err := r.ApplicationByID(ctx, organizationID, applicationID); err != nil {
 		return nil, err
 	}
-	rows, err := r.Pool.Query(ctx, `SELECT id,name,provider,created_at,updated_at FROM secrets WHERE organization_id=$1 AND application_id=$2 ORDER BY name`, organizationID, applicationID)
+	rows, err := r.Pool.Query(ctx, `SELECT id,name,provider,project_id,environment_id,application_id,'application',created_at,updated_at FROM secrets WHERE organization_id=$1 AND application_id=$2 ORDER BY name`, organizationID, applicationID)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +119,7 @@ func (r Repository) ListSecretMetadata(ctx context.Context, organizationID, appl
 	items := []SecretMetadata{}
 	for rows.Next() {
 		var item SecretMetadata
-		if err := rows.Scan(&item.ID, &item.Name, &item.Provider, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Provider, &item.ProjectID, &item.EnvironmentID, &item.ApplicationID, &item.Scope, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

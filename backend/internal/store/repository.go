@@ -15,7 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrNotFound = errors.New("record not found")
+var (
+	ErrNotFound = errors.New("record not found")
+	ErrConflict = errors.New("resource has dependent records")
+)
 
 type Repository struct{ Pool *pgxpool.Pool }
 
@@ -97,6 +100,21 @@ type Deployment struct {
 	ExternalDeliveryID   *string    `json:"githubDeliveryId,omitempty"`
 	CreatedAt            time.Time  `json:"createdAt"`
 	UpdatedAt            time.Time  `json:"updatedAt"`
+	StartedAt            *time.Time `json:"startedAt"`
+	FinishedAt           *time.Time `json:"finishedAt"`
+}
+
+type DeploymentEvent struct {
+	ID         int64     `json:"id"`
+	FromStatus *string   `json:"fromStatus"`
+	ToStatus   string    `json:"toStatus"`
+	Message    string    `json:"message"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+type DeploymentDetail struct {
+	Deployment
+	Events []DeploymentEvent `json:"events"`
 }
 
 type Server struct {
@@ -449,6 +467,55 @@ func (r Repository) CreateEnvironment(ctx context.Context, organizationID, proje
 	return item, nil
 }
 
+func (r Repository) GetEnvironment(ctx context.Context, organizationID, environmentID uuid.UUID) (Environment, error) {
+	var item Environment
+	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,project_id,name,slug,created_at FROM environments WHERE organization_id=$1 AND id=$2`, organizationID, environmentID).Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.Name, &item.Slug, &item.CreatedAt)
+	return item, notFound(err)
+}
+
+func (r Repository) UpdateEnvironment(ctx context.Context, organizationID, environmentID, actorID uuid.UUID, name, slug string, requestID uuid.UUID, ip net.IP) (Environment, error) {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return Environment{}, err
+	}
+	defer tx.Rollback(ctx)
+	var item Environment
+	err = tx.QueryRow(ctx, `UPDATE environments SET name=$3,slug=$4,updated_at=now() WHERE organization_id=$1 AND id=$2 RETURNING id,organization_id,project_id,name,slug,created_at`, organizationID, environmentID, name, slug).Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.Name, &item.Slug, &item.CreatedAt)
+	if err != nil {
+		return Environment{}, notFound(err)
+	}
+	if err = insertAudit(ctx, tx, &organizationID, &actorID, "environment.updated", "environment", &environmentID, requestID, map[string]any{"name": name}, ip); err != nil {
+		return Environment{}, err
+	}
+	return item, tx.Commit(ctx)
+}
+
+func (r Repository) DeleteEnvironment(ctx context.Context, organizationID, environmentID, actorID, requestID uuid.UUID, ip net.IP) error {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var applications int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM applications WHERE organization_id=$1 AND environment_id=$2`, organizationID, environmentID).Scan(&applications); err != nil {
+		return err
+	}
+	if applications > 0 {
+		return ErrConflict
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM environments WHERE organization_id=$1 AND id=$2`, organizationID, environmentID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrNotFound
+	}
+	if err = insertAudit(ctx, tx, &organizationID, &actorID, "environment.deleted", "environment", &environmentID, requestID, nil, ip); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (r Repository) ListApplications(ctx context.Context, organizationID, environmentID uuid.UUID) ([]Application, error) {
 	var exists bool
 	if err := r.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM environments WHERE organization_id=$1 AND id=$2)`, organizationID, environmentID).Scan(&exists); err != nil {
@@ -510,13 +577,49 @@ func (r Repository) CreateApplication(ctx context.Context, organizationID, envir
 	return item, nil
 }
 
+func (r Repository) UpdateApplication(ctx context.Context, organizationID, applicationID, actorID uuid.UUID, name, sourceType string, image *string, internalPort *int, hostAddress *string, publishedPort *int, serverID *uuid.UUID, requestID uuid.UUID, ip net.IP) (Application, error) {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return Application{}, err
+	}
+	defer tx.Rollback(ctx)
+	var item Application
+	err = tx.QueryRow(ctx, `UPDATE applications a SET name=$3,source_type=$4,image=$5,internal_port=$6,host_bind_address=$7,published_port=$8,server_id=$9,updated_at=now() WHERE a.organization_id=$1 AND a.id=$2 AND ($9::uuid IS NULL OR EXISTS(SELECT 1 FROM servers s WHERE s.organization_id=$1 AND s.id=$9)) RETURNING id,organization_id,project_id,environment_id,name,source_type,image,internal_port,host(host_bind_address),published_port,server_id,created_at`, organizationID, applicationID, name, sourceType, image, internalPort, hostAddress, publishedPort, serverID).Scan(&item.ID, &item.OrganizationID, &item.ProjectID, &item.EnvironmentID, &item.Name, &item.SourceType, &item.Image, &item.InternalPort, &item.HostAddress, &item.PublishedPort, &item.ServerID, &item.CreatedAt)
+	if err != nil {
+		return Application{}, notFound(err)
+	}
+	if err = insertAudit(ctx, tx, &organizationID, &actorID, "application.updated", "application", &applicationID, requestID, map[string]any{"name": name, "sourceType": sourceType}, ip); err != nil {
+		return Application{}, err
+	}
+	return item, tx.Commit(ctx)
+}
+
+func (r Repository) DeleteApplication(ctx context.Context, organizationID, applicationID, actorID, requestID uuid.UUID, ip net.IP) error {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `DELETE FROM applications WHERE organization_id=$1 AND id=$2`, organizationID, applicationID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrNotFound
+	}
+	if err = insertAudit(ctx, tx, &organizationID, &actorID, "application.deleted", "application", &applicationID, requestID, nil, ip); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (r Repository) ListDeployments(ctx context.Context, organizationID uuid.UUID, applicationID *uuid.UUID) ([]Deployment, error) {
 	if applicationID != nil {
 		if _, err := r.ApplicationByID(ctx, organizationID, *applicationID); err != nil {
 			return nil, err
 		}
 	}
-	query := `SELECT id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type,external_delivery_id,created_at,updated_at FROM deployments WHERE organization_id=$1`
+	query := `SELECT id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type,external_delivery_id,created_at,updated_at,started_at,finished_at FROM deployments WHERE organization_id=$1`
 	args := []any{organizationID}
 	if applicationID != nil {
 		query += ` AND application_id=$2`
@@ -531,7 +634,7 @@ func (r Repository) ListDeployments(ctx context.Context, organizationID uuid.UUI
 	items := []Deployment{}
 	for rows.Next() {
 		var item Deployment
-		if err := rows.Scan(&item.ID, &item.OrganizationID, &item.ApplicationID, &item.Number, &item.Source, &item.SourceRevision, &item.Image, &item.Status, &item.TriggeredBy, &item.PreviousDeploymentID, &item.Repository, &item.Branch, &item.CommitSHA, &item.TriggerType, &item.ExternalDeliveryID, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.OrganizationID, &item.ApplicationID, &item.Number, &item.Source, &item.SourceRevision, &item.Image, &item.Status, &item.TriggeredBy, &item.PreviousDeploymentID, &item.Repository, &item.Branch, &item.CommitSHA, &item.TriggerType, &item.ExternalDeliveryID, &item.CreatedAt, &item.UpdatedAt, &item.StartedAt, &item.FinishedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -567,6 +670,28 @@ func (r Repository) CreateDeployment(ctx context.Context, organizationID, applic
 		return Deployment{}, err
 	}
 	return item, nil
+}
+
+func (r Repository) GetDeploymentDetail(ctx context.Context, organizationID, deploymentID uuid.UUID) (DeploymentDetail, error) {
+	var item DeploymentDetail
+	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,application_id,number,source,source_revision,image,status,triggered_by,previous_deployment_id,repository,branch,commit_sha,trigger_type,external_delivery_id,created_at,updated_at,started_at,finished_at FROM deployments WHERE organization_id=$1 AND id=$2`, organizationID, deploymentID).Scan(&item.ID, &item.OrganizationID, &item.ApplicationID, &item.Number, &item.Source, &item.SourceRevision, &item.Image, &item.Status, &item.TriggeredBy, &item.PreviousDeploymentID, &item.Repository, &item.Branch, &item.CommitSHA, &item.TriggerType, &item.ExternalDeliveryID, &item.CreatedAt, &item.UpdatedAt, &item.StartedAt, &item.FinishedAt)
+	if err != nil {
+		return DeploymentDetail{}, notFound(err)
+	}
+	rows, err := r.Pool.Query(ctx, `SELECT event.id,event.from_status,event.to_status,event.message,event.created_at FROM deployment_events event JOIN deployments deployment ON deployment.id=event.deployment_id WHERE deployment.organization_id=$1 AND deployment.id=$2 ORDER BY event.created_at,event.id`, organizationID, deploymentID)
+	if err != nil {
+		return DeploymentDetail{}, err
+	}
+	defer rows.Close()
+	item.Events = []DeploymentEvent{}
+	for rows.Next() {
+		var event DeploymentEvent
+		if err = rows.Scan(&event.ID, &event.FromStatus, &event.ToStatus, &event.Message, &event.CreatedAt); err != nil {
+			return DeploymentDetail{}, err
+		}
+		item.Events = append(item.Events, event)
+	}
+	return item, rows.Err()
 }
 
 func (r Repository) TransitionDeployment(ctx context.Context, organizationID, deploymentID, actorID uuid.UUID, to deployments.State, message string, requestID uuid.UUID, ip net.IP) (Deployment, error) {

@@ -316,6 +316,19 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	deploymentID := stringField(t, deployment, "id")
 	owner.post("/organizations/"+orgA+"/deployments/"+deploymentID+"/transitions", map[string]any{"status": "preparing", "message": "integration test transition"}, http.StatusOK)
 	owner.post("/organizations/"+orgA+"/deployments/"+deploymentID+"/transitions", map[string]any{"status": "healthy", "message": "invalid skip"}, http.StatusConflict)
+	if detail := owner.get("/organizations/"+orgA+"/deployments/"+deploymentID, http.StatusOK); len(arrayField(t, detail, "events")) != 2 {
+		t.Fatalf("deployment detail events missing: %#v", detail)
+	}
+	owner.get("/organizations/"+orgA+"/environments/"+environmentID, http.StatusOK)
+	owner.get("/organizations/"+orgA+"/applications/"+applicationID, http.StatusOK)
+	owner.put("/organizations/"+orgA+"/environments/"+environmentID, map[string]any{"name": "Production", "slug": "production"}, http.StatusOK)
+	owner.put("/organizations/"+orgA+"/applications/"+applicationID, map[string]any{"name": "api", "sourceType": "docker_image", "image": "example/api:1", "internalPort": 3000, "serverId": serverID}, http.StatusOK)
+	temporaryEnvironment := owner.post("/organizations/"+orgA+"/projects/"+projectID+"/environments", map[string]any{"name": "Temporary", "slug": "temporary"}, http.StatusCreated)
+	temporaryEnvironmentID := stringField(t, temporaryEnvironment, "id")
+	temporaryApplication := owner.post("/organizations/"+orgA+"/environments/"+temporaryEnvironmentID+"/applications", map[string]any{"name": "temporary", "sourceType": "docker_image", "image": "busybox:latest"}, http.StatusCreated)
+	owner.delete("/organizations/"+orgA+"/environments/"+temporaryEnvironmentID, http.StatusConflict)
+	owner.delete("/organizations/"+orgA+"/applications/"+stringField(t, temporaryApplication, "id"), http.StatusNoContent)
+	owner.delete("/organizations/"+orgA+"/environments/"+temporaryEnvironmentID, http.StatusNoContent)
 
 	// A verified GitHub push enters the same deployments/jobs pipeline with the
 	// exact pushed revision. Delivery IDs are idempotency keys.
@@ -438,8 +451,33 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	// the scoped application at execution time.
 	runtimeApplication := owner.post("/organizations/"+orgA+"/environments/"+environmentID+"/applications", map[string]any{"name": "web", "sourceType": "docker_image", "image": "nginx:alpine", "internalPort": 80, "hostAddress": "127.0.0.1", "publishedPort": 32781}, http.StatusCreated)
 	runtimeApplicationID := stringField(t, runtimeApplication, "id")
-	owner.put("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "APP_MODE", "value": "production"}}}, http.StatusOK)
+	owner.put("/organizations/"+orgA+"/projects/"+projectID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "APP_MODE", "value": "project"}, {"name": "PROJECT_ONLY", "value": "project-value"}, {"name": "PROJECT_DELETE_ME", "value": "temporary"}, {"name": "SHARED", "value": "project"}}}, http.StatusOK)
+	owner.put("/organizations/"+orgA+"/environments/"+environmentID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "APP_MODE", "value": "environment"}, {"name": "ENVIRONMENT_ONLY", "value": "environment-value"}, {"name": "ENVIRONMENT_DELETE_ME", "value": "temporary"}, {"name": "SHARED", "value": "environment"}}}, http.StatusOK)
+	owner.put("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "APP_MODE", "value": "production"}, {"name": "SHARED", "value": "application"}}}, http.StatusOK)
+	preview := owner.post("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/environment-variables/parse", map[string]any{"text": "PUBLIC_URL=https://example.test\nDATABASE_PASSWORD=do-not-return"}, http.StatusOK)
+	parsed := arrayField(t, preview, "variables")
+	if len(parsed) != 2 || parsed[0].(map[string]any)["secretSuggested"] != true && parsed[1].(map[string]any)["secretSuggested"] != true {
+		t.Fatalf("dotenv secret suggestion missing: %#v", preview)
+	}
+	owner.put("/organizations/"+orgA+"/projects/"+projectID+"/secrets/PROJECT_SECRET", map[string]any{"value": "project-secret-value"}, http.StatusOK)
+	owner.put("/organizations/"+orgA+"/environments/"+environmentID+"/secrets/ENVIRONMENT_SECRET", map[string]any{"value": "environment-secret-value"}, http.StatusOK)
+	owner.put("/organizations/"+orgA+"/projects/"+projectID+"/secrets/API_TOKEN", map[string]any{"value": "project-api-token"}, http.StatusOK)
 	owner.put("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/secrets/API_TOKEN", map[string]any{"value": "runtime-secret-value"}, http.StatusOK)
+	effective := owner.get("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/configuration", http.StatusOK)
+	effectiveVariables := arrayField(t, effective, "variables")
+	resolvedVariables := map[string]map[string]any{}
+	for _, raw := range effectiveVariables {
+		item := raw.(map[string]any)
+		resolvedVariables[stringField(t, item, "name")] = item
+	}
+	if resolvedVariables["APP_MODE"]["value"] != "production" || resolvedVariables["APP_MODE"]["scope"] != "application" || resolvedVariables["SHARED"]["value"] != "application" || resolvedVariables["PROJECT_ONLY"]["scope"] != "project" || resolvedVariables["ENVIRONMENT_ONLY"]["scope"] != "environment" {
+		t.Fatalf("effective variable precedence incorrect: %#v", effectiveVariables)
+	}
+	effectiveSecrets := arrayField(t, effective, "secrets")
+	encodedEffectiveSecrets, _ := json.Marshal(effectiveSecrets)
+	if bytes.Contains(encodedEffectiveSecrets, []byte("secret-value")) || len(effectiveSecrets) != 3 {
+		t.Fatalf("effective secret metadata leaked plaintext or omitted inherited names: %s", encodedEffectiveSecrets)
+	}
 	secretView := owner.get("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/secrets", http.StatusOK)
 	encodedSecrets, _ := json.Marshal(secretView)
 	if bytes.Contains(encodedSecrets, []byte("runtime-secret-value")) || len(arrayField(t, secretView, "secrets")) != 1 {
@@ -463,8 +501,20 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	dockerRuntime.mu.Lock()
 	capturedSpec := dockerRuntime.spec
 	dockerRuntime.mu.Unlock()
-	if capturedSpec.Image != "nginx:alpine" || !capturedSpec.PullImage || capturedSpec.Environment["APP_MODE"] != "production" || capturedSpec.Environment["API_TOKEN"] != "runtime-secret-value" || capturedSpec.HostAddress != "127.0.0.1" || capturedSpec.HostPort != 32781 {
-		t.Fatalf("runtime deployment spec is incomplete: image=%q pull=%t mode=%q secretPresent=%t host=%q port=%d", capturedSpec.Image, capturedSpec.PullImage, capturedSpec.Environment["APP_MODE"], capturedSpec.Environment["API_TOKEN"] != "", capturedSpec.HostAddress, capturedSpec.HostPort)
+	if capturedSpec.Image != "nginx:alpine" || !capturedSpec.PullImage || capturedSpec.Environment["APP_MODE"] != "production" || capturedSpec.Environment["SHARED"] != "application" || capturedSpec.Environment["PROJECT_ONLY"] != "project-value" || capturedSpec.Environment["ENVIRONMENT_ONLY"] != "environment-value" || capturedSpec.Environment["API_TOKEN"] != "runtime-secret-value" || capturedSpec.Environment["PROJECT_SECRET"] != "project-secret-value" || capturedSpec.Environment["ENVIRONMENT_SECRET"] != "environment-secret-value" || capturedSpec.HostAddress != "127.0.0.1" || capturedSpec.HostPort != 32781 {
+		t.Fatalf("runtime deployment spec is incomplete: image=%q pull=%t mode=%q shared=%q secretPresent=%t host=%q port=%d", capturedSpec.Image, capturedSpec.PullImage, capturedSpec.Environment["APP_MODE"], capturedSpec.Environment["SHARED"], capturedSpec.Environment["API_TOKEN"] != "", capturedSpec.HostAddress, capturedSpec.HostPort)
+	}
+	owner.put("/organizations/"+orgA+"/projects/"+projectID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "APP_MODE", "value": "project"}, {"name": "PROJECT_ONLY", "value": "project-value"}, {"name": "SHARED", "value": "project"}}}, http.StatusOK)
+	owner.put("/organizations/"+orgA+"/environments/"+environmentID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "APP_MODE", "value": "environment"}, {"name": "ENVIRONMENT_ONLY", "value": "environment-value"}, {"name": "SHARED", "value": "environment"}}}, http.StatusOK)
+	projectVariables, _ := json.Marshal(owner.get("/organizations/"+orgA+"/projects/"+projectID+"/environment-variables", http.StatusOK))
+	environmentVariables, _ := json.Marshal(owner.get("/organizations/"+orgA+"/environments/"+environmentID+"/environment-variables", http.StatusOK))
+	if bytes.Contains(projectVariables, []byte("PROJECT_DELETE_ME")) || bytes.Contains(environmentVariables, []byte("ENVIRONMENT_DELETE_ME")) {
+		t.Fatalf("scoped variable replacement did not delete omitted records: project=%s environment=%s", projectVariables, environmentVariables)
+	}
+	owner.put("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "APP_MODE", "value": "production"}}}, http.StatusOK)
+	applicationVariables, _ := json.Marshal(owner.get("/organizations/"+orgA+"/applications/"+runtimeApplicationID+"/environment-variables", http.StatusOK))
+	if bytes.Contains(applicationVariables, []byte("SHARED")) {
+		t.Fatalf("application variable replacement did not delete omitted override: %s", applicationVariables)
 	}
 	var runtimeID, runtimeState, deploymentState string
 	if err := pool.QueryRow(ctx, `SELECT external_id,state FROM runtime_instances WHERE deployment_id=$1`, stringField(t, firstRuntimeDeployment, "id")).Scan(&runtimeID, &runtimeState); err != nil {
@@ -576,6 +626,8 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	owner.post("/organizations/"+orgA+"/members", map[string]any{"email": "viewer@example.com", "role": "viewer"}, http.StatusCreated)
 	viewer.post("/organizations/"+orgA+"/projects", map[string]any{"name": "Forbidden", "slug": "forbidden"}, http.StatusForbidden)
 	viewer.get("/organizations/"+orgA+"/projects", http.StatusOK)
+	viewer.put("/organizations/"+orgA+"/projects/"+projectID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "FORBIDDEN", "value": "write"}}}, http.StatusForbidden)
+	viewer.put("/organizations/"+orgA+"/environments/"+environmentID+"/secrets/FORBIDDEN", map[string]any{"value": "write"}, http.StatusForbidden)
 
 	// Membership in both tenants must not make resource identifiers portable
 	// between them. The same user is a viewer in A and owner in B for these
@@ -607,6 +659,11 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	viewer.put("/organizations/"+orgB+"/applications/"+applicationBID+"/server", map[string]any{"serverId": serverID}, http.StatusNotFound)
 	viewer.get("/organizations/"+orgB+"/applications/"+runtimeApplicationID+"/secrets", http.StatusNotFound)
 	viewer.put("/organizations/"+orgB+"/applications/"+runtimeApplicationID+"/secrets/CROSS_TENANT", map[string]any{"value": "forbidden"}, http.StatusNotFound)
+	viewer.get("/organizations/"+orgB+"/applications/"+runtimeApplicationID+"/configuration", http.StatusNotFound)
+	viewer.get("/organizations/"+orgB+"/projects/"+projectID+"/environment-variables", http.StatusNotFound)
+	viewer.put("/organizations/"+orgB+"/projects/"+projectID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "CROSS", "value": "tenant"}}}, http.StatusNotFound)
+	viewer.get("/organizations/"+orgB+"/environments/"+environmentID+"/environment-variables", http.StatusNotFound)
+	viewer.put("/organizations/"+orgB+"/environments/"+environmentID+"/secrets/CROSS_TENANT", map[string]any{"value": "forbidden"}, http.StatusNotFound)
 	viewer.post("/organizations/"+orgB+"/applications/"+applicationID+"/domains", map[string]any{"hostname": "cross.example.com", "targetPort": 3000, "protocol": "http", "routingMode": "dns_only"}, http.StatusNotFound)
 	viewer.get("/organizations/"+orgB+"/applications/"+applicationID+"/git-source", http.StatusNotFound)
 	viewer.post("/organizations/"+orgB+"/applications/"+applicationID+"/deployments", map[string]any{}, http.StatusNotFound)

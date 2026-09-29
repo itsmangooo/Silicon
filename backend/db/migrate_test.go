@@ -126,6 +126,14 @@ func TestAgentSchemaMigrationPreservesServer(t *testing.T) {
 	if preservedRecords != 11 {
 		t.Fatalf("forward migrations preserved %d representative records, want 11", preservedRecords)
 	}
+	var migratedSecretProjectID string
+	var migratedSecretCiphertext []byte
+	if err = pool.QueryRow(ctx, `SELECT project_id,encrypted_value FROM secrets WHERE application_id=$1 AND name='DATABASE_PASSWORD'`, applicationID).Scan(&migratedSecretProjectID, &migratedSecretCiphertext); err != nil {
+		t.Fatal(err)
+	}
+	if migratedSecretProjectID != projectID || string(migratedSecretCiphertext) != string([]byte{1, 2, 3}) {
+		t.Fatalf("application secret hierarchy migration project=%q ciphertext=%x", migratedSecretProjectID, migratedSecretCiphertext)
+	}
 	var administratorEmail string
 	var administratorCount int
 	if err = pool.QueryRow(ctx, `SELECT email::text FROM users WHERE is_system_admin`).Scan(&administratorEmail); err != nil {

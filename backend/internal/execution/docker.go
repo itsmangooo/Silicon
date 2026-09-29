@@ -60,23 +60,29 @@ func (e DockerDeploymentExecutor) Execute(ctx context.Context, spec jobs.Deploym
 	default:
 		return fmt.Errorf("unsupported application source type %q", application.SourceType)
 	}
-	environment, err := repository.ListEnvironmentVariables(ctx, spec.OrganizationID, spec.ApplicationID)
+	configuration, err := repository.ResolveApplicationConfiguration(ctx, spec.OrganizationID, spec.ApplicationID)
 	if err != nil {
-		return fmt.Errorf("load environment variables: %w", err)
+		return fmt.Errorf("resolve effective application configuration: %w", err)
 	}
-	values := make(map[string]string, len(environment))
-	for _, variable := range environment {
+	values := make(map[string]string, len(configuration.Variables)+len(configuration.Secrets))
+	for _, variable := range configuration.Variables {
 		values[variable.Name] = variable.Value
 	}
-	secrets, err := repository.ListSecretMetadata(ctx, spec.OrganizationID, spec.ApplicationID)
-	if err != nil {
-		return fmt.Errorf("load secret references: %w", err)
-	}
-	if len(secrets) > 0 && e.Secrets == nil {
+	if len(configuration.Secrets) > 0 && e.Secrets == nil {
 		return errors.New("local encrypted secret provider is unavailable")
 	}
-	for _, secret := range secrets {
-		plaintext, resolveErr := e.Secrets.Resolve(ctx, secretprovider.Reference{OrganizationID: spec.OrganizationID.String(), EnvironmentID: application.EnvironmentID.String(), ApplicationID: application.ID.String(), SecretID: secret.ID.String(), Name: secret.Name})
+	for _, secret := range configuration.Secrets {
+		reference := secretprovider.Reference{OrganizationID: spec.OrganizationID.String(), SecretID: secret.ID.String(), Name: secret.Name}
+		if secret.ProjectID != nil {
+			reference.ProjectID = secret.ProjectID.String()
+		}
+		if secret.EnvironmentID != nil {
+			reference.EnvironmentID = secret.EnvironmentID.String()
+		}
+		if secret.ApplicationID != nil {
+			reference.ApplicationID = secret.ApplicationID.String()
+		}
+		plaintext, resolveErr := e.Secrets.Resolve(ctx, reference)
 		if resolveErr != nil {
 			return fmt.Errorf("resolve secret %q: %w", secret.Name, resolveErr)
 		}

@@ -9,6 +9,8 @@ const (
 	ProjectDelete          Permission = "project.delete"
 	EnvironmentRead        Permission = "environment.read"
 	EnvironmentCreate      Permission = "environment.create"
+	EnvironmentUpdate      Permission = "environment.update"
+	EnvironmentDelete      Permission = "environment.delete"
 	ApplicationRead        Permission = "application.read"
 	ApplicationCreate      Permission = "application.create"
 	ApplicationUpdate      Permission = "application.update"
@@ -44,7 +46,7 @@ var rolePermissions = map[string]map[Permission]struct{}{
 	"owner": allPermissions(),
 	"admin": set(
 		ProjectRead, ProjectCreate, ProjectUpdate, ProjectDelete,
-		EnvironmentRead, EnvironmentCreate,
+		EnvironmentRead, EnvironmentCreate, EnvironmentUpdate, EnvironmentDelete,
 		ApplicationRead, ApplicationCreate, ApplicationUpdate, ApplicationDelete,
 		DeploymentRead, DeploymentCreate, DeploymentRollback,
 		ServerRead, ServerManage, LogsRead, DomainManage, SecretWrite,
@@ -55,7 +57,7 @@ var rolePermissions = map[string]map[Permission]struct{}{
 	),
 	"developer": set(
 		ProjectRead, ProjectCreate, ProjectUpdate,
-		EnvironmentRead, EnvironmentCreate,
+		EnvironmentRead, EnvironmentCreate, EnvironmentUpdate,
 		ApplicationRead, ApplicationCreate, ApplicationUpdate,
 		DeploymentRead, DeploymentCreate, DeploymentRollback,
 		ServerRead, LogsRead, DomainManage, SecretWrite,
@@ -97,7 +99,7 @@ func set(values ...Permission) map[Permission]struct{} {
 func allPermissions() map[Permission]struct{} {
 	return set(
 		ProjectRead, ProjectCreate, ProjectUpdate, ProjectDelete,
-		EnvironmentRead, EnvironmentCreate,
+		EnvironmentRead, EnvironmentCreate, EnvironmentUpdate, EnvironmentDelete,
 		ApplicationRead, ApplicationCreate, ApplicationUpdate, ApplicationDelete,
 		DeploymentRead, DeploymentCreate, DeploymentRollback,
 		ServerRead, ServerManage, LogsRead, DomainManage, SecretWrite,

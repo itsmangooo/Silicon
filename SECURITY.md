@@ -66,7 +66,7 @@ OIDC execution is not enabled. The provider contract requires a mature library t
 
 ## Secrets
 
-The schema and `SecretProvider` contract distinguish secrets from normal environment variables. The local provider uses AES-256-GCM with organization/application/name authenticated context and one-way create/update responses. `SILICON_ENCRYPTION_KEY` is host-supplied and must be protected and backed up separately. Secret values never appear in audit metadata, API reads, deployment events, or structured logs. Docker administrators can inspect container environment metadata and are therefore part of the trusted boundary. Automated key rotation is not yet implemented.
+The schema and `SecretProvider` contract distinguish secrets from normal environment variables. The local provider uses AES-256-GCM with organization/scope/name authenticated context and one-way create/update responses. Project, environment, and application relationships use tenant-qualified foreign keys; the runtime resolver applies application > environment > project precedence only after loading the organization-owned application. `SILICON_ENCRYPTION_KEY` is host-supplied and must be protected and backed up separately. Secret values never appear in `.env` preview responses, audit metadata, API reads, deployment events, or structured logs. Docker administrators can inspect container environment metadata and are therefore part of the trusted boundary. Automated key rotation is not yet implemented.
 
 ## Self-update trust boundary
 

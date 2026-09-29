@@ -124,15 +124,36 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("DELETE /api/v1/organizations/{organizationID}/projects/{projectID}", a.org(authorization.ProjectDelete, http.HandlerFunc(a.deleteProject)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/projects/{projectID}/environments", a.org(authorization.EnvironmentRead, http.HandlerFunc(a.listEnvironments)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/projects/{projectID}/environments", a.org(authorization.EnvironmentCreate, http.HandlerFunc(a.createEnvironment)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/environments/{environmentID}", a.org(authorization.EnvironmentRead, http.HandlerFunc(a.getEnvironment)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/environments/{environmentID}", a.org(authorization.EnvironmentUpdate, http.HandlerFunc(a.updateEnvironment)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/environments/{environmentID}", a.org(authorization.EnvironmentDelete, http.HandlerFunc(a.deleteEnvironment)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/applications", a.org(authorization.ApplicationRead, http.HandlerFunc(a.listAllApplications)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/environments/{environmentID}/applications", a.org(authorization.ApplicationRead, http.HandlerFunc(a.listApplications)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/environments/{environmentID}/applications", a.org(authorization.ApplicationCreate, http.HandlerFunc(a.createApplication)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}", a.org(authorization.ApplicationRead, http.HandlerFunc(a.getApplication)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/applications/{applicationID}", a.org(authorization.ApplicationUpdate, http.HandlerFunc(a.updateApplication)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/applications/{applicationID}", a.org(authorization.ApplicationDelete, http.HandlerFunc(a.deleteApplication)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/deployments", a.org(authorization.DeploymentRead, http.HandlerFunc(a.listAllDeployments)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/deployments", a.org(authorization.DeploymentRead, http.HandlerFunc(a.listDeployments)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/applications/{applicationID}/deployments", a.org(authorization.DeploymentCreate, http.HandlerFunc(a.createDeployment)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/deployments/{deploymentID}", a.org(authorization.DeploymentRead, http.HandlerFunc(a.getDeployment)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/deployments/{deploymentID}/transitions", a.org(authorization.DeploymentCreate, http.HandlerFunc(a.transitionDeployment)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/projects/{projectID}/environment-variables", a.org(authorization.ProjectRead, http.HandlerFunc(a.listProjectVariables)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/projects/{projectID}/environment-variables", a.org(authorization.ProjectUpdate, http.HandlerFunc(a.replaceProjectVariables)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/projects/{projectID}/environment-variables/parse", a.org(authorization.ProjectUpdate, http.HandlerFunc(a.parseDotEnv)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/environments/{environmentID}/environment-variables", a.org(authorization.EnvironmentRead, http.HandlerFunc(a.listEnvironmentOverrideVariables)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/environments/{environmentID}/environment-variables", a.org(authorization.EnvironmentUpdate, http.HandlerFunc(a.replaceEnvironmentOverrideVariables)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/environments/{environmentID}/environment-variables/parse", a.org(authorization.EnvironmentUpdate, http.HandlerFunc(a.parseDotEnv)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/environment-variables", a.org(authorization.ApplicationRead, http.HandlerFunc(a.listEnvironmentVariables)))
 	mux.Handle("PUT /api/v1/organizations/{organizationID}/applications/{applicationID}/environment-variables", a.org(authorization.ApplicationUpdate, http.HandlerFunc(a.replaceEnvironmentVariables)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/applications/{applicationID}/environment-variables/parse", a.org(authorization.ApplicationUpdate, http.HandlerFunc(a.parseDotEnv)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/configuration", a.org(authorization.ApplicationRead, http.HandlerFunc(a.getEffectiveConfiguration)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/projects/{projectID}/secrets", a.org(authorization.ProjectRead, http.HandlerFunc(a.listProjectSecrets)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/projects/{projectID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.putProjectSecret)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/projects/{projectID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.deleteProjectSecret)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/environments/{environmentID}/secrets", a.org(authorization.EnvironmentRead, http.HandlerFunc(a.listEnvironmentSecrets)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/environments/{environmentID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.putEnvironmentSecret)))
+	mux.Handle("DELETE /api/v1/organizations/{organizationID}/environments/{environmentID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.deleteEnvironmentSecret)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/secrets", a.org(authorization.ApplicationRead, http.HandlerFunc(a.listSecrets)))
 	mux.Handle("PUT /api/v1/organizations/{organizationID}/applications/{applicationID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.putSecret)))
 	mux.Handle("DELETE /api/v1/organizations/{organizationID}/applications/{applicationID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.deleteSecret)))
@@ -439,17 +460,8 @@ func (a *API) listEnvironments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createEnvironment(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name string `json:"name"`
-		Slug string `json:"slug"`
-	}
-	if !decode(w, r, &input) {
-		return
-	}
-	input.Name = strings.TrimSpace(input.Name)
-	input.Slug = cleanSlug(input.Slug, input.Name)
-	if input.Name == "" || !slugPattern.MatchString(input.Slug) {
-		validation(w, "Provide a valid environment name and slug.")
+	input, ok := environmentInput(w, r)
+	if !ok {
 		return
 	}
 	orgID := pathUUID(r, "organizationID")
@@ -459,6 +471,57 @@ func (a *API) createEnvironment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, item)
+}
+
+func environmentInput(w http.ResponseWriter, r *http.Request) (struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}, bool) {
+	var input struct {
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	}
+	if !decode(w, r, &input) {
+		return input, false
+	}
+	input.Name = strings.TrimSpace(input.Name)
+	input.Slug = cleanSlug(input.Slug, input.Name)
+	if input.Name == "" || len(input.Name) > 120 || !slugPattern.MatchString(input.Slug) {
+		validation(w, "Provide a valid environment name and slug.")
+		return input, false
+	}
+	return input, true
+}
+
+func (a *API) getEnvironment(w http.ResponseWriter, r *http.Request) {
+	item, err := a.repo.GetEnvironment(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "environmentID"))
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (a *API) updateEnvironment(w http.ResponseWriter, r *http.Request) {
+	input, ok := environmentInput(w, r)
+	if !ok {
+		return
+	}
+	item, err := a.repo.UpdateEnvironment(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "environmentID"), currentUser(r.Context()).ID, input.Name, input.Slug, requestID(r.Context()), clientIP(r))
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (a *API) deleteEnvironment(w http.ResponseWriter, r *http.Request) {
+	err := a.repo.DeleteEnvironment(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "environmentID"), currentUser(r.Context()).ID, requestID(r.Context()), clientIP(r))
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *API) listApplications(w http.ResponseWriter, r *http.Request) {
@@ -478,18 +541,20 @@ func (a *API) listAllApplications(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"applications": items})
 }
 
-func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name          string     `json:"name"`
-		SourceType    string     `json:"sourceType"`
-		Image         *string    `json:"image"`
-		InternalPort  *int       `json:"internalPort"`
-		HostAddress   *string    `json:"hostAddress"`
-		PublishedPort *int       `json:"publishedPort"`
-		ServerID      *uuid.UUID `json:"serverId"`
-	}
+type applicationInputPayload struct {
+	Name          string     `json:"name"`
+	SourceType    string     `json:"sourceType"`
+	Image         *string    `json:"image"`
+	InternalPort  *int       `json:"internalPort"`
+	HostAddress   *string    `json:"hostAddress"`
+	PublishedPort *int       `json:"publishedPort"`
+	ServerID      *uuid.UUID `json:"serverId"`
+}
+
+func readApplicationInput(w http.ResponseWriter, r *http.Request) (applicationInputPayload, bool) {
+	var input applicationInputPayload
 	if !decode(w, r, &input) {
-		return
+		return input, false
 	}
 	input.Name = strings.TrimSpace(input.Name)
 	if input.Image != nil {
@@ -506,12 +571,20 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 	portsInvalid := input.InternalPort != nil && (*input.InternalPort < 1 || *input.InternalPort > 65535) || input.PublishedPort != nil && (*input.PublishedPort < 1 || *input.PublishedPort > 65535)
 	bindingInvalid := (input.HostAddress == nil) != (input.PublishedPort == nil) || input.PublishedPort != nil && input.InternalPort == nil
 	imageInvalid := input.Image != nil && (strings.HasPrefix(*input.Image, "-") || strings.ContainsAny(*input.Image, " \t\r\n\x00"))
-	if input.Name == "" || !oneOf(input.SourceType, "docker_image", "git_dockerfile", "compose") || portsInvalid || bindingInvalid || imageInvalid || input.HostAddress != nil && net.ParseIP(*input.HostAddress) == nil {
+	if input.Name == "" || len(input.Name) > 120 || !oneOf(input.SourceType, "docker_image", "git_dockerfile", "compose") || portsInvalid || bindingInvalid || imageInvalid || input.HostAddress != nil && net.ParseIP(*input.HostAddress) == nil {
 		validation(w, "Provide a valid application name, source type, and internal port.")
-		return
+		return input, false
 	}
 	if input.SourceType == "docker_image" && (input.Image == nil || strings.TrimSpace(*input.Image) == "") {
 		validation(w, "Docker image applications require an image reference.")
+		return input, false
+	}
+	return input, true
+}
+
+func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
+	input, ok := readApplicationInput(w, r)
+	if !ok {
 		return
 	}
 	orgID := pathUUID(r, "organizationID")
@@ -521,6 +594,37 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, item)
+}
+
+func (a *API) getApplication(w http.ResponseWriter, r *http.Request) {
+	item, err := a.repo.ApplicationByID(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "applicationID"))
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (a *API) updateApplication(w http.ResponseWriter, r *http.Request) {
+	input, ok := readApplicationInput(w, r)
+	if !ok {
+		return
+	}
+	item, err := a.repo.UpdateApplication(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "applicationID"), currentUser(r.Context()).ID, input.Name, input.SourceType, input.Image, input.InternalPort, input.HostAddress, input.PublishedPort, input.ServerID, requestID(r.Context()), clientIP(r))
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (a *API) deleteApplication(w http.ResponseWriter, r *http.Request) {
+	err := a.repo.DeleteApplication(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "applicationID"), currentUser(r.Context()).ID, requestID(r.Context()), clientIP(r))
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *API) listAllDeployments(w http.ResponseWriter, r *http.Request) {
@@ -561,6 +665,15 @@ func (a *API) createDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, item)
+}
+
+func (a *API) getDeployment(w http.ResponseWriter, r *http.Request) {
+	item, err := a.repo.GetDeploymentDetail(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "deploymentID"))
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
 }
 
 func (a *API) transitionDeployment(w http.ResponseWriter, r *http.Request) {
@@ -820,6 +933,10 @@ func (a *API) recover(next http.Handler) http.Handler {
 func (a *API) persistenceError(w http.ResponseWriter, err error) {
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "not_found", "Resource not found.")
+		return
+	}
+	if errors.Is(err, store.ErrConflict) {
+		writeError(w, http.StatusConflict, "dependent_records", "Remove dependent resources before deleting this record.")
 		return
 	}
 	var pgErr *pgconn.PgError

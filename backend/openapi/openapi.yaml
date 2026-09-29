@@ -13,8 +13,10 @@ tags:
   - name: Authentication
   - name: Organizations
   - name: Projects
+  - name: Environments
   - name: Applications
   - name: Deployments
+  - name: Configuration
   - name: Servers
   - name: Identity
   - name: Audit
@@ -289,6 +291,74 @@ paths:
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/NamedSlugInput'}}}}
       responses:
         '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Environment'}}}}
+  /organizations/{organizationID}/environments/{environmentID}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/EnvironmentID'}]
+    get:
+      tags: [Environments]
+      summary: Get an environment
+      responses:
+        '200': {description: Environment, content: {application/json: {schema: {$ref: '#/components/schemas/Environment'}}}}
+        '404': {$ref: '#/components/responses/NotFoundError'}
+    put:
+      tags: [Environments]
+      summary: Update an environment
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/NamedSlugInput'}}}}
+      responses:
+        '200': {description: Updated environment, content: {application/json: {schema: {$ref: '#/components/schemas/Environment'}}}}
+    delete:
+      tags: [Environments]
+      summary: Delete an empty environment
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses:
+        '204': {description: Deleted}
+        '409': {$ref: '#/components/responses/ConflictError'}
+  /organizations/{organizationID}/projects/{projectID}/environment-variables:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ProjectID'}]
+    get:
+      tags: [Configuration]
+      summary: List project variable defaults
+      responses:
+        '200': {$ref: '#/components/responses/EnvironmentVariables'}
+    put:
+      tags: [Configuration]
+      summary: Replace project variable defaults
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {$ref: '#/components/requestBodies/EnvironmentVariables'}
+      responses:
+        '200': {description: Variables replaced}
+  /organizations/{organizationID}/projects/{projectID}/environment-variables/parse:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ProjectID'}]
+    post:
+      tags: [Configuration]
+      summary: Parse and preview dotenv input for a project
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {$ref: '#/components/requestBodies/DotEnv'}
+      responses:
+        '200': {$ref: '#/components/responses/DotEnvPreview'}
+  /organizations/{organizationID}/environments/{environmentID}/environment-variables:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/EnvironmentID'}]
+    get:
+      tags: [Configuration]
+      summary: List environment variable overrides
+      responses:
+        '200': {$ref: '#/components/responses/EnvironmentVariables'}
+    put:
+      tags: [Configuration]
+      summary: Replace environment variable overrides
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {$ref: '#/components/requestBodies/EnvironmentVariables'}
+      responses:
+        '200': {description: Variables replaced}
+  /organizations/{organizationID}/environments/{environmentID}/environment-variables/parse:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/EnvironmentID'}]
+    post:
+      tags: [Configuration]
+      summary: Parse and preview dotenv input for an environment
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {$ref: '#/components/requestBodies/DotEnv'}
+      responses:
+        '200': {$ref: '#/components/responses/DotEnvPreview'}
   /organizations/{organizationID}/applications:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}]
     get:
@@ -312,6 +382,26 @@ paths:
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationInput'}}}}
       responses:
         '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}
+  /organizations/{organizationID}/applications/{applicationID}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ApplicationID'}]
+    get:
+      tags: [Applications]
+      summary: Get an application
+      responses:
+        '200': {description: Application, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}
+    put:
+      tags: [Applications]
+      summary: Update an application
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationInput'}}}}
+      responses:
+        '200': {description: Updated application, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}
+    delete:
+      tags: [Applications]
+      summary: Delete an application and its dependent control-plane records
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses:
+        '204': {description: Deleted}
   /organizations/{organizationID}/deployments:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}]
     get:
@@ -359,6 +449,63 @@ paths:
       responses:
         '200': {description: Variables replaced}
         '422': {$ref: '#/components/responses/ValidationError'}
+  /organizations/{organizationID}/applications/{applicationID}/environment-variables/parse:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ApplicationID'}]
+    post:
+      tags: [Configuration]
+      summary: Parse and preview dotenv input for an application
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {$ref: '#/components/requestBodies/DotEnv'}
+      responses:
+        '200': {$ref: '#/components/responses/DotEnvPreview'}
+  /organizations/{organizationID}/applications/{applicationID}/configuration:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ApplicationID'}]
+    get:
+      tags: [Configuration]
+      summary: Resolve effective application variables and secret metadata
+      description: Application values override environment values, which override project defaults. Secret plaintext is never returned.
+      responses:
+        '200': {description: Effective configuration, content: {application/json: {schema: {$ref: '#/components/schemas/EffectiveConfiguration'}}}}
+  /organizations/{organizationID}/projects/{projectID}/secrets:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ProjectID'}]
+    get:
+      tags: [Secrets]
+      summary: List project secret metadata
+      responses:
+        '200': {description: Secret metadata, content: {application/json: {schema: {type: object, properties: {secrets: {type: array, items: {$ref: '#/components/schemas/SecretMetadata'}}}}}}}
+  /organizations/{organizationID}/projects/{projectID}/secrets/{secret}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ProjectID'}, {name: secret, in: path, required: true, schema: {type: string}}]
+    put:
+      tags: [Secrets]
+      summary: Create or rotate a project secret
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {$ref: '#/components/requestBodies/SecretValue'}
+      responses: {'200': {description: Stored}}
+    delete:
+      tags: [Secrets]
+      summary: Delete a project secret by ID
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses: {'204': {description: Deleted}}
+  /organizations/{organizationID}/environments/{environmentID}/secrets:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/EnvironmentID'}]
+    get:
+      tags: [Secrets]
+      summary: List environment secret metadata
+      responses:
+        '200': {description: Secret metadata, content: {application/json: {schema: {type: object, properties: {secrets: {type: array, items: {$ref: '#/components/schemas/SecretMetadata'}}}}}}}
+  /organizations/{organizationID}/environments/{environmentID}/secrets/{secret}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/EnvironmentID'}, {name: secret, in: path, required: true, schema: {type: string}}]
+    put:
+      tags: [Secrets]
+      summary: Create or rotate an environment secret
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {$ref: '#/components/requestBodies/SecretValue'}
+      responses: {'200': {description: Stored}}
+    delete:
+      tags: [Secrets]
+      summary: Delete an environment secret by ID
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses: {'204': {description: Deleted}}
   /organizations/{organizationID}/applications/{applicationID}/secrets:
     parameters:
       - {$ref: '#/components/parameters/OrganizationID'}
@@ -446,6 +593,16 @@ paths:
       responses:
         '200': {description: Transitioned, content: {application/json: {schema: {$ref: '#/components/schemas/Deployment'}}}}
         '409': {$ref: '#/components/responses/ConflictError'}
+  /organizations/{organizationID}/deployments/{deploymentID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {$ref: '#/components/parameters/DeploymentID'}
+    get:
+      tags: [Deployments]
+      summary: Get deployment details and persisted events
+      responses:
+        '200': {description: Deployment detail, content: {application/json: {schema: {$ref: '#/components/schemas/DeploymentDetail'}}}}
+        '404': {$ref: '#/components/responses/NotFoundError'}
   /organizations/{organizationID}/servers:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}]
     get:
@@ -809,7 +966,29 @@ components:
     AWSAccountID: {name: accountID, in: path, required: true, schema: {type: string, format: uuid}}
     AWSRegion: {name: region, in: query, required: true, schema: {type: string}}
     AWSResourceID: {name: resourceID, in: path, required: true, schema: {type: string}}
+  requestBodies:
+    EnvironmentVariables:
+      required: true
+      content:
+        application/json:
+          schema: {type: object, required: [variables], properties: {variables: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/EnvironmentVariableInput'}}}}
+    DotEnv:
+      required: true
+      content:
+        application/json:
+          schema: {type: object, required: [text], properties: {text: {type: string, maxLength: 1048576}}}
+    SecretValue:
+      required: true
+      content:
+        application/json:
+          schema: {type: object, required: [value], properties: {value: {type: string, writeOnly: true, maxLength: 65536}}}
   responses:
+    EnvironmentVariables:
+      description: Scoped environment variables
+      content: {application/json: {schema: {type: object, properties: {variables: {type: array, items: {$ref: '#/components/schemas/EnvironmentVariable'}}}}}}
+    DotEnvPreview:
+      description: Parsed values with secret-name suggestions
+      content: {application/json: {schema: {type: object, properties: {variables: {type: array, items: {$ref: '#/components/schemas/DotEnvEntry'}}}}}}
     AuthenticationError: {description: Authentication required, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     ForbiddenError: {description: Permission or CSRF check failed, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     NotFoundError: {description: Resource or membership not found, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -995,9 +1174,22 @@ components:
       allOf:
         - {$ref: '#/components/schemas/EnvironmentVariableInput'}
         - {type: object, properties: {updatedAt: {$ref: '#/components/schemas/Timestamp'}}}
+    DotEnvEntry:
+      allOf:
+        - {$ref: '#/components/schemas/EnvironmentVariableInput'}
+        - {type: object, properties: {secretSuggested: {type: boolean}}}
+    ScopedVariable:
+      allOf:
+        - {$ref: '#/components/schemas/EnvironmentVariableInput'}
+        - {type: object, properties: {scope: {type: string, enum: [project, environment, application]}, inherited: {type: boolean}}}
     SecretMetadata:
       type: object
-      properties: {id: {$ref: '#/components/schemas/UUID'}, name: {type: string}, provider: {type: string, enum: [local]}, createdAt: {$ref: '#/components/schemas/Timestamp'}, updatedAt: {$ref: '#/components/schemas/Timestamp'}}
+      properties: {id: {$ref: '#/components/schemas/UUID'}, name: {type: string}, provider: {type: string, enum: [local]}, projectId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}, environmentId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}, applicationId: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}, scope: {type: string, enum: [project, environment, application]}, createdAt: {$ref: '#/components/schemas/Timestamp'}, updatedAt: {$ref: '#/components/schemas/Timestamp'}}
+    EffectiveConfiguration:
+      type: object
+      properties:
+        variables: {type: array, items: {$ref: '#/components/schemas/ScopedVariable'}}
+        secrets: {type: array, items: {$ref: '#/components/schemas/SecretMetadata'}}
     RuntimeInstance:
       type: object
       properties:
@@ -1050,6 +1242,20 @@ components:
         githubDeliveryId: {type: [string, 'null']}
         createdAt: {$ref: '#/components/schemas/Timestamp'}
         updatedAt: {$ref: '#/components/schemas/Timestamp'}
+        startedAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        finishedAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+    DeploymentEvent:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        fromStatus: {oneOf: [{$ref: '#/components/schemas/DeploymentStatus'}, {type: 'null'}]}
+        toStatus: {$ref: '#/components/schemas/DeploymentStatus'}
+        message: {type: string}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+    DeploymentDetail:
+      allOf:
+        - {$ref: '#/components/schemas/Deployment'}
+        - {type: object, properties: {events: {type: array, items: {$ref: '#/components/schemas/DeploymentEvent'}}}}
     ServerInput:
       type: object
       additionalProperties: false

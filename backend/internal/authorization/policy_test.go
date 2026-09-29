@@ -10,6 +10,7 @@ func TestRolePermissions(t *testing.T) {
 	}{
 		{"owner", ProjectDelete, true}, {"admin", MemberManage, true},
 		{"developer", DeploymentCreate, true}, {"developer", ProjectDelete, false},
+		{"developer", EnvironmentUpdate, true}, {"developer", EnvironmentDelete, false},
 		{"viewer", ProjectRead, true}, {"viewer", SecretWrite, false},
 		{"owner", CloudDelete, true}, {"admin", CostRead, true},
 		{"developer", CloudRead, true}, {"developer", CloudProvision, false},

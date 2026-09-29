@@ -6,6 +6,7 @@ type Reference struct {
 	OrganizationID string
 	SecretID       string
 	Name           string
+	ProjectID      string
 	EnvironmentID  string
 	ApplicationID  string
 }
