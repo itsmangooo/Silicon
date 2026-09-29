@@ -20,12 +20,13 @@ var ErrNotFound = errors.New("record not found")
 type Repository struct{ Pool *pgxpool.Pool }
 
 type User struct {
-	ID           uuid.UUID `json:"id"`
-	Email        string    `json:"email"`
-	DisplayName  string    `json:"displayName"`
-	PasswordHash string    `json:"-"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID            uuid.UUID `json:"id"`
+	Email         string    `json:"email"`
+	DisplayName   string    `json:"displayName"`
+	PasswordHash  string    `json:"-"`
+	Status        string    `json:"status"`
+	IsSystemAdmin bool      `json:"isSystemAdmin"`
+	CreatedAt     time.Time `json:"createdAt"`
 }
 
 type Organization struct {
@@ -185,17 +186,34 @@ type AuditEvent struct {
 }
 
 func (r Repository) CreateUser(ctx context.Context, email, displayName, passwordHash string) (User, error) {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return User{}, err
+	}
+	defer tx.Rollback(ctx)
+	// Serialize bootstrap registration so exactly one first account receives
+	// installation-level administration.
+	if _, err = tx.Exec(ctx, `LOCK TABLE users IN EXCLUSIVE MODE`); err != nil {
+		return User{}, err
+	}
 	var user User
-	err := r.Pool.QueryRow(ctx, `INSERT INTO users(email,display_name,password_hash) VALUES($1,$2,$3)
-		RETURNING id,email,display_name,password_hash,status,created_at`, email, displayName, passwordHash).
-		Scan(&user.ID, &user.Email, &user.DisplayName, &user.PasswordHash, &user.Status, &user.CreatedAt)
-	return user, err
+	err = tx.QueryRow(ctx, `INSERT INTO users(email,display_name,password_hash,is_system_admin)
+		VALUES($1,$2,$3,NOT EXISTS(SELECT 1 FROM users))
+		RETURNING id,email,display_name,password_hash,status,is_system_admin,created_at`, email, displayName, passwordHash).
+		Scan(&user.ID, &user.Email, &user.DisplayName, &user.PasswordHash, &user.Status, &user.IsSystemAdmin, &user.CreatedAt)
+	if err != nil {
+		return User{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return User{}, err
+	}
+	return user, nil
 }
 
 func (r Repository) UserByEmail(ctx context.Context, email string) (User, error) {
 	var user User
-	err := r.Pool.QueryRow(ctx, `SELECT id,email,display_name,password_hash,status,created_at FROM users WHERE email=$1`, email).
-		Scan(&user.ID, &user.Email, &user.DisplayName, &user.PasswordHash, &user.Status, &user.CreatedAt)
+	err := r.Pool.QueryRow(ctx, `SELECT id,email,display_name,password_hash,status,is_system_admin,created_at FROM users WHERE email=$1`, email).
+		Scan(&user.ID, &user.Email, &user.DisplayName, &user.PasswordHash, &user.Status, &user.IsSystemAdmin, &user.CreatedAt)
 	return user, notFound(err)
 }
 
@@ -209,8 +227,8 @@ func (r Repository) UserBySession(ctx context.Context, tokenHash []byte) (User, 
 	var csrfHash []byte
 	err := r.Pool.QueryRow(ctx, `UPDATE sessions s SET last_seen_at=now()
 		FROM users u WHERE s.token_hash=$1 AND s.expires_at>now() AND u.id=s.user_id AND u.status='active'
-		RETURNING u.id,u.email,u.display_name,u.password_hash,u.status,u.created_at,s.csrf_token_hash`, tokenHash).
-		Scan(&user.ID, &user.Email, &user.DisplayName, &user.PasswordHash, &user.Status, &user.CreatedAt, &csrfHash)
+		RETURNING u.id,u.email,u.display_name,u.password_hash,u.status,u.is_system_admin,u.created_at,s.csrf_token_hash`, tokenHash).
+		Scan(&user.ID, &user.Email, &user.DisplayName, &user.PasswordHash, &user.Status, &user.IsSystemAdmin, &user.CreatedAt, &csrfHash)
 	return user, csrfHash, notFound(err)
 }
 

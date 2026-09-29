@@ -12,10 +12,16 @@ if [ "$(id -u)" -eq 0 ]; then DEFAULT_INSTALL_DIR="/opt/silicon"; else DEFAULT_I
 INSTALL_DIR="${SILICON_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
 TEST_MODE="${SILICON_INSTALL_TEST_MODE:-false}"
 READINESS_ATTEMPTS="${SILICON_READINESS_ATTEMPTS:-60}"
+REQUIRE_TAGGED_RELEASE="${SILICON_REQUIRE_TAGGED_RELEASE:-false}"
+UPDATE_RUNNER="${SILICON_UPDATE_RUNNER:-false}"
+UPDATE_STAGE_FILE="${SILICON_UPDATE_STAGE_FILE:-}"
 
 fail() { printf 'Silicon installer: %s\n' "$*" >&2; exit 1; }
 info() { printf 'Silicon installer: %s\n' "$*"; }
 usage() { printf '%s\n' 'Usage: install.sh [--update] [--version REF] [--install-dir PATH] [--public-url URL] [--http-port PORT]'; }
+report_stage() {
+  [ -z "$UPDATE_STAGE_FILE" ] || printf '%s\n' "$1" > "$UPDATE_STAGE_FILE"
+}
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -204,7 +210,7 @@ case "$PUBLIC_URL" in
 esac
 
 mkdir -p "$CONFIG_DIR" "$DATA_DIR/postgres"
-chmod 700 "$CONFIG_DIR"
+if [ ! -f "$ENV_FILE" ]; then chmod 700 "$CONFIG_DIR"; fi
 
 if [ -f "$ENV_FILE" ]; then
   info "existing installation detected at $INSTALL_DIR; preserving configuration and data"
@@ -243,6 +249,11 @@ if [ "$TEST_MODE" = "true" ]; then
   exit 0
 fi
 
+if [ "$REQUIRE_TAGGED_RELEASE" = "true" ]; then
+  [ "$MODE" = "update" ] || fail 'the release-only update path requires --update'
+  printf '%s\n' "$REF" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || fail '--version must be an exact stable semantic tag such as v0.4.2'
+fi
+
 if [ ! -d "$SOURCE_DIR/.git" ]; then
   [ ! -e "$SOURCE_DIR" ] || fail "$SOURCE_DIR exists but is not a Silicon Git checkout"
   info "obtaining Silicon source ref $REF"
@@ -250,26 +261,48 @@ if [ ! -d "$SOURCE_DIR/.git" ]; then
   if [ "$REF" = "main" ]; then git -C "$SOURCE_DIR" checkout main; else git -C "$SOURCE_DIR" checkout --detach "$REF"; fi
 elif [ "$MODE" = "update" ]; then
   [ -z "$(git -C "$SOURCE_DIR" status --porcelain)" ] || fail 'installed source contains local changes; refusing to overwrite them'
+  report_stage preparing
   info "updating Silicon source to $REF"
   git -C "$SOURCE_DIR" fetch --tags origin
   if [ "$REF" = "main" ]; then
+    [ "$REQUIRE_TAGGED_RELEASE" != "true" ] || fail 'production self-update never follows main'
     git -C "$SOURCE_DIR" checkout main
     git -C "$SOURCE_DIR" merge --ff-only origin/main
+  elif [ "$REQUIRE_TAGGED_RELEASE" = "true" ]; then
+    git -C "$SOURCE_DIR" rev-parse --verify --quiet "refs/tags/$REF^{commit}" >/dev/null || fail "release tag $REF does not exist in the installed repository"
+    git -C "$SOURCE_DIR" checkout --detach "refs/tags/$REF"
   else
     git -C "$SOURCE_DIR" checkout --detach "$REF"
   fi
 fi
 
 compose() { docker compose --env-file "$ENV_FILE" -f "$SOURCE_DIR/docker-compose.production.yml" "$@"; }
+BUILD_COMMIT=$(git -C "$SOURCE_DIR" rev-parse HEAD)
+BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+if printf '%s\n' "$REF" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then BUILD_VERSION=$REF; else BUILD_VERSION=dev; fi
+export SILICON_BUILD_VERSION="$BUILD_VERSION" SILICON_BUILD_COMMIT="$BUILD_COMMIT" SILICON_BUILD_TIME="$BUILD_TIME"
+compose config --quiet || fail 'production Compose configuration is invalid; the existing installation was not replaced'
 info 'building Silicon services'
 # Build completes before running containers, so a build failure leaves the current installation running.
 compose build || fail 'service build failed; the existing installation was not replaced'
+report_stage updating
 info 'starting Silicon and applying embedded migrations'
-compose up -d || fail 'service startup failed; inspect docker compose logs'
+if [ "$MODE" = "update" ] && [ "$UPDATE_RUNNER" = "true" ]; then
+  # The narrowly scoped runner must survive long enough to persist progress.
+  # Only application services are replaced here; PostgreSQL and its volume stay in place.
+  report_stage migrating
+  compose up -d postgres backend || fail 'backend startup failed; inspect docker compose logs'
+  report_stage restarting
+  compose up -d frontend || fail 'frontend startup failed; inspect docker compose logs'
+else
+  compose up -d || fail 'service startup failed; inspect docker compose logs'
+fi
 
+report_stage waiting_for_health
+READINESS_URL="${SILICON_READINESS_URL:-http://127.0.0.1:$HTTP_PORT/healthz}"
 READY="false"; attempt=0
 while [ "$attempt" -lt "$READINESS_ATTEMPTS" ]; do
-  if curl -fsS "http://127.0.0.1:$HTTP_PORT/healthz" >/dev/null 2>&1; then READY="true"; break; fi
+  if curl -fsS "$READINESS_URL" >/dev/null 2>&1; then READY="true"; break; fi
   attempt=$((attempt + 1)); sleep 2
 done
 if [ "$READY" != "true" ]; then

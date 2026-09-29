@@ -62,3 +62,15 @@ SSM secret-safe file transfer is not implemented; SSH remains required for sourc
 - External secrets and logging providers
 
 Azure, Kubernetes, automatic TLS, Traefik/Nginx adapters, SAML, Kafka, service mesh, and microservice decomposition have no current implementation or implied delivery date.
+
+## Safe tagged self-update increment
+
+- Compiled installed version/commit and cached stable GitHub Release discovery
+- Installation-global system administrator separate from organization roles
+- Durable, single-flight update states across backend/frontend restarts
+- Exact `vMAJOR.MINOR.PATCH` release and Git-tag verification; never `main`
+- Privilege-separated host updater that invokes only the fixed production installer flow
+- Configuration/data preflight, build-before-replacement, forward migrations, health wait, and browser reconnect
+- Tag-triggered release workflow with full verification, production image builds, source archive, and SHA-256 checksums
+
+Automatic rollback after a migration or replacement-time failure is not claimed. Operators still need tested PostgreSQL/configuration backups before production updates.

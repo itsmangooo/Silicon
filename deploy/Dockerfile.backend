@@ -1,9 +1,12 @@
 FROM golang:1.26-alpine AS build
+ARG SILICON_BUILD_VERSION=dev
+ARG SILICON_BUILD_COMMIT=unknown
+ARG SILICON_BUILD_TIME=unknown
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./backend/
 RUN cd backend && go mod download
 COPY backend ./backend
-RUN cd backend && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/silicon ./cmd/silicon
+RUN cd backend && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/itsmangooo/Silicon/backend/internal/buildinfo.Version=${SILICON_BUILD_VERSION} -X github.com/itsmangooo/Silicon/backend/internal/buildinfo.CommitSHA=${SILICON_BUILD_COMMIT} -X github.com/itsmangooo/Silicon/backend/internal/buildinfo.BuildTime=${SILICON_BUILD_TIME}" -o /out/silicon ./cmd/silicon
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/silicon /usr/local/bin/silicon

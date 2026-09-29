@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: silicon
+          POSTGRES_PASSWORD: silicon-release
+          POSTGRES_DB: silicon_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U silicon -d silicon_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://silicon:silicon-release@localhost:5432/silicon_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Validate stable semantic tag
+        run: |
+          printf '%s\n' "$GITHUB_REF_NAME" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          test "$(git rev-list -n 1 "$GITHUB_REF_NAME")" = "$GITHUB_SHA"
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Verify backend
+        working-directory: backend
+        run: |
+          go test -count=1 -p=1 ./...
+          go vet ./...
+          test -z "$(gofmt -l .)"
+      - name: Verify frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+      - name: Verify installer and Compose
+        run: |
+          shellcheck install.sh deploy/tests/install_test.sh
+          sh deploy/tests/install_test.sh
+          POSTGRES_DB=silicon POSTGRES_USER=silicon POSTGRES_PASSWORD=test SILICON_ENCRYPTION_KEY=dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1sb25nISEhISE= SILICON_PUBLIC_URL=http://localhost SILICON_COOKIE_SECURE=false SILICON_DATA_DIR=/tmp/silicon-data docker compose -f docker-compose.production.yml config --quiet
+      - name: Build production services
+        env:
+          POSTGRES_DB: silicon
+          POSTGRES_USER: silicon
+          POSTGRES_PASSWORD: release-build-only
+          SILICON_ENCRYPTION_KEY: dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1sb25nISEhISE=
+          SILICON_PUBLIC_URL: http://localhost
+          SILICON_COOKIE_SECURE: 'false'
+          SILICON_DATA_DIR: /tmp/silicon-data
+          SILICON_BUILD_VERSION: ${{ github.ref_name }}
+          SILICON_BUILD_COMMIT: ${{ github.sha }}
+        run: docker compose -f docker-compose.production.yml build backend frontend updater
+      - name: Package release and checksums
+        run: |
+          mkdir -p dist
+          git archive --format=tar.gz --prefix="Silicon-$GITHUB_REF_NAME/" -o "dist/Silicon-$GITHUB_REF_NAME.tar.gz" "$GITHUB_SHA"
+          cd dist
+          sha256sum "Silicon-$GITHUB_REF_NAME.tar.gz" > SHA256SUMS
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --title "Silicon $GITHUB_REF_NAME"

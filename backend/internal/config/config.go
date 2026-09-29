@@ -24,6 +24,9 @@ type Config struct {
 	GitHubPrivateKey        string
 	GitHubWebhookSecret     string
 	GitHubAPIURL            string
+	GitHubReleaseAPIURL     string
+	GitHubRepository        string
+	ReleaseCheckTTL         time.Duration
 	CloudflareAPIURL        string
 	LocalDockerEnabled      bool
 	DockerBinary            string
@@ -45,6 +48,9 @@ func Load() (Config, error) {
 		GitHubPrivateKey:        os.Getenv("SILICON_GITHUB_PRIVATE_KEY"),
 		GitHubWebhookSecret:     os.Getenv("SILICON_GITHUB_WEBHOOK_SECRET"),
 		GitHubAPIURL:            env("SILICON_GITHUB_API_URL", "https://api.github.com"),
+		GitHubReleaseAPIURL:     env("SILICON_RELEASE_API_URL", "https://api.github.com"),
+		GitHubRepository:        env("SILICON_RELEASE_REPOSITORY", "itsmangooo/Silicon"),
+		ReleaseCheckTTL:         15 * time.Minute,
 		CloudflareAPIURL:        env("SILICON_CLOUDFLARE_API_URL", "https://api.cloudflare.com/client/v4"),
 		LocalDockerEnabled:      envBool("SILICON_LOCAL_DOCKER_ENABLED", false),
 		DockerBinary:            env("SILICON_DOCKER_BINARY", "docker"),
@@ -68,6 +74,13 @@ func Load() (Config, error) {
 			return Config{}, errors.New("SILICON_RUNTIME_LOG_FOLLOW_TIMEOUT must be between 10s and 1h")
 		}
 		cfg.RuntimeLogFollowTimeout = duration
+	}
+	if value := os.Getenv("SILICON_RELEASE_CHECK_TTL"); value != "" {
+		duration, err := time.ParseDuration(value)
+		if err != nil || duration < time.Minute || duration > 24*time.Hour {
+			return Config{}, errors.New("SILICON_RELEASE_CHECK_TTL must be between 1m and 24h")
+		}
+		cfg.ReleaseCheckTTL = duration
 	}
 	if value := os.Getenv("SILICON_ENCRYPTION_KEY"); value != "" {
 		key, err := base64.StdEncoding.DecodeString(value)

@@ -42,14 +42,48 @@ func TestAgentSchemaMigrationPreservesServer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var organizationID, serverID string
+	var organizationID, serverID, projectID, environmentID, applicationID, deploymentID, githubIntegrationID string
 	if err = pool.QueryRow(ctx, `INSERT INTO organizations(name,slug) VALUES('Migration','migration') RETURNING id`).Scan(&organizationID); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `INSERT INTO projects(organization_id,name,slug) VALUES($1,'Preserved project','preserved-project') RETURNING id`, organizationID).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `INSERT INTO environments(organization_id,project_id,name,slug) VALUES($1,$2,'Production','production') RETURNING id`, organizationID, projectID).Scan(&environmentID); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `INSERT INTO applications(organization_id,project_id,environment_id,name,image,internal_port) VALUES($1,$2,$3,'API','registry.example/api:1',3000) RETURNING id`, organizationID, projectID, environmentID).Scan(&applicationID); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `INSERT INTO deployments(organization_id,application_id,number,source_revision,image,status) VALUES($1,$2,1,'abc123','registry.example/api:1','healthy') RETURNING id`, organizationID, applicationID).Scan(&deploymentID); err != nil {
 		t.Fatal(err)
 	}
 	if err = pool.QueryRow(ctx, `INSERT INTO servers(organization_id,name,hostname,connection_status) VALUES($1,'legacy','legacy.internal','connected') RETURNING id`, organizationID).Scan(&serverID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = pool.Exec(ctx, `
+		INSERT INTO secrets(organization_id,environment_id,application_id,name,encrypted_value) VALUES($1,$2,$3,'DATABASE_PASSWORD',decode('010203','hex'));
+		INSERT INTO application_environment_variables(organization_id,environment_id,application_id,name,value) VALUES($1,$2,$3,'LOG_LEVEL','info');
+		INSERT INTO runtime_instances(organization_id,application_id,deployment_id,provider,external_id,image,state,health,container_port) VALUES($1,$3,$4,'docker','container-preserved','registry.example/api:1','running','healthy',3000);
+		INSERT INTO domains(organization_id,environment_id,application_id,hostname,target_port) VALUES($1,$2,$3,'api.example.test',3000);
+	`, organizationID, environmentID, applicationID, deploymentID); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `INSERT INTO github_integrations(organization_id,installation_id,account_login) VALUES($1,42,'migration-test') RETURNING id`, organizationID).Scan(&githubIntegrationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `
+		INSERT INTO application_git_sources(application_id,organization_id,integration_id,repository_id,repository_full_name,branch,auto_deploy) VALUES($1,$2,$3,99,'example/preserved','main',true);
+		INSERT INTO cloudflare_integrations(organization_id,account_id,encrypted_api_token) VALUES($2,'account-preserved',decode('040506','hex'));
+	`, applicationID, organizationID, githubIntegrationID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = pool.Exec(ctx, `INSERT INTO agent_enrollment_tokens(organization_id,server_id,token_hash,expires_at) VALUES($1,$2,'legacy-token',now()+interval '1 hour')`, organizationID, serverID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO users(email,display_name,password_hash,created_at) VALUES
+		('first@example.test','First user','hash',now()-interval '1 day'),
+		('second@example.test','Second user','hash',now())`); err != nil {
 		t.Fatal(err)
 	}
 	if err = Migrate(ctx, pool); err != nil {
@@ -68,5 +102,35 @@ func TestAgentSchemaMigrationPreservesServer(t *testing.T) {
 	}
 	if enrollmentTable != nil || identityTable != nil {
 		t.Fatalf("retired tables remain: enrollment=%v identity=%v", enrollmentTable, identityTable)
+	}
+	var preservedRecords int64
+	if err = pool.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM projects WHERE id=$1) +
+		(SELECT count(*) FROM environments WHERE id=$2) +
+		(SELECT count(*) FROM applications WHERE id=$3) +
+		(SELECT count(*) FROM deployments WHERE id=$4) +
+		(SELECT count(*) FROM runtime_instances WHERE deployment_id=$4) +
+		(SELECT count(*) FROM secrets WHERE application_id=$3) +
+		(SELECT count(*) FROM application_environment_variables WHERE application_id=$3) +
+		(SELECT count(*) FROM domains WHERE application_id=$3) +
+		(SELECT count(*) FROM github_integrations WHERE organization_id=$5) +
+		(SELECT count(*) FROM application_git_sources WHERE application_id=$3) +
+		(SELECT count(*) FROM cloudflare_integrations WHERE organization_id=$5)
+	`, projectID, environmentID, applicationID, deploymentID, organizationID).Scan(&preservedRecords); err != nil {
+		t.Fatal(err)
+	}
+	if preservedRecords != 11 {
+		t.Fatalf("forward migrations preserved %d representative records, want 11", preservedRecords)
+	}
+	var administratorEmail string
+	var administratorCount int
+	if err = pool.QueryRow(ctx, `SELECT email::text FROM users WHERE is_system_admin`).Scan(&administratorEmail); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM users WHERE is_system_admin`).Scan(&administratorCount); err != nil {
+		t.Fatal(err)
+	}
+	if administratorEmail != "first@example.test" || administratorCount != 1 {
+		t.Fatalf("migration system administrator email=%q count=%d", administratorEmail, administratorCount)
 	}
 }

@@ -27,6 +27,9 @@ flowchart LR
     API --> Audit[Audit writer]
     Audit --> DB
     Routing --> External[ExternalRoutingProvider]
+    API -->|durable exact-tag request| UpdateDB[(System update state)]
+    Updater[Scoped host update runner] --> UpdateDB
+    Updater -->|fixed installer flow| Services[Backend + frontend services]
 ```
 
 ## Module responsibilities
@@ -52,6 +55,7 @@ flowchart LR
 | `providers/secrets` | Secret write/resolve/delete boundary and local encrypted adapter | `Provider`, `LocalEncryptedSecretProvider` | AES-256-GCM envelope, PostgreSQL | Future Vault/cloud stores | Plaintext is write-only and never enters audit metadata or normal reads |
 | `providers/logs` | Runtime-log query and streaming boundary | `Provider` | Runtime adapter | Local and external log backends | Workload output remains untrusted |
 | `httpapi` | Routing, validation, sessions, CSRF, organization authorization, response shape and request logs | `/api/v1` | Feature policy/repository | SSE can be added to specific live resources | Size limits, unknown-field rejection, safe errors, request IDs; integration tested |
+| `updates` / `silicon-updater` | Stable GitHub Release discovery, durable update state, exact-tag verification and fixed installer execution | `/api/v1/system/updates`, database queue | GitHub Releases, PostgreSQL, production installer | Alternate signed release sources can implement the narrow source interface | Installation-admin authorization; no generic command API; configuration hash and persistent-state preflight |
 | `db` | Ordered transactional migrations | `Migrate` | PostgreSQL | Additive numbered SQL migrations | Empty-database integration test; constraints reinforce invariants |
 
 ## Dependency rule

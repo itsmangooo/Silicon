@@ -30,6 +30,7 @@ import (
 	cloudaws "github.com/itsmangooo/Silicon/backend/internal/providers/cloud/aws"
 	"github.com/itsmangooo/Silicon/backend/internal/providers/connection"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
+	"github.com/itsmangooo/Silicon/backend/internal/updates"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -52,6 +53,19 @@ type fakeRuntime struct {
 type fakeConnectionProvider struct{ installations atomic.Int32 }
 
 type fakeAWSFactory struct{ provider *fakeAWSProvider }
+
+type fakeReleaseSource struct{}
+
+func (fakeReleaseSource) LatestStable(context.Context) (updates.Release, error) {
+	return updates.Release{TagName: "v0.4.2", Name: "Silicon v0.4.2", Notes: "A safe update."}, nil
+}
+
+func (fakeReleaseSource) Release(_ context.Context, tag string) (updates.Release, error) {
+	if tag != "v0.4.2" {
+		return updates.Release{}, updates.ErrNoRelease
+	}
+	return updates.Release{TagName: tag, Name: "Silicon v0.4.2", Notes: "A safe update."}, nil
+}
 
 func (f fakeAWSFactory) Open(_ context.Context, input cloudaws.AccountConfig) (cloudaws.Provider, error) {
 	if strings.Contains(input.RoleARN, "Denied") {
@@ -192,6 +206,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	cfg := config.Config{DatabaseURL: databaseURL, CookieName: "silicon_test_session", SessionTTL: time.Hour, FrontendOrigin: "http://localhost:5173", PublicURL: "http://silicon.test", GitHubWebhookSecret: "webhook-test-secret", EncryptionKey: bytes.Repeat([]byte{5}, 32), CloudflareAPIURL: cloudflareServer.URL, RuntimeLogFollowTimeout: time.Minute, LocalDockerEnabled: true}
 	dockerRuntime := &fakeRuntime{}
 	apiServer := NewWithProviders(cfg, pool, logger, dockerRuntime, nil)
+	apiServer.SetUpdateChecker(&updates.Checker{Source: fakeReleaseSource{}, CurrentVersion: "v0.4.1", CommitSHA: "test-commit", CacheTTL: time.Hour})
 	fakeAWS := &fakeAWSProvider{}
 	apiServer.SetAWSFactory(fakeAWSFactory{provider: fakeAWS})
 	connections := &fakeConnectionProvider{}
@@ -202,6 +217,20 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	viewer := newTestClient(t, server.URL)
 	owner.register("owner@example.com", "Owner User", "correct horse battery staple")
 	viewer.register("viewer@example.com", "Viewer User", "another correct horse battery")
+	ownerSession := mapField(t, owner.get("/auth/session", http.StatusOK), "user")
+	viewerSession := mapField(t, viewer.get("/auth/session", http.StatusOK), "user")
+	if ownerSession["isSystemAdmin"] != true || viewerSession["isSystemAdmin"] != false {
+		t.Fatalf("unexpected bootstrap system administration: owner=%#v viewer=%#v", ownerSession, viewerSession)
+	}
+	viewer.post("/system/updates/check", map[string]any{}, http.StatusForbidden)
+	update := owner.post("/system/updates", map[string]any{"targetVersion": "v0.4.2"}, http.StatusAccepted)
+	if update["targetVersion"] != "v0.4.2" || update["status"] != "queued" {
+		t.Fatalf("unexpected persisted update operation: %#v", update)
+	}
+	status := owner.get("/system/updates", http.StatusOK)
+	if mapField(t, status, "operation")["id"] != update["id"] {
+		t.Fatalf("latest persisted update was not returned: %#v", status)
+	}
 
 	organizationA := owner.post("/organizations", map[string]any{"name": "Organization A", "slug": "organization-a"}, http.StatusCreated)
 	organizationB := viewer.post("/organizations", map[string]any{"name": "Organization B", "slug": "organization-b"}, http.StatusCreated)

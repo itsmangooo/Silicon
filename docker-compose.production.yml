@@ -21,6 +21,10 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile.backend
+      args:
+        SILICON_BUILD_VERSION: ${SILICON_BUILD_VERSION:-dev}
+        SILICON_BUILD_COMMIT: ${SILICON_BUILD_COMMIT:-unknown}
+        SILICON_BUILD_TIME: ${SILICON_BUILD_TIME:-unknown}
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
@@ -33,6 +37,9 @@ services:
       SILICON_TRUST_FORWARDED_PROTO: ${SILICON_TRUST_FORWARDED_PROTO:-false}
       SILICON_LOG_LEVEL: ${SILICON_LOG_LEVEL:-info}
       SILICON_LOCAL_DOCKER_ENABLED: "false"
+      SILICON_RELEASE_API_URL: ${SILICON_RELEASE_API_URL:-https://api.github.com}
+      SILICON_RELEASE_REPOSITORY: ${SILICON_RELEASE_REPOSITORY:-itsmangooo/Silicon}
+      SILICON_RELEASE_CHECK_TTL: ${SILICON_RELEASE_CHECK_TTL:-15m}
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,6 +48,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    networks: [database, application]
+
+  updater:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.updater
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      SILICON_INSTALL_DIR: /opt/silicon
+      SILICON_RELEASE_API_URL: ${SILICON_RELEASE_API_URL:-https://api.github.com}
+      SILICON_RELEASE_REPOSITORY: ${SILICON_RELEASE_REPOSITORY:-itsmangooo/Silicon}
+      SILICON_READINESS_URL: http://frontend/healthz
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${SILICON_DATA_DIR}/..:/opt/silicon
+      - ${SILICON_DATA_DIR}/../config:/opt/silicon/config:ro
+      - ${SILICON_DATA_DIR}/postgres:/opt/silicon/data/postgres:ro
+    depends_on:
+      backend:
+        condition: service_healthy
     networks: [database, application]
 
   frontend:

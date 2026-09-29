@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/itsmangooo/Silicon/backend/internal/auth"
 	"github.com/itsmangooo/Silicon/backend/internal/authorization"
+	"github.com/itsmangooo/Silicon/backend/internal/buildinfo"
 	"github.com/itsmangooo/Silicon/backend/internal/config"
 	"github.com/itsmangooo/Silicon/backend/internal/cryptoenvelope"
 	"github.com/itsmangooo/Silicon/backend/internal/deployments"
@@ -27,6 +28,7 @@ import (
 	localsecrets "github.com/itsmangooo/Silicon/backend/internal/providers/secrets/local"
 	"github.com/itsmangooo/Silicon/backend/internal/serverconnections"
 	"github.com/itsmangooo/Silicon/backend/internal/store"
+	"github.com/itsmangooo/Silicon/backend/internal/updates"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -40,6 +42,7 @@ type API struct {
 	secrets     secretprovider.Provider
 	connections serverconnections.Manager
 	awsFactory  cloudaws.Factory
+	updates     *updates.Checker
 }
 
 type contextKey string
@@ -61,7 +64,14 @@ func NewWithProviders(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger
 	if cfg.RuntimeLogFollowTimeout <= 0 {
 		cfg.RuntimeLogFollowTimeout = 5 * time.Minute
 	}
-	api := &API{cfg: cfg, repo: store.Repository{Pool: pool}, logger: logger, runtime: runtime, secrets: secrets, awsFactory: cloudaws.SDKFactory{}}
+	build := buildinfo.Current()
+	api := &API{
+		cfg: cfg, repo: store.Repository{Pool: pool}, logger: logger, runtime: runtime, secrets: secrets, awsFactory: cloudaws.SDKFactory{},
+		updates: &updates.Checker{
+			Source:         updates.GitHubSource{APIBaseURL: cfg.GitHubReleaseAPIURL, Repository: cfg.GitHubRepository},
+			CurrentVersion: build.Version, CommitSHA: build.CommitSHA, BuildTime: build.BuildTime, CacheTTL: cfg.ReleaseCheckTTL,
+		},
+	}
 	if box, err := cryptoenvelope.New(cfg.EncryptionKey); err == nil {
 		api.box = &box
 		if api.secrets == nil {
@@ -82,6 +92,12 @@ func (a *API) SetAWSConnectionProvider(provider connectionprovider.Provider) {
 	a.connections.AWS = provider
 }
 
+func (a *API) SetUpdateChecker(checker *updates.Checker) {
+	if checker != nil {
+		a.updates = checker
+	}
+}
+
 func (a *API) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", a.health)
@@ -92,6 +108,10 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("POST /api/v1/auth/logout", a.auth(http.HandlerFunc(a.logout)))
 	mux.Handle("GET /api/v1/organizations", a.auth(http.HandlerFunc(a.listOrganizations)))
 	mux.Handle("POST /api/v1/organizations", a.auth(http.HandlerFunc(a.createOrganization)))
+	mux.Handle("GET /api/v1/system/version", a.auth(http.HandlerFunc(a.systemVersion)))
+	mux.Handle("GET /api/v1/system/updates", a.auth(http.HandlerFunc(a.getSystemUpdates)))
+	mux.Handle("POST /api/v1/system/updates/check", a.systemAdmin(http.HandlerFunc(a.checkSystemUpdates)))
+	mux.Handle("POST /api/v1/system/updates", a.systemAdmin(http.HandlerFunc(a.createSystemUpdate)))
 
 	mux.Handle("GET /api/v1/organizations/{organizationID}/access", a.org(authorization.OrganizationRead, http.HandlerFunc(a.access)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/search", a.org(authorization.OrganizationRead, http.HandlerFunc(a.search)))
@@ -733,6 +753,16 @@ func (a *API) org(permission authorization.Permission, next http.Handler) http.H
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), roleKey, role)))
+	}))
+}
+
+func (a *API) systemAdmin(next http.Handler) http.Handler {
+	return a.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !currentUser(r.Context()).IsSystemAdmin {
+			writeError(w, http.StatusForbidden, "system_admin_required", "Installation administrator access is required.")
+			return
+		}
+		next.ServeHTTP(w, r)
 	}))
 }
 

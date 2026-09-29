@@ -68,6 +68,14 @@ OIDC execution is not enabled. The provider contract requires a mature library t
 
 The schema and `SecretProvider` contract distinguish secrets from normal environment variables. The local provider uses AES-256-GCM with organization/application/name authenticated context and one-way create/update responses. `SILICON_ENCRYPTION_KEY` is host-supplied and must be protected and backed up separately. Secret values never appear in audit metadata, API reads, deployment events, or structured logs. Docker administrators can inspect container environment metadata and are therefore part of the trusted boundary. Automated key rotation is not yet implemented.
 
+## Self-update trust boundary
+
+In-panel updates accept only stable exact semantic tags (`vMAJOR.MINOR.PATCH`) that exist as non-draft, non-prerelease GitHub Releases and resolve to an exact Git tag. `main`, malformed versions, downgrades, and duplicate concurrent updates are rejected. Trigger authorization is installation-global (`users.is_system_admin`) and deliberately independent from organization RBAC. The request and every progress state are persisted in PostgreSQL so a backend restart cannot erase update state.
+
+The backend never receives a Docker socket or a generic host-command API. A dedicated updater service owns the minimum host-side capability required to call the fixed `install.sh --update --version <verified-tag>` flow. It has no HTTP listener. Its nested mounts make the existing configuration and PostgreSQL data directory read-only even though the installer-owned source checkout must be writable. The production Docker socket remains a highly privileged trust boundary; operators must restrict host access and image modification accordingly.
+
+Before service replacement the updater verifies the release, tag, existing configuration, PostgreSQL data path, source cleanliness, Compose configuration, and image build. It hashes `config/silicon.env` before and after and aborts if required persistent state is absent. The update path never invokes `down -v`, volume pruning, schema reset, or secret regeneration. Forward database migrations still require normal backup and restore discipline.
+
 ## Reporting
 
 Do not publish a suspected vulnerability in a public issue. Contact the repository owner privately with the affected version, reproduction, impact, and suggested mitigation.

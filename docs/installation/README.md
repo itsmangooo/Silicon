@@ -65,13 +65,42 @@ The supplied Compose file serves HTTP. Operators exposing Silicon publicly must 
 
 ## Updates and releases
 
+Production updates are discovered from stable GitHub Releases whose tags match
+exactly `vMAJOR.MINOR.PATCH`. Drafts, prereleases, malformed tags, older tags,
+and the `main` branch are never offered in the panel. The installed version and
+commit are compiled into the backend image and shown under **Settings → Updates**.
+
+The first registered account on a new installation is the installation-level
+system administrator. On an upgraded installation, the oldest existing account
+receives that capability. Organization Owner/Admin roles do not grant permission
+to replace the Silicon installation. A system administrator can review release
+notes, request an exact tag, and follow durable progress through Preparing,
+Updating, Migrating, Restarting, and Waiting for health. The browser tolerates
+the short application restart, reconnects, and reloads after the target version
+reports healthy. Silicon does not claim zero downtime.
+
+The production Compose layout includes a narrowly scoped updater. It has no HTTP
+endpoint and accepts only durable exact-tag requests written by the authenticated
+control plane. The updater is the only Silicon process with the Docker socket;
+the backend does not receive host command or Docker-socket access. Before
+replacement it verifies the GitHub Release, exact Git tag, Compose configuration,
+existing `silicon.env`, and PostgreSQL data directory, then builds all images
+while the current services keep running.
+
 Update the installed source without replacing configuration or data:
 
 ```sh
 /opt/silicon/source/install.sh --update --install-dir /opt/silicon
 ```
 
-Use `--version <tag>` or `SILICON_VERSION=<tag>` to select a release. `main` remains supported for development. The update path refuses a dirty installer-owned checkout, builds before replacing containers, runs normal embedded migrations, restarts services, and waits for readiness. It never regenerates the database password or encryption key.
+Use `--version <tag>` or `SILICON_VERSION=<tag>` to select a release. `main` remains supported for manual development installs only; the in-panel path sets release-only enforcement and refuses it. The update path refuses a dirty installer-owned checkout, validates Compose, builds before replacing containers, runs normal forward embedded migrations against the existing database, replaces the backend/frontend, and waits for readiness. It never regenerates the database password or encryption key.
+
+The updater checks that `silicon.env` is byte-for-byte unchanged after the
+installer returns. It never runs `docker compose down -v`, prunes or deletes
+volumes, resets PostgreSQL, overwrites configuration, or generates replacement
+credentials. If release verification, configuration validation, or image
+preparation fails, the currently running application services remain in place.
+Backups remain an operator responsibility before any production upgrade.
 
 Repeat installs and updates read the configured HTTP port and public URL from `config/silicon.env`; command defaults never replace them. If another process has taken that configured port while Silicon is stopped, the installer reports the conflict and stops rather than editing existing configuration or secrets.
 

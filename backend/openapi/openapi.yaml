@@ -26,6 +26,7 @@ tags:
   - name: AWS
   - name: Costs
   - name: Budgets
+  - name: System
 paths:
   /auth/register:
     post:
@@ -78,6 +79,42 @@ paths:
                 required: [user]
                 properties: {user: {$ref: '#/components/schemas/User'}}
         '401': {$ref: '#/components/responses/AuthenticationError'}
+  /system/version:
+    get:
+      tags: [System]
+      summary: Read the installed Silicon version and commit
+      responses:
+        '200': {description: Installed build, content: {application/json: {schema: {$ref: '#/components/schemas/SystemVersion'}}}}
+        '401': {$ref: '#/components/responses/AuthenticationError'}
+  /system/updates:
+    get:
+      tags: [System]
+      summary: Read cached stable release information and the latest durable update operation
+      responses:
+        '200': {description: Update state, content: {application/json: {schema: {$ref: '#/components/schemas/SystemUpdateStatus'}}}}
+        '401': {$ref: '#/components/responses/AuthenticationError'}
+    post:
+      tags: [System]
+      summary: Queue an exact tagged Silicon release update
+      description: Requires an installation-level system administrator. Organization roles do not grant this capability.
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SystemUpdateInput'}}}
+      responses:
+        '202': {description: Durable update operation, content: {application/json: {schema: {$ref: '#/components/schemas/SystemUpdate'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+        '409': {$ref: '#/components/responses/ConflictError'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /system/updates/check:
+    post:
+      tags: [System]
+      summary: Refresh GitHub stable release discovery
+      description: Requires an installation-level system administrator.
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses:
+        '200': {description: Refreshed update state, content: {application/json: {schema: {$ref: '#/components/schemas/SystemUpdateStatus'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
   /auth/logout:
     post:
       tags: [Authentication]
@@ -809,13 +846,66 @@ components:
       properties: {user: {$ref: '#/components/schemas/User'}, csrfToken: {type: string}}
     User:
       type: object
-      required: [id, email, displayName, status, createdAt]
+      required: [id, email, displayName, status, isSystemAdmin, createdAt]
       properties:
         id: {$ref: '#/components/schemas/UUID'}
         email: {type: string, format: email}
         displayName: {type: string}
         status: {type: string, enum: [active, disabled]}
+        isSystemAdmin: {type: boolean, description: Installation-level update administration; independent of organization roles}
         createdAt: {$ref: '#/components/schemas/Timestamp'}
+    SystemVersion:
+      type: object
+      required: [version, commitSha, buildTime]
+      properties:
+        version: {type: string, description: Exact vX.Y.Z tag for production releases; dev for untagged development builds}
+        commitSha: {type: string}
+        buildTime: {type: string}
+    StableRelease:
+      type: object
+      required: [tagName, name, notes, htmlUrl, publishedAt]
+      properties:
+        tagName: {type: string, pattern: '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'}
+        name: {type: string}
+        notes: {type: string}
+        htmlUrl: {type: string, format: uri}
+        publishedAt: {$ref: '#/components/schemas/Timestamp'}
+    SystemUpdate:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        requestedBy: {oneOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]}
+        fromVersion: {type: string}
+        targetVersion: {type: string}
+        status: {type: string, enum: [queued, checking, preparing, updating, migrating, restarting, waiting_for_health, completed, failed]}
+        message: {type: string}
+        releaseNotes: {type: string}
+        startedAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        completedAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+        updatedAt: {$ref: '#/components/schemas/Timestamp'}
+    SystemUpdateStatus:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: object
+          required: [currentVersion, commitSha, buildTime, updateAvailable, checkedAt]
+          properties:
+            currentVersion: {type: string}
+            commitSha: {type: string}
+            buildTime: {type: string}
+            latestRelease: {oneOf: [{$ref: '#/components/schemas/StableRelease'}, {type: 'null'}]}
+            updateAvailable: {type: boolean}
+            checkedAt: {$ref: '#/components/schemas/Timestamp'}
+        operation: {$ref: '#/components/schemas/SystemUpdate'}
+        releaseCheckError: {type: string}
+    SystemUpdateInput:
+      type: object
+      additionalProperties: false
+      required: [targetVersion]
+      properties:
+        targetVersion: {type: string, pattern: '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'}
     NamedSlugInput:
       type: object
       additionalProperties: false
