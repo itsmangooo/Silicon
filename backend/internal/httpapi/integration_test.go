@@ -298,8 +298,9 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	assertApplicationValidation := func(name string, input map[string]any, message string) {
 		t.Helper()
 		response := owner.post(applicationPath, input, http.StatusUnprocessableEntity)
-		if response["message"] != message {
-			t.Fatalf("%s validation=%q want %q", name, response["message"], message)
+		errorBody := mapField(t, response, "error")
+		if errorBody["message"] != message {
+			t.Fatalf("%s validation=%q want %q", name, errorBody["message"], message)
 		}
 	}
 	assertApplicationValidation("published without host", map[string]any{"name": "invalid-binding", "sourceType": "git_dockerfile", "internalPort": 3000, "publishedPort": 8080}, "Host address is required when publishing a host port.")
