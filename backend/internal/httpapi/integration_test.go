@@ -303,10 +303,10 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	if _, err := pool.Exec(ctx, `INSERT INTO domains(organization_id,environment_id,application_id,hostname,target_port) VALUES($1,$2,$3,'cross.example.test',3000)`, orgB, environmentID, applicationID); err == nil {
 		t.Fatal("cross-organization domain relation was accepted")
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO secrets(organization_id,environment_id,application_id,name,encrypted_value) VALUES($1,$2,$3,'DATABASE_PASSWORD',$4)`, orgA, environmentID, applicationID, []byte("ciphertext-test-fixture")); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO secrets(organization_id,project_id,environment_id,application_id,name,encrypted_value) VALUES($1,$2,$3,$4,'DATABASE_PASSWORD',$5)`, orgA, projectID, environmentID, applicationID, []byte("ciphertext-test-fixture")); err != nil {
 		t.Fatalf("insert scoped secret: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO secrets(organization_id,environment_id,application_id,name,encrypted_value) VALUES($1,$2,$3,'CROSS_TENANT',$4)`, orgB, environmentID, applicationID, []byte("ciphertext-test-fixture")); err == nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO secrets(organization_id,project_id,environment_id,application_id,name,encrypted_value) VALUES($1,$2,$3,$4,'CROSS_TENANT',$5)`, orgB, projectID, environmentID, applicationID, []byte("ciphertext-test-fixture")); err == nil {
 		t.Fatal("cross-organization secret relation was accepted")
 	}
 	deployment := owner.post("/organizations/"+orgA+"/applications/"+applicationID+"/deployments", map[string]any{"source": "registry", "sourceRevision": "sha256:abc", "image": "example/api:1"}, http.StatusCreated)
