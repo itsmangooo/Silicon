@@ -6,7 +6,7 @@ import { useAuth } from '../state/AuthContext.jsx'
 import { Brand } from '../components/Brand.jsx'
 
 function AuthFrame({ title, description, children, footer }) {
-  return <main className="auth-layout"><section className="auth-panel"><Brand className="auth-brand" /><header><h1>{title}</h1><p>{description}</p></header>{children}<p className="auth-footer">{footer}</p></section><aside className="auth-context"><p className="eyebrow">SELF-HOSTED CONTROL PLANE</p><h2>Infrastructure without theater.</h2><p>Silicon keeps project, environment, application, deployment, server, and access records in one precise operational surface.</p><dl><div><dt>Runtime</dt><dd>Provider boundary ready</dd></div><div><dt>Routing</dt><dd>External management</dd></div><div><dt>Execution</dt><dd>Not enabled in Milestone 1</dd></div></dl></aside></main>
+  return <main className="auth-layout"><section className="auth-panel"><Brand className="auth-brand" /><header><h1>{title}</h1><p>{description}</p></header>{children}<p className="auth-footer">{footer}</p></section><aside className="auth-context"><p className="eyebrow">SELF-HOSTED CONTROL PLANE</p><h2>Infrastructure without theater.</h2><p>Silicon keeps project, environment, application, deployment, server, and access records in one precise operational surface.</p><dl><div><dt>Runtime</dt><dd>Docker · local, SSH, and AWS</dd></div><div><dt>Routing</dt><dd>External or Cloudflare</dd></div><div><dt>Execution</dt><dd>Explicit targets and exact revisions</dd></div></dl></aside></main>
 }
 
 export function LoginPage() {

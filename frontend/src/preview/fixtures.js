@@ -32,15 +32,39 @@ export const previewFixtures = {
     { id: 'deployment-67', organizationId: 'org-preview', applicationId: 'app-worker', number: 67, source: 'manual', sourceRevision: '', image: 'registry.example.test/worker:2026.09', status: 'healthy', repository: '', branch: '', commitSha: '', triggerType: 'manual', startedAt: '2026-09-29T12:58:04Z', finishedAt: '2026-09-29T12:59:31Z', createdAt: '2026-09-29T12:58:00Z', updatedAt: '2026-09-29T12:59:31Z' },
   ],
   servers: [
-    { id: 'server-edge', organizationId: 'org-preview', name: 'edge-production', hostname: 'edge.example.test', connectionType: 'ssh', connectionStatus: 'connected', dockerAvailable: true, dockerVersion: '28.0.1', connectivityType: 'public', publicAddress: '203.0.113.10' },
+    { id: 'server-edge', organizationId: 'org-preview', name: 'edge-production', hostname: 'edge.example.test', connectionType: 'ssh', connectionStatus: 'connected', dockerAvailable: true, dockerVersion: '28.0.1', connectivityType: 'public', publicAddress: '203.0.113.10', sshPort: 22, sshUsername: 'silicon', sshHostKeyFingerprint: 'SHA256:examplePreviewFingerprint', credentialConfigured: true, operatingSystem: 'Ubuntu 24.04 LTS', architecture: 'x86_64', lastCheckedAt: '2026-09-29T13:24:00Z' },
+    { id: 'server-aws', organizationId: 'org-preview', name: 'aws-production-01', hostname: 'ip-10-20-1-24.eu-central-1.compute.internal', connectionType: 'aws_ssm', providerType: 'aws', connectionStatus: 'connected', dockerAvailable: true, dockerVersion: '28.0.1', connectivityType: 'private', publicAddress: '', awsRegion: 'eu-central-1', awsInstanceId: 'i-0123456789abcdef0', operatingSystem: 'Amazon Linux 2023', architecture: 'x86_64', lastCheckedAt: '2026-09-29T13:22:00Z' },
   ],
   domains: [
     { id: 'domain-api', organizationId: 'org-preview', environmentId: 'environment-production', applicationId: 'app-api', targetServerId: 'server-edge', hostname: 'api.example.test', targetPort: 3000, protocol: 'http', routingMode: 'cloudflare_proxied', dnsState: 'active', proxied: true },
   ],
   searchResults: [
     { id: 'server-edge', type: 'server', title: 'edge-production', subtitle: 'ssh · edge.example.test', route: '/servers', status: 'connected' },
-    { id: 'app-api', type: 'application', title: 'api', subtitle: 'Platform / production · docker_image · registry.example.test/api:2026-09', route: '/applications' },
+    { id: 'app-api', type: 'application', title: 'api', subtitle: 'Platform / production · Git + Dockerfile · exact revision', route: '/applications' },
     { id: 'domain-api', type: 'domain', title: 'api.example.test', subtitle: 'cloudflare_proxied · http:3000', route: '/domains', status: 'active' },
+  ],
+  members: [
+    { userId: 'preview-user', displayName: 'Preview Operator', email: 'operator@example.test', role: 'owner', createdAt: '2026-01-15T10:00:00Z' },
+    { userId: 'preview-developer', displayName: 'Alex Rivera', email: 'alex@example.test', role: 'developer', createdAt: '2026-08-22T09:30:00Z' },
+  ],
+  identityProviders: [
+    { id: 'identity-authentik', name: 'Acme Authentik', providerType: 'authentik', issuerUrl: 'https://identity.example.test/application/o/silicon/', enabled: false, createdAt: '2026-09-20T08:00:00Z' },
+  ],
+  auditEvents: [
+    { id: 'audit-deploy', actorName: 'Preview Operator', action: 'deployment.triggered', resourceType: 'deployment', resourceId: 'deployment-184', requestId: 'req-18f70c2a', createdAt: '2026-09-29T13:21:00Z' },
+    { id: 'audit-domain', actorName: 'Preview Operator', action: 'domain.synchronized', resourceType: 'domain', resourceId: 'domain-api', requestId: 'req-7c3ea916', createdAt: '2026-09-29T12:45:00Z' },
+  ],
+  github: { installationId: 48192017, accountLogin: 'acme-infrastructure', status: 'connected', createdAt: '2026-09-18T08:00:00Z' },
+  repositories: [
+    { id: 98142031, fullName: 'acme/api', defaultBranch: 'main', private: true },
+    { id: 98142032, fullName: 'acme/worker', defaultBranch: 'main', private: true },
+  ],
+  cloudflare: { accountId: 'preview-cloudflare-account', status: 'connected', lastCheckedAt: '2026-09-29T13:20:00Z' },
+  zones: [
+    { id: 'zone-example', name: 'example.test', providerZoneId: 'cf-zone-example', status: 'active', selected: true },
+  ],
+  tunnels: [
+    { id: 'tunnel-edge', name: 'edge-production', providerTunnelId: 'cf-tunnel-edge', ownership: 'silicon', status: 'healthy', installationStatus: 'installed', serverId: 'server-edge' },
   ],
 }
 
@@ -59,6 +83,15 @@ export function previewResponse(path, options = {}) {
   if (path === `${root}/deployments`) return { deployments: previewFixtures.deployments }
   if (path === `${root}/servers`) return { servers: previewFixtures.servers, localRuntimeAvailable: true }
   if (path === `${root}/domains`) return { domains: previewFixtures.domains }
+  if (path === `${root}/members`) return { members: previewFixtures.members }
+  if (path === `${root}/access`) return { role: 'owner', permissions: ['audit.read', 'application.create', 'application.delete', 'application.read', 'application.update', 'deployment.create', 'deployment.read', 'deployment.rollback', 'domain.manage', 'identity_provider.manage', 'logs.read', 'project.create', 'project.delete', 'project.read', 'project.update', 'secret.write', 'server.manage', 'server.read'] }
+  if (path === `${root}/identity-providers`) return { identityProviders: previewFixtures.identityProviders }
+  if (path === `${root}/audit-events`) return { auditEvents: previewFixtures.auditEvents }
+  if (path === `${root}/integrations/github`) return previewFixtures.github
+  if (path === `${root}/integrations/github/repositories`) return { repositories: previewFixtures.repositories }
+  if (path === `${root}/integrations/cloudflare`) return previewFixtures.cloudflare
+  if (path === `${root}/integrations/cloudflare/zones`) return { zones: previewFixtures.zones }
+  if (path === `${root}/integrations/cloudflare/tunnels`) return { tunnels: previewFixtures.tunnels }
   const projectMatch = path.match(new RegExp(`^${root}/projects/([^/]+)$`))
   if (projectMatch) return previewFixtures.projects.find((item) => item.id === projectMatch[1])
   const projectEnvironmentsMatch = path.match(new RegExp(`^${root}/projects/([^/]+)/environments$`))
@@ -69,6 +102,7 @@ export function previewResponse(path, options = {}) {
   if (environmentApplicationsMatch) return { applications: previewFixtures.applications.filter((item) => item.environmentId === environmentApplicationsMatch[1]) }
   const applicationMatch = path.match(new RegExp(`^${root}/applications/([^/]+)$`))
   if (applicationMatch) return previewFixtures.applications.find((item) => item.id === applicationMatch[1])
+  if (path === `${root}/applications/app-api/git-source`) return { repositoryId: 98142031, repositoryFullName: 'acme/api', branch: 'main', autoDeploy: true }
   const applicationDeploymentsMatch = path.match(new RegExp(`^${root}/applications/([^/]+)/deployments$`))
   if (applicationDeploymentsMatch) return { deployments: previewFixtures.deployments.filter((item) => item.applicationId === applicationDeploymentsMatch[1]) }
   const deploymentMatch = path.match(new RegExp(`^${root}/deployments/([^/]+)$`))

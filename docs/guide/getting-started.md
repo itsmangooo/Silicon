@@ -28,10 +28,10 @@ Create records in this order:
 
 1. Create a project.
 2. Add an environment such as `production`.
-3. Register an application with a Docker image or Git source.
-4. Add a local or SSH-connected server.
+3. Register an application with a Docker image, or choose Git + Dockerfile and connect its exact-revision source through the existing GitHub integration.
+4. Add an available local, SSH-connected, or AWS-backed Docker target.
 5. Assign the application to that server.
-6. Configure an explicit host address and published port before deploying.
+6. If host publication is required, configure an internal port, explicit host IP, and published port. The form suggests local-only `127.0.0.1`; it never silently exposes the workload on `0.0.0.0`.
 
 Silicon never publishes an internal container port implicitly. A deployment remains a historical record with an explicit state and exact source revision.
 

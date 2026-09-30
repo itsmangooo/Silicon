@@ -6,7 +6,7 @@ Silicon occupies the same broad problem space as infrastructure deployment produ
 
 ## Interface previews
 
-These previews were captured from the running application at a consistent desktop viewport. Authenticated views use temporary, isolated preview fixtures so the implemented data-backed states are visible; Silicon does not ship with seeded users, organizations, or workload records. The current previews include local/SSH targets and provider-independent Cloudflare routing.
+These previews were captured from the running application at a consistent desktop viewport. Authenticated views use temporary, isolated preview fixtures so the implemented data-backed states are visible; Silicon does not ship with seeded users, organizations, or workload records. The current previews include local, SSH, and AWS-backed targets plus provider-independent Cloudflare routing.
 
 | Login | Register |
 | --- | --- |
@@ -39,6 +39,10 @@ These previews were captured from the running application at a consistent deskto
 | Applications | Deployments |
 | --- | --- |
 | [![Silicon applications page](docs/previews/applications.png)](docs/previews/applications.png) | [![Silicon deployments page](docs/previews/deployments.png)](docs/previews/deployments.png) |
+
+| Application creation |
+| --- |
+| [![Silicon application creation with Git source, runtime target, and explicit port binding](docs/previews/application-create.png)](docs/previews/application-create.png) |
 
 | Servers | SSH server detail |
 | --- | --- |
@@ -125,6 +129,10 @@ Open `http://localhost:5173`, register a local account, create an organization, 
 
 The authenticated interface includes an in-panel [user guide](docs/guide/README.md). Press `Ctrl+K` on Windows/Linux or `Command+K` on macOS to search registered pages, commands, documentation, and permitted resources in the active organization.
 
+Documentation previews are generated from isolated `example.test` fixtures and
+the real frontend, never from production or user data. After a UI change, refresh
+the complete preview set with `cd frontend && npm run preview:capture`.
+
 Production installations also expose **Settings → Updates**. Silicon compares
 the compiled installed version with stable tagged GitHub Releases, shows release
 notes, and lets an installation administrator apply an exact newer tag through
@@ -160,6 +168,7 @@ That flow verifies a fresh migration, registration, sessions, organization creat
 The REST API is rooted at `/api/v1`. Its OpenAPI contract lives at [`backend/openapi/openapi.yaml`](backend/openapi/openapi.yaml). Important resource groups are:
 
 - `/auth/register`, `/auth/login`, `/auth/logout`, `/auth/session`
+- `/system/updates`, `/system/updates/check`
 - `/organizations`
 - `/organizations/{organizationID}/projects`
 - `/organizations/{organizationID}/search`
@@ -210,7 +219,7 @@ Runtime records and control-plane behavior are PostgreSQL-backed. When the local
 
 - Docker image deployment and exact-revision GitHub Dockerfile builds enter the same persistent job runner and `DockerRuntimeProvider`; local execution requires the explicit `SILICON_LOCAL_DOCKER_ENABLED=true` opt-in;
 - environment variables and secrets support project defaults, environment overrides, and application overrides resolved dynamically in that order at deployment time; local secrets are AES-256-GCM encrypted, write-only through the API, and require `SILICON_ENCRYPTION_KEY`;
-- ports are never published implicitly; an IP address and host port must both be configured;
+- ports are never published implicitly; an internal port, valid host IP, and host port are validated independently and must be configured together for publication. The form suggests the explicit local-only address `127.0.0.1` when a host port is entered and never silently binds `0.0.0.0`;
 - runtime inspection, lifecycle actions, bounded historical logs, and bounded live SSE logs operate only on persisted Silicon-managed containers;
 - Linux servers use organization-scoped SSH credentials encrypted at rest; host identity must be explicitly trusted, and remote Docker operations remain typed with no user-facing shell API;
 - AWS account connections prefer STS AssumeRole and temporary credentials. Optional bootstrap access keys are encrypted at rest. Regional inventory and lifecycle operations use the official AWS SDK for Go v2, and external resources stay read-only until imported;
@@ -218,7 +227,7 @@ Runtime records and control-plane behavior are PostgreSQL-backed. When the local
 - AWS Cost Explorer data is labeled as delayed actual billing data, with current/previous period, daily, service, region, forecast, and allocation-tag breakdowns. Pre-provision estimates use AWS public on-demand pricing and explicitly exclude unpredictable network, public IPv4, snapshot, IOPS, throughput, and tax charges. Silicon-local organization/account/project/environment budget policies may block only new provisioning and never stop workloads;
 - `ExternalRoutingProvider` reports externally managed routing/TLS semantics; it changes no proxy configuration;
 - OIDC/Authentik configuration records are disabled planning records; the OIDC login flow is not activated;
-- applications select either the explicitly enabled local provider or a configured SSH server; Docker images and exact-revision Dockerfile builds share the Docker adapter. Automatic scheduling, registry credential management, distributed build caching, and Compose execution are not implemented;
+- application target choices reflect runtime health: the control-plane target is selectable only when local Docker is enabled, and remote targets require a connected server with Docker available. Docker images and exact-revision GitHub Dockerfile builds share the Docker adapter; Compose is shown as unsupported and cannot be selected. Automatic scheduling, registry credential management, and distributed build caching are not implemented;
 - domains reference normalized application/server origins. Cloudflare resolves A, AAAA, or CNAME records from a server public address, or installs official `cloudflared` as a managed host-network Docker container on the chosen local/SSH target.
 
 Provider credentials are handled separately: GitHub App secrets remain process configuration, while Cloudflare API/tunnel tokens and optional AWS bootstrap credentials use authenticated encryption at rest. See [GitHub integration](docs/integrations/github.md), [Cloudflare integration](docs/integrations/cloudflare.md), and [AWS hybrid infrastructure](docs/integrations/aws.md).

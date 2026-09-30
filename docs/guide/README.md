@@ -37,4 +37,8 @@ The panel route for each article is stable and includes generated heading anchor
 | --- |
 | [![Silicon safe tagged update settings](../previews/settings-updates.png)](../previews/settings-updates.png) |
 
-The screenshots use isolated `example.test` preview fixtures. The production application does not seed those identities or resources.
+| Application creation |
+| --- |
+| [![Silicon application creation with exact-revision Git source and explicit port binding](../previews/application-create.png)](../previews/application-create.png) |
+
+The screenshots use isolated `example.test` preview fixtures. The production application does not seed those identities or resources. Regenerate the complete set after frontend changes with `cd frontend && npm run preview:capture`.

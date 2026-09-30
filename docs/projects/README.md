@@ -14,6 +14,6 @@ application override
 
 The same precedence applies independently to ordinary variables and encrypted secret names. The resolver never materializes a copied configuration snapshot, so a new deployment always receives the current effective values. Existing application configuration was preserved and classified as the application override layer by migration `000009_project_workspaces`.
 
-The `.env` import flow parses and previews values before applying them. Names that commonly represent credentials are suggested as encrypted secrets, but the operator makes the final classification. Applying the preview replaces ordinary variables at the selected scope and writes secrets through the configured `SecretProvider`.
+The `.env` import flow parses and previews values before applying them. Names that commonly represent credentials are suggested as encrypted secrets, but the operator makes the final classification. Applying the preview merges reviewed ordinary variables into the selected scope without deleting unrelated existing values and writes reviewed secrets through the configured `SecretProvider`.
 
 Every nested insert selects its parent under the same organization to prevent cross-tenant ID substitution.
