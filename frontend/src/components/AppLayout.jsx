@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   BuildingsIcon,
   BookOpenTextIcon,
@@ -43,21 +43,37 @@ function NavigationItem({ to, icon, children, end = false, onClick }) {
 export function AppLayout() {
   const { user, logout } = useAuth()
   const { organizations, organizationId, selectOrganization, loading } = useWorkspace()
+  const location = useLocation()
+  const navigationRef = useRef(null)
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const navigation = navigationRef.current
+    const activeItem = navigation?.querySelector('.nav-item.active')
+    if (!navigation || !activeItem) return
+
+    const navigationBounds = navigation.getBoundingClientRect()
+    const activeBounds = activeItem.getBoundingClientRect()
+    if (activeBounds.top < navigationBounds.top || activeBounds.bottom > navigationBounds.bottom) {
+      activeItem.scrollIntoView({ block: 'center' })
+    }
+  }, [location.pathname])
 
   return (
     <div className="shell">
       <a className="skip-link" href="#main">Skip to content</a>
       <aside className={`sidebar ${open ? 'sidebar-open' : ''}`} aria-label="Primary navigation">
-        <Brand />
-        <label className="sidebar-organization">
-          <span>Organization</span>
-          <span className="sidebar-select"><BuildingsIcon size={16} aria-hidden="true" /><select value={organizationId} onChange={(event) => selectOrganization(event.target.value)} disabled={!organizations.length}>
-            {!organizations.length && <option value="">No organization</option>}
-            {organizations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select></span>
-        </label>
-        <nav>
+        <div className="sidebar-header">
+          <Brand />
+          <label className="sidebar-organization">
+            <span>Organization</span>
+            <span className="sidebar-select"><BuildingsIcon size={16} aria-hidden="true" /><select value={organizationId} onChange={(event) => selectOrganization(event.target.value)} disabled={!organizations.length}>
+              {!organizations.length && <option value="">No organization</option>}
+              {organizations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select></span>
+          </label>
+        </div>
+        <nav ref={navigationRef}>
           <NavigationItem end to="/" icon={GaugeIcon} onClick={() => setOpen(false)}>Dashboard</NavigationItem>
           {groups.map(([label, links]) => (
             <div className="nav-group" key={label}>
