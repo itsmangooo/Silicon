@@ -17,10 +17,17 @@ describe('in-panel documentation', () => {
     expect(screen.getByRole('link', { name: 'Trust the host identity' })).toHaveAttribute('href', '#trust-the-host-identity')
   })
 
+  it('renders procedural guide images and converts relative Markdown guides to panel routes', () => {
+    renderRoute('/docs/workloads/self-hosted-project')
+    expect(screen.getByRole('heading', { level: 1, name: 'Host a frontend and backend on your own server' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Create project dialog with sanitized example values' }).getAttribute('src')).not.toBe('../previews/guide-create-project.png')
+    expect(screen.getAllByRole('link', { name: 'GitHub setup guide' })[0]).toHaveAttribute('href', '/docs/integrations/github')
+  })
+
   it('supports focused documentation search', () => {
     renderRoute('/docs/overview/getting-started')
     fireEvent.change(screen.getByPlaceholderText('Search docs'), { target: { value: 'webhook' } })
-    expect(screen.getByRole('link', { name: /GitHub integration/ })).toHaveAttribute('href', '/docs/integrations/github')
+    expect(screen.getByRole('link', { name: /GitHub setup and auto-deploy/ })).toHaveAttribute('href', '/docs/integrations/github')
   })
 
   it('shows a useful not-found state for an invalid article', () => {

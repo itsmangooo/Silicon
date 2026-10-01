@@ -9,15 +9,17 @@ These Markdown articles are the source for Silicon's in-panel documentation and 
 
 ## Workloads
 
+- [Complete frontend + backend example](frontend-backend-example.md)
+- [Self-hosted project](self-hosted-project.md)
 - [Applications and configuration](applications.md)
 - [Deployments](deployments.md)
 
 ## Infrastructure and integrations
 
 - [Servers and SSH](servers.md)
-- [GitHub integration](github.md)
+- [GitHub setup and auto-deploy](github.md)
 - [Cloudflare DNS and Tunnel](cloudflare.md)
-- [AWS infrastructure](aws.md)
+- [AWS project](aws.md)
 
 ## Security and operations
 
@@ -40,5 +42,17 @@ The panel route for each article is stable and includes generated heading anchor
 | Application creation |
 | --- |
 | [![Silicon application creation with exact-revision Git source and explicit port binding](../previews/application-create.png)](../previews/application-create.png) |
+
+| Project and environment | SSH server setup |
+| --- | --- |
+| [![Create a project](../previews/guide-create-project.png)](../previews/guide-create-project.png) | [![Configure an SSH connection](../previews/guide-ssh-connection.png)](../previews/guide-ssh-connection.png) |
+
+| GitHub source | Cloudflare routing |
+| --- | --- |
+| [![GitHub App integration](../previews/guide-github-integration.png)](../previews/guide-github-integration.png) | [![Cloudflare integration](../previews/guide-cloudflare-integration.png)](../previews/guide-cloudflare-integration.png) |
+
+| AWS compute | AWS network |
+| --- | --- |
+| [![AWS compute inventory](../previews/guide-aws-compute.png)](../previews/guide-aws-compute.png) | [![AWS network inventory](../previews/guide-aws-network.png)](../previews/guide-aws-network.png) |
 
 The screenshots use isolated `example.test` preview fixtures. The production application does not seed those identities or resources. Regenerate the complete set after frontend changes with `cd frontend && npm run preview:capture`.

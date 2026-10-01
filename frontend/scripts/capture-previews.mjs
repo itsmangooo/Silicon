@@ -46,6 +46,15 @@ async function capture(page, baseUrl, route, filename, selector = '.section', fu
   await page.screenshot({ path: path.join(outputDirectory, filename), fullPage })
 }
 
+async function captureElement(page, filename, selector) {
+  await settle(page, selector)
+  const element = await page.$(selector)
+  if (!element) throw new Error(`Could not find ${selector}`)
+  await element.evaluate((node) => node.scrollIntoView({ block: 'center' }))
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  await element.screenshot({ path: path.join(outputDirectory, filename) })
+}
+
 async function clickButton(page, label) {
   const clicked = await page.evaluate((text) => {
     const button = [...globalThis.document.querySelectorAll('button')].find((item) => item.textContent.trim().includes(text))
@@ -127,6 +136,87 @@ try {
   await page.type('input[name="internalPort"]', '3000')
   await page.type('input[name="publishedPort"]', '8080')
   await page.screenshot({ path: path.join(outputDirectory, 'application-create.png') })
+
+  await page.setViewport({ width: 1440, height: 1200, deviceScaleFactor: 1 })
+  await page.goto(`${previewUrl}/projects`, { waitUntil: 'networkidle0' })
+  await settle(page, '.section')
+  await clickButton(page, 'Create project')
+  await page.type('input[name="name"]', 'example-app')
+  await page.type('input[name="slug"]', 'example-app')
+  await page.type('textarea[name="description"]', 'Frontend and backend production workloads')
+  await captureElement(page, 'guide-create-project.png', '.dialog')
+
+  await page.goto(`${previewUrl}/environments`, { waitUntil: 'networkidle0' })
+  await settle(page, '.section')
+  await clickButton(page, 'Create environment')
+  await page.type('input[name="name"]', 'production')
+  await page.type('input[name="slug"]', 'production')
+  await captureElement(page, 'guide-create-environment.png', '.dialog')
+
+  await page.goto(`${previewUrl}/servers`, { waitUntil: 'networkidle0' })
+  await settle(page, '.section')
+  await clickButton(page, 'Add server')
+  await page.type('input[name="name"]', 'example-production')
+  await page.select('select[name="connectivityType"]', 'self_hosted')
+  await page.type('input[name="host"]', 'server.example.test')
+  await page.type('input[name="username"]', 'silicon')
+  await captureElement(page, 'guide-add-server.png', '.dialog')
+
+  await page.goto(`${previewUrl}/servers`, { waitUntil: 'networkidle0' })
+  await settle(page, '.section')
+  await page.click('.table-link')
+  await clickButton(page, 'Configure connection')
+  await captureElement(page, 'guide-ssh-connection.png', '.dialog')
+
+  await page.goto(`${previewUrl}/applications`, { waitUntil: 'networkidle0' })
+  await settle(page, '.section')
+  await clickButton(page, 'Create application')
+  await page.type('input[name="name"]', 'frontend')
+  await page.select('select[name="sourceType"]', 'git_dockerfile')
+  await page.select('select[name="targetId"]', 'server-edge')
+  await page.type('input[name="internalPort"]', '3000')
+  await page.type('input[name="publishedPort"]', '8080')
+  await captureElement(page, 'guide-create-application.png', '.dialog')
+
+  await page.goto(`${previewUrl}/applications`, { waitUntil: 'networkidle0' })
+  await settle(page, '.section')
+  await clickButton(page, 'Configure')
+  await captureElement(page, 'guide-deployment-target.png', '.dialog')
+
+  await page.goto(`${previewUrl}/projects/project-platform/applications/app-api`, { waitUntil: 'networkidle0' })
+  await captureElement(page, 'guide-environment-variables.png', '.configuration-editor .split-tables')
+  await captureElement(page, 'guide-secrets.png', '.configuration-editor #secrets')
+  await clickButton(page, 'Inspect runtime')
+  await settle(page, '.dialog')
+  await clickButton(page, 'Tail')
+  await captureElement(page, 'guide-runtime-logs.png', '.dialog')
+
+  await page.goto(`${previewUrl}/domains`, { waitUntil: 'networkidle0' })
+  await page.type('input[name="hostname"]', 'api.example.com')
+  await page.$eval('input[name="targetPort"]', (input) => {
+    const inputElement = input.ownerDocument.defaultView.HTMLInputElement
+    const setter = Object.getOwnPropertyDescriptor(inputElement.prototype, 'value').set
+    setter.call(input, '18080')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await page.select('select[name="routingMode"]', 'cloudflare_tunnel')
+  await captureElement(page, 'guide-domain-setup.png', '.section')
+
+  await page.goto(`${previewUrl}/integrations`, { waitUntil: 'networkidle0' })
+  await settle(page, '.section')
+  await captureElement(page, 'guide-github-integration.png', '.section:nth-of-type(1)')
+  await captureElement(page, 'guide-cloudflare-integration.png', '.section:nth-of-type(2)')
+
+  await page.goto(`${previewUrl}/aws/accounts`, { waitUntil: 'networkidle0' })
+  await settle(page, '.section')
+  await clickButton(page, 'Connect account')
+  await page.type('input[name="displayName"]', 'Production AWS')
+  await page.type('input[name="accountId"]', '000000000000')
+  await page.type('input[name="roleArn"]', 'arn:aws:iam::000000000000:role/Silicon')
+  await captureElement(page, 'guide-aws-account.png', '.dialog')
+
+  await capture(page, previewUrl, '/aws/compute', 'guide-aws-compute.png')
+  await capture(page, previewUrl, '/aws/network', 'guide-aws-network.png')
 } finally {
   await browser?.close()
   guestServer.kill()

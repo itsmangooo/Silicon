@@ -5,8 +5,22 @@ import rehypeSlug from 'rehype-slug'
 import remarkGfm from 'remark-gfm'
 import { Link, NavLink, Navigate, useParams } from 'react-router-dom'
 import { Page } from '../components/ui.jsx'
-import { docCategories, docs, findDoc } from '../docs/registry.js'
+import { docCategories, docRoute, docs, findDoc } from '../docs/registry.js'
 import { searchEntries } from '../search/registry.js'
+
+const previewImages = import.meta.glob('../../../docs/previews/*.png', { eager: true, query: '?url', import: 'default' })
+
+export function documentationAsset(value) {
+  if (!value.startsWith('../previews/')) return value
+  return previewImages[`../../../docs/previews/${value.slice('../previews/'.length)}`] || value
+}
+
+export function documentationHref(value) {
+  const match = value.match(/^(?:\.\/)?([a-z0-9-]+)\.md(#[a-z0-9-]+)?$/i)
+  if (!match) return documentationAsset(value)
+  const route = docRoute(match[1])
+  return route === '/docs' ? value : `${route}${match[2] || ''}`
+}
 
 function DocsNavigation({ onNavigate }) {
   return <nav className="docs-navigation" aria-label="Documentation articles">
@@ -23,8 +37,11 @@ export function DocsIndexPage() {
 
 export function MarkdownContent({ content }) {
   return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSlug]} components={{
-    a: ({ href = '', children, title }) => !href ? <span>{children}</span> : href.startsWith('/docs/') ? <Link to={href} title={title}>{children}</Link> : <a href={href} title={title}>{children}</a>,
-    img: ({ alt = '', src = '', title }) => <img alt={alt} src={src} title={title} loading="lazy" />,
+    a: ({ href = '', children, title }) => {
+      const destination = documentationHref(href)
+      return !destination ? <span>{children}</span> : destination.startsWith('/docs/') ? <Link to={destination} title={title}>{children}</Link> : <a href={destination} title={title}>{children}</a>
+    },
+    img: ({ alt = '', src = '', title }) => <img alt={alt} src={documentationAsset(src)} title={title} loading="lazy" />,
   }}>{content}</ReactMarkdown>
 }
 

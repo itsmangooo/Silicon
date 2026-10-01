@@ -9,6 +9,8 @@ describe('documentation registry', () => {
     expect(docs.every((article) => docCategories.some((category) => category.id === article.category))).toBe(true)
     expect(docs.flatMap((article) => article.headings).every((heading) => heading.id === headingId(heading.title))).toBe(true)
     expect(docRoute('servers')).toBe('/docs/infrastructure/servers')
+    expect(docRoute('self-hosted-project')).toBe('/docs/workloads/self-hosted-project')
+    expect(docRoute('frontend-backend-example')).toBe('/docs/workloads/frontend-backend-example')
   })
 
   it('searches article titles, aliases, and headings', () => {
@@ -16,5 +18,6 @@ describe('documentation registry', () => {
     expect(searchEntries('fingerprint', entries)[0]?.slug).toBe('servers')
     expect(searchEntries('auto deploy', entries)[0]?.slug).toBe('github')
     expect(searchEntries('budget', entries).some((article) => article.slug === 'aws')).toBe(true)
+    expect(searchEntries('frontend backend', entries)[0]?.slug).toBe('frontend-backend-example')
   })
 })

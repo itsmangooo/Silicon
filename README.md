@@ -127,7 +127,7 @@ npm run dev
 
 Open `http://localhost:5173`, register a local account, create an organization, then create real platform records. Migrations run transactionally at backend startup when `SILICON_AUTO_MIGRATE=true`.
 
-The authenticated interface includes an in-panel [user guide](docs/guide/README.md). Press `Ctrl+K` on Windows/Linux or `Command+K` on macOS to search registered pages, commands, documentation, and permitted resources in the active organization.
+The authenticated interface includes an in-panel [user guide](docs/guide/README.md), including complete [self-hosted](docs/guide/self-hosted-project.md), [AWS](docs/guide/aws.md), [GitHub App](docs/guide/github.md), and [frontend + backend example](docs/guide/frontend-backend-example.md) walkthroughs. Press `Ctrl+K` on Windows/Linux or `Command+K` on macOS to search registered pages, commands, documentation, and permitted resources in the active organization.
 
 Documentation previews are generated from isolated `example.test` fixtures and
 the real frontend, never from production or user data. After a UI change, refresh

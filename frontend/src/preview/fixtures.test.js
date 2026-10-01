@@ -7,6 +7,8 @@ describe('sanitized screenshot fixtures', () => {
     expect(serialized).not.toMatch(/BEGIN (RSA |OPENSSH )?PRIVATE KEY|AKIA[0-9A-Z]{16}|api[_-]?token|client[_-]?secret/i)
     expect(serialized).not.toMatch(/\b(?:10|127|169\.254|172\.(?:1[6-9]|2\d|3[01])|192\.168)\./)
     expect(serialized).toContain('example.test')
+    expect(previewFixtures.awsAccounts[0].accountId).toBe('000000000000')
+    expect(previewFixtures.awsAccounts[0].staticKeysConfigured).toBe(false)
   })
 
   it('filters preview resource search without exposing unrelated fixture data', () => {

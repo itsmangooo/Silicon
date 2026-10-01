@@ -66,6 +66,36 @@ export const previewFixtures = {
   tunnels: [
     { id: 'tunnel-edge', name: 'edge-production', providerTunnelId: 'cf-tunnel-edge', ownership: 'silicon', status: 'healthy', installationStatus: 'installed', serverId: 'server-edge' },
   ],
+  awsAccounts: [
+    { id: 'aws-preview', displayName: 'Production AWS', accountId: '000000000000', roleArn: 'arn:aws:iam::000000000000:role/SiliconControlPlane', externalIdConfigured: true, staticKeysConfigured: false, defaultRegion: 'eu-central-1', enabledRegions: ['eu-central-1'], status: 'connected', lastCheckedAt: '2026-09-29T13:20:00Z' },
+  ],
+  awsInventory: {
+    instances: [
+      { id: 'i-00000000000000001', name: 'example-production', state: 'running', instanceType: 't3.small', architecture: 'x86_64', region: 'eu-central-1', availabilityZone: 'eu-central-1a', privateIp: 'redacted', publicIp: '203.0.113.24', vpcId: 'vpc-00000000000000001', subnetId: 'subnet-00000000000000001', securityGroupIds: ['sg-00000000000000001'], ownership: 'managed', siliconServerId: 'server-aws' },
+    ],
+    vpcs: [
+      { id: 'vpc-00000000000000001', cidr: '198.51.100.0/24', isDefault: false, ownership: 'managed' },
+    ],
+    subnets: [
+      { id: 'subnet-00000000000000001', vpcId: 'vpc-00000000000000001', cidr: '198.51.100.0/25', availabilityZone: 'eu-central-1a', public: true, ownership: 'managed' },
+    ],
+    securityGroups: [
+      { id: 'sg-00000000000000001', vpcId: 'vpc-00000000000000001', name: 'example-web', description: 'Only required web ingress', ownership: 'managed', rules: [{ direction: 'ingress', protocol: 'tcp', fromPort: 443, toPort: 443, cidrs: ['0.0.0.0/0'], description: 'Public HTTPS' }] },
+    ],
+    elasticIps: [
+      { allocationId: 'eipalloc-00000000000000001', publicIp: '203.0.113.24', instanceId: 'i-00000000000000001', ownership: 'managed', unused: false },
+    ],
+    volumes: [
+      { id: 'vol-00000000000000001', state: 'in-use', sizeGiB: 20, type: 'gp3', encrypted: true, instanceId: 'i-00000000000000001', ownership: 'managed' },
+    ],
+    snapshots: [],
+  },
+  awsOperations: [
+    { id: 'operation-aws-machine', accountId: 'aws-preview', operationType: 'provision_machine', status: 'succeeded', providerResourceId: 'i-00000000000000001', createdAt: '2026-09-29T12:00:00Z', error: '' },
+  ],
+  budgets: [
+    { id: 'budget-production', name: 'Production monthly guardrail', accountId: 'aws-preview', projectId: null, environmentId: null, monthlyAmount: 100, currency: 'USD', thresholds: [50, 80, 100], preventNewProvisioning: true, lastEvaluatedAmount: 24.18 },
+  ],
 }
 
 export function previewResponse(path, options = {}) {
@@ -92,6 +122,10 @@ export function previewResponse(path, options = {}) {
   if (path === `${root}/integrations/cloudflare`) return previewFixtures.cloudflare
   if (path === `${root}/integrations/cloudflare/zones`) return { zones: previewFixtures.zones }
   if (path === `${root}/integrations/cloudflare/tunnels`) return { tunnels: previewFixtures.tunnels }
+  if (path === `${root}/aws/accounts`) return { accounts: previewFixtures.awsAccounts }
+  if (path === `${root}/aws/operations`) return { operations: previewFixtures.awsOperations }
+  if (path === `${root}/budgets`) return { budgets: previewFixtures.budgets }
+  if (path === `${root}/aws/accounts/aws-preview/inventory?region=eu-central-1`) return previewFixtures.awsInventory
   const projectMatch = path.match(new RegExp(`^${root}/projects/([^/]+)$`))
   if (projectMatch) return previewFixtures.projects.find((item) => item.id === projectMatch[1])
   const projectEnvironmentsMatch = path.match(new RegExp(`^${root}/projects/([^/]+)/environments$`))
@@ -113,6 +147,7 @@ export function previewResponse(path, options = {}) {
   if (/\/environment-variables$/.test(path)) return { variables: path.includes('/applications/') ? [{ name: 'LOG_LEVEL', value: 'info', updatedAt: '2026-09-29T10:00:00Z' }] : [{ name: 'REGION', value: 'eu-central-1', updatedAt: '2026-09-29T10:00:00Z' }] }
   if (/\/secrets$/.test(path)) return { secrets: [{ id: 'secret-database', name: 'DATABASE_URL', provider: 'local', scope: path.includes('/applications/') ? 'application' : path.includes('/environments/') ? 'environment' : 'project', updatedAt: '2026-09-29T10:00:00Z' }] }
   if (path === `${root}/applications/app-api/configuration`) return { variables: [{ name: 'LOG_LEVEL', value: 'info', scope: 'application', inherited: false }, { name: 'REGION', value: 'eu-central-1', scope: 'project', inherited: true }], secrets: [{ id: 'secret-database', name: 'DATABASE_URL', provider: 'local', scope: 'application', updatedAt: '2026-09-29T10:00:00Z' }] }
-  if (path === `${root}/applications/app-api/runtime`) return { providerAvailable: true, instance: { instanceId: '93c2a7e60de1', state: 'running', health: 'healthy', image: 'registry.example.test/api:8f319ad', lastInspectedAt: '2026-09-29T13:24:00Z' } }
+  if (path === `${root}/applications/app-api/runtime`) return { providerAvailable: true, instance: { instanceId: '93c2a7e60de1', state: 'running', health: 'healthy', image: 'registry.example.test/api:8f319ad', hostAddress: '127.0.0.1', hostPort: 32781, lastInspectedAt: '2026-09-29T13:24:00Z' } }
+  if (path === `${root}/applications/app-api/runtime/logs?tail=300`) return { logs: [{ timestamp: '2026-09-29T13:23:19Z', stream: 'stdout', message: 'HTTP server listening on port 3000' }, { timestamp: '2026-09-29T13:23:20Z', stream: 'stdout', message: 'Database connection ready' }, { timestamp: '2026-09-29T13:24:02Z', stream: 'stdout', message: 'GET /health 200' }] }
   return undefined
 }

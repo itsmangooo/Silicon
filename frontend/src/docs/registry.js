@@ -1,5 +1,7 @@
 import gettingStarted from '../../../docs/guide/getting-started.md?raw'
 import coreConcepts from '../../../docs/guide/core-concepts.md?raw'
+import frontendBackendExample from '../../../docs/guide/frontend-backend-example.md?raw'
+import selfHostedProject from '../../../docs/guide/self-hosted-project.md?raw'
 import applications from '../../../docs/guide/applications.md?raw'
 import deployments from '../../../docs/guide/deployments.md?raw'
 import servers from '../../../docs/guide/servers.md?raw'
@@ -24,6 +26,8 @@ function headings(content) {
 const contentBySlug = {
   'getting-started': gettingStarted,
   'core-concepts': coreConcepts,
+  'frontend-backend-example': frontendBackendExample,
+  'self-hosted-project': selfHostedProject,
   applications,
   deployments,
   servers,
