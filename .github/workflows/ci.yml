@@ -74,8 +74,9 @@ jobs:
           npm run build
       - name: Verify installers and production Compose
         run: |
-          shellcheck install.sh deploy/tests/install_test.sh
+          shellcheck install.sh deploy/tests/install_test.sh .github/scripts/*.sh
           sh deploy/tests/install_test.sh
+          sh .github/scripts/test-next-release-tag.sh
           POSTGRES_DB=silicon POSTGRES_USER=silicon POSTGRES_PASSWORD=test SILICON_ENCRYPTION_KEY=dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1sb25nISEhISE= SILICON_PUBLIC_URL=http://localhost SILICON_COOKIE_SECURE=false SILICON_DATA_DIR=/tmp/silicon-data docker compose -f docker-compose.production.yml config --quiet
 
   docker-runtime:
@@ -130,3 +131,79 @@ jobs:
           if test -f "${{ runner.temp }}/silicon-install/config/silicon.env"; then
             docker compose --env-file "${{ runner.temp }}/silicon-install/config/silicon.env" -f "${{ runner.temp }}/silicon-install/source/docker-compose.production.yml" down -v || true
           fi
+
+  auto-tag:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [verify, docker-runtime, production-install]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: silicon-automatic-patch-release
+      cancel-in-progress: false
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Tag the exact tested commit
+        id: tag
+        env:
+          TESTED_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          git fetch --force --tags origin
+          series=$(tr -d '[:space:]' < .github/release-series)
+          stable_pattern="^v${series//./\\.}\\.(0|[1-9][0-9]*)$"
+          existing=$(git tag --points-at "$TESTED_SHA" | grep -E "$stable_pattern" | head -n 1 || true)
+          if [ -n "$existing" ]; then
+            echo "Exact tested commit already has $existing"
+            echo "tag=$existing" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          latest=$(git tag --list "v$series.*" --sort=-v:refname | grep -E "$stable_pattern" | head -n 1 || true)
+          if [ -n "$latest" ] && ! git merge-base --is-ancestor "$latest" "$TESTED_SHA"; then
+            if git merge-base --is-ancestor "$TESTED_SHA" "$latest"; then
+              echo "A newer descendant ($latest) is already released; refusing to version an older commit."
+              echo 'tag=' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Latest release $latest is not in the tested commit ancestry" >&2
+            exit 1
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          attempts=0
+          while [ "$attempts" -lt 5 ]; do
+            attempts=$((attempts + 1))
+            git fetch --force --tags origin
+            existing=$(git tag --points-at "$TESTED_SHA" | grep -E "$stable_pattern" | head -n 1 || true)
+            if [ -n "$existing" ]; then
+              echo "Exact tested commit acquired $existing while waiting"
+              echo "tag=$existing" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            tag=$(sh .github/scripts/next-release-tag.sh)
+            git tag -a "$tag" "$TESTED_SHA" -m "Silicon $tag"
+            if git push origin "refs/tags/$tag"; then
+              echo "tag=$tag" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git tag -d "$tag"
+            sleep "$attempts"
+          done
+          echo 'Could not allocate a release tag after five serialized attempts' >&2
+          exit 1
+
+  publish-release:
+    needs: auto-tag
+    if: needs.auto-tag.outputs.tag != ''
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.auto-tag.outputs.tag }}
+      sha: ${{ github.sha }}

@@ -2,6 +2,7 @@ package updates
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -35,6 +36,71 @@ func TestVersionComparison(t *testing.T) {
 		if _, err := ParseVersion(invalid); err == nil {
 			t.Fatalf("ParseVersion(%q) accepted malformed tag", invalid)
 		}
+	}
+}
+
+func TestNoStableReleaseIsDistinctFromRequestFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	}))
+	defer server.Close()
+	checker := Checker{Source: GitHubSource{Client: server.Client(), APIBaseURL: server.URL}, CurrentVersion: "dev", CommitSHA: "abc123"}
+	status, err := checker.Check(context.Background(), false)
+	if !errors.Is(err, ErrNoRelease) {
+		t.Fatalf("Check error=%v want ErrNoRelease", err)
+	}
+	if status.Latest != nil || status.UpdateAvailable {
+		t.Fatalf("unexpected no-release status: %#v", status)
+	}
+}
+
+type firstReleaseSource struct{}
+
+func (firstReleaseSource) LatestStable(context.Context) (Release, error) {
+	return Release{TagName: "v0.1.0", Name: "Silicon v0.1.0"}, nil
+}
+
+func (firstReleaseSource) Release(_ context.Context, tag string) (Release, error) {
+	if tag != "v0.1.0" {
+		return Release{}, ErrNoRelease
+	}
+	return Release{TagName: tag, Name: "Silicon v0.1.0"}, nil
+}
+
+func TestDevelopmentBuildCanBootstrapToExactFirstRelease(t *testing.T) {
+	checker := Checker{Source: firstReleaseSource{}, CurrentVersion: "dev", CommitSHA: "development-sha"}
+	status, err := checker.Check(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.UpdateAvailable || status.Latest == nil || status.Latest.TagName != "v0.1.0" {
+		t.Fatalf("development build did not discover first release: %#v", status)
+	}
+	release, err := checker.VerifyTarget(context.Background(), "v0.1.0")
+	if err != nil || release.TagName != "v0.1.0" {
+		t.Fatalf("development bootstrap release=%#v err=%v", release, err)
+	}
+	for _, invalid := range []string{"main", "feature/bootstrap", "v0.1.0-rc.1"} {
+		if _, err = checker.VerifyTarget(context.Background(), invalid); err == nil {
+			t.Fatalf("development build accepted %q", invalid)
+		}
+	}
+}
+
+func TestTaggedBuildStillRequiresNewerSemanticRelease(t *testing.T) {
+	checker := Checker{Source: firstReleaseSource{}, CurrentVersion: "v0.1.0"}
+	if _, err := checker.VerifyTarget(context.Background(), "v0.1.0"); err == nil {
+		t.Fatal("installed tagged release was accepted as its own update")
+	}
+	checker.Source = &countingSource{}
+	checker.CurrentVersion = "v0.1.0"
+	status, err := checker.Check(context.Background(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.UpdateAvailable || status.Latest.TagName != "v0.4.2" {
+		t.Fatalf("normal semantic update was not detected: %#v", status)
 	}
 }
 

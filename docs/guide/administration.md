@@ -24,4 +24,8 @@ Use Audit to review authentication, membership, role, project, deployment, secre
 
 Back up PostgreSQL and the configured secrets before upgrades. **Settings → Updates** shows the compiled installed version/commit, the newest stable `vX.Y.Z` GitHub Release, and its notes. Only an installation-level system administrator can start an update; organization roles remain tenant-scoped and cannot replace Silicon itself.
 
+An existing `dev` installation may bootstrap onto the stable channel when a real release exists. The panel labels it **Development build**, verifies the exact stable tag, and offers **Install vX.Y.Z**. It never treats `main`, a branch, a prerelease, or an arbitrary ref as a release. After bootstrap, normal semantic comparison applies.
+
 The production updater verifies the exact release and tag, validates the existing configuration/data layout and Compose file, builds before replacement, runs normal forward migrations, replaces the backend/frontend, and waits for health. The panel reconnects through the short restart. Updates never follow `main`, regenerate secrets, reset PostgreSQL, or remove data volumes. Review migrations and release notes before updating a critical environment; the safe update path does not replace tested backups.
+
+Successful `main` CI runs allocate the next patch in the series stored in `.github/release-series`, tag that exact tested commit, and invoke the same release workflow. Change the series deliberately for a future minor or major line; do not manually create a second tag for an automatically released commit.

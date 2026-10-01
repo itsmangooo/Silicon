@@ -102,7 +102,7 @@ export function previewResponse(path, options = {}) {
   if (options.method && options.method !== 'GET') return undefined
   if (path === '/auth/session') return { user: previewFixtures.user }
   if (path === '/organizations') return { organizations: previewFixtures.organizations }
-  if (path === '/system/updates') return { version: { currentVersion: 'v0.4.1', commitSha: '35bef7e', buildTime: '2026-09-28T10:00:00Z', latestRelease: { tagName: 'v0.4.2', name: 'Silicon v0.4.2', notes: 'Safe in-panel updates and release verification.', htmlUrl: 'https://github.com/itsmangooo/Silicon/releases/tag/v0.4.2' }, updateAvailable: true, checkedAt: '2026-09-28T10:00:00Z' } }
+  if (path === '/system/updates') return { releaseCheckStatus: 'available', version: { currentVersion: 'dev', commitSha: '0123456', buildTime: '2026-10-01T10:00:00Z', latestRelease: { tagName: 'v0.1.0', name: 'Silicon v0.1.0', notes: 'First stable development release with verified in-panel updates.', htmlUrl: 'https://github.com/itsmangooo/Silicon/releases/tag/v0.1.0' }, updateAvailable: true, checkedAt: '2026-10-01T10:00:00Z' } }
   if (/^\/organizations\/[^/]+\/search\?q=/.test(path)) {
     const query = new URL(path, 'http://preview.invalid').searchParams.get('q')?.toLowerCase() || ''
     return { query, results: previewFixtures.searchResults.filter((item) => `${item.title} ${item.subtitle} ${item.type}`.toLowerCase().includes(query)) }

@@ -56,15 +56,35 @@ type fakeAWSFactory struct{ provider *fakeAWSProvider }
 
 type fakeReleaseSource struct{}
 
+type noReleaseSource struct{}
+
+type failedReleaseSource struct{}
+
 func (fakeReleaseSource) LatestStable(context.Context) (updates.Release, error) {
-	return updates.Release{TagName: "v0.4.2", Name: "Silicon v0.4.2", Notes: "A safe update."}, nil
+	return updates.Release{TagName: "v0.1.0", Name: "Silicon v0.1.0", Notes: "The first stable development release."}, nil
 }
 
 func (fakeReleaseSource) Release(_ context.Context, tag string) (updates.Release, error) {
-	if tag != "v0.4.2" {
+	if tag != "v0.1.0" {
 		return updates.Release{}, updates.ErrNoRelease
 	}
-	return updates.Release{TagName: tag, Name: "Silicon v0.4.2", Notes: "A safe update."}, nil
+	return updates.Release{TagName: tag, Name: "Silicon v0.1.0", Notes: "The first stable development release."}, nil
+}
+
+func (noReleaseSource) LatestStable(context.Context) (updates.Release, error) {
+	return updates.Release{}, updates.ErrNoRelease
+}
+
+func (noReleaseSource) Release(context.Context, string) (updates.Release, error) {
+	return updates.Release{}, updates.ErrNoRelease
+}
+
+func (failedReleaseSource) LatestStable(context.Context) (updates.Release, error) {
+	return updates.Release{}, errors.New("network unavailable")
+}
+
+func (failedReleaseSource) Release(context.Context, string) (updates.Release, error) {
+	return updates.Release{}, errors.New("network unavailable")
 }
 
 func (f fakeAWSFactory) Open(_ context.Context, input cloudaws.AccountConfig) (cloudaws.Provider, error) {
@@ -206,7 +226,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	cfg := config.Config{DatabaseURL: databaseURL, CookieName: "silicon_test_session", SessionTTL: time.Hour, FrontendOrigin: "http://localhost:5173", PublicURL: "http://silicon.test", GitHubWebhookSecret: "webhook-test-secret", EncryptionKey: bytes.Repeat([]byte{5}, 32), CloudflareAPIURL: cloudflareServer.URL, RuntimeLogFollowTimeout: time.Minute, LocalDockerEnabled: true}
 	dockerRuntime := &fakeRuntime{}
 	apiServer := NewWithProviders(cfg, pool, logger, dockerRuntime, nil)
-	apiServer.SetUpdateChecker(&updates.Checker{Source: fakeReleaseSource{}, CurrentVersion: "v0.4.1", CommitSHA: "test-commit", CacheTTL: time.Hour})
+	apiServer.SetUpdateChecker(&updates.Checker{Source: fakeReleaseSource{}, CurrentVersion: "dev", CommitSHA: "test-commit", CacheTTL: time.Hour})
 	fakeAWS := &fakeAWSProvider{}
 	apiServer.SetAWSFactory(fakeAWSFactory{provider: fakeAWS})
 	connections := &fakeConnectionProvider{}
@@ -223,13 +243,27 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 		t.Fatalf("unexpected bootstrap system administration: owner=%#v viewer=%#v", ownerSession, viewerSession)
 	}
 	viewer.post("/system/updates/check", map[string]any{}, http.StatusForbidden)
-	update := owner.post("/system/updates", map[string]any{"targetVersion": "v0.4.2"}, http.StatusAccepted)
-	if update["targetVersion"] != "v0.4.2" || update["status"] != "queued" {
+	update := owner.post("/system/updates", map[string]any{"targetVersion": "v0.1.0"}, http.StatusAccepted)
+	if update["fromVersion"] != "dev" || update["targetVersion"] != "v0.1.0" || update["status"] != "queued" {
 		t.Fatalf("unexpected persisted update operation: %#v", update)
 	}
 	status := owner.get("/system/updates", http.StatusOK)
 	if mapField(t, status, "operation")["id"] != update["id"] {
 		t.Fatalf("latest persisted update was not returned: %#v", status)
+	}
+	apiServer.SetUpdateChecker(&updates.Checker{Source: noReleaseSource{}, CurrentVersion: "dev", CommitSHA: "development-commit", CacheTTL: time.Hour})
+	noRelease := owner.get("/system/updates", http.StatusOK)
+	if noRelease["releaseCheckStatus"] != "none" || noRelease["releaseCheckError"] != nil {
+		t.Fatalf("empty release channel was reported as a request failure: %#v", noRelease)
+	}
+	noReleaseVersion := mapField(t, noRelease, "version")
+	if noReleaseVersion["currentVersion"] != "dev" || noReleaseVersion["updateAvailable"] != false {
+		t.Fatalf("unexpected development no-release status: %#v", noReleaseVersion)
+	}
+	apiServer.SetUpdateChecker(&updates.Checker{Source: failedReleaseSource{}, CurrentVersion: "dev", CommitSHA: "development-commit", CacheTTL: time.Hour})
+	failedReleaseCheck := owner.get("/system/updates", http.StatusOK)
+	if failedReleaseCheck["releaseCheckStatus"] != "error" || failedReleaseCheck["releaseCheckError"] == nil {
+		t.Fatalf("failed release request was not distinguished from an empty channel: %#v", failedReleaseCheck)
 	}
 
 	organizationA := owner.post("/organizations", map[string]any{"name": "Organization A", "slug": "organization-a"}, http.StatusCreated)

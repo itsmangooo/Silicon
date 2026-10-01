@@ -1065,7 +1065,7 @@ components:
         updatedAt: {$ref: '#/components/schemas/Timestamp'}
     SystemUpdateStatus:
       type: object
-      required: [version]
+      required: [version, releaseCheckStatus]
       properties:
         version:
           type: object
@@ -1078,6 +1078,7 @@ components:
             updateAvailable: {type: boolean}
             checkedAt: {$ref: '#/components/schemas/Timestamp'}
         operation: {$ref: '#/components/schemas/SystemUpdate'}
+        releaseCheckStatus: {type: string, enum: [available, none, error], description: Distinguishes a discovered release, an empty stable release channel, and a failed GitHub request}
         releaseCheckError: {type: string}
     SystemUpdateInput:
       type: object

@@ -71,6 +71,8 @@ Azure, Kubernetes, automatic TLS, Traefik/Nginx adapters, SAML, Kafka, service m
 - Exact `vMAJOR.MINOR.PATCH` release and Git-tag verification; never `main`
 - Privilege-separated host updater that invokes only the fixed production installer flow
 - Configuration/data preflight, build-before-replacement, forward migrations, health wait, and browser reconnect
-- Tag-triggered release workflow with full verification, production image builds, source archive, and SHA-256 checksums
+- Serialized automatic patch tags for successful `main` CI runs, with a deliberate `.github/release-series` major/minor baseline
+- Tag/reusable release workflow with full verification, production image builds, source archive, and SHA-256 checksums
+- One-time verified `dev` to stable-channel bootstrap through the same preservation-safe updater
 
 Automatic rollback after a migration or replacement-time failure is not claimed. Operators still need tested PostgreSQL/configuration backups before production updates.

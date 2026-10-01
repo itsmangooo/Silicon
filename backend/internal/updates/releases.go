@@ -18,7 +18,7 @@ import (
 var stableVersionPattern = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 
 var (
-	ErrInvalidVersion = errors.New("version must be a stable semantic tag such as v0.4.2")
+	ErrInvalidVersion = errors.New("version must be a stable semantic tag such as v0.1.0")
 	ErrNoRelease      = errors.New("no stable GitHub release is available")
 )
 
@@ -52,6 +52,14 @@ func Compare(left, right Version) int {
 		}
 	}
 	return 0
+}
+
+func updateAvailable(current string, latest Version) bool {
+	if current == "dev" {
+		return true
+	}
+	installed, err := ParseVersion(current)
+	return err == nil && Compare(latest, installed) > 0
 }
 
 type Release struct {
@@ -213,9 +221,8 @@ func (checker *Checker) Check(ctx context.Context, force bool) (Status, error) {
 		return checker.cached, err
 	}
 	status := Status{CurrentVersion: checker.CurrentVersion, CommitSHA: checker.CommitSHA, BuildTime: checker.BuildTime, Latest: &latest, CheckedAt: time.Now().UTC()}
-	current, currentErr := ParseVersion(checker.CurrentVersion)
 	available, latestErr := ParseVersion(latest.TagName)
-	status.UpdateAvailable = currentErr == nil && latestErr == nil && Compare(available, current) > 0
+	status.UpdateAvailable = latestErr == nil && updateAvailable(checker.CurrentVersion, available)
 	checker.cached = status
 	checker.cacheError = nil
 	return status, nil
@@ -226,12 +233,14 @@ func (checker *Checker) VerifyTarget(ctx context.Context, tag string) (Release, 
 	if err != nil {
 		return Release{}, err
 	}
-	current, err := ParseVersion(checker.CurrentVersion)
-	if err != nil {
-		return Release{}, errors.New("the installed build is not a tagged semantic release")
-	}
-	if Compare(target, current) <= 0 {
-		return Release{}, errors.New("target release must be newer than the installed version")
+	if checker.CurrentVersion != "dev" {
+		current, currentErr := ParseVersion(checker.CurrentVersion)
+		if currentErr != nil {
+			return Release{}, errors.New("the installed build is neither a development build nor a tagged semantic release")
+		}
+		if Compare(target, current) <= 0 {
+			return Release{}, errors.New("target release must be newer than the installed version")
+		}
 	}
 	release, err := checker.Source.Release(ctx, tag)
 	if err != nil {

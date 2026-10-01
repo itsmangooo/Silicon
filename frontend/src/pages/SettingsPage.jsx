@@ -6,6 +6,38 @@ import { useAuth } from '../state/AuthContext.jsx'
 import { ErrorNotice, Mono, Notice, Page, Section, Status, formatDate } from '../components/ui.jsx'
 
 const activeStates = new Set(['queued', 'checking', 'preparing', 'updating', 'migrating', 'restarting', 'waiting_for_health', 'reconnecting'])
+const stableVersion = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
+
+export function updatePanelState(version, releaseCheckStatus = 'available') {
+  const currentVersion = version?.currentVersion || ''
+  const latest = version?.latestRelease
+  const developmentBuild = currentVersion === 'dev'
+  const taggedBuild = stableVersion.test(currentVersion)
+  const canUpdate = Boolean(version?.updateAvailable && latest && (developmentBuild || taggedBuild))
+  let message = 'Silicon is up to date.'
+  let tone = 'success'
+  if (releaseCheckStatus === 'none') {
+    message = 'No stable Silicon release has been published yet. This installation remains unchanged.'
+    tone = undefined
+  } else if (developmentBuild && canUpdate) {
+    message = `Installing ${latest.tagName} converts this development installation onto the stable tagged release channel. Existing data and configuration are preserved.`
+    tone = undefined
+  } else if (!taggedBuild && !developmentBuild) {
+    message = 'This build does not report a supported development or semantic version. Install a verified tagged release before using self-update.'
+    tone = 'danger'
+  } else if (version?.updateAvailable && latest) {
+    message = `Update available · ${latest.tagName}`
+    tone = undefined
+  }
+  return {
+    canUpdate,
+    developmentBuild,
+    installedLabel: developmentBuild ? 'Development build' : currentVersion,
+    message,
+    tone,
+    actionLabel: developmentBuild && latest ? `Install ${latest.tagName}` : `Update Silicon${latest?.tagName ? ` to ${latest.tagName}` : ''}`,
+  }
+}
 
 function UpdatePanel() {
   const { user } = useAuth()
@@ -67,7 +99,7 @@ function UpdatePanel() {
 
   const version = data?.version
   const latest = version?.latestRelease
-  const taggedBuild = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version?.currentVersion || '')
+  const presentation = updatePanelState(version, data?.releaseCheckStatus)
   const busy = operation && activeStates.has(operation.status)
   return <Section
     title="Updates"
@@ -79,15 +111,15 @@ function UpdatePanel() {
     {version && <>
       {data.releaseCheckError && <Notice tone="danger">{data.releaseCheckError}</Notice>}
       <dl className="definition-grid update-version-grid">
-        <div><dt>Installed</dt><dd><Mono>{version.currentVersion}</Mono></dd></div>
+        <div><dt>Installed</dt><dd>{presentation.developmentBuild ? presentation.installedLabel : <Mono>{presentation.installedLabel}</Mono>}</dd></div>
         <div><dt>Commit</dt><dd><Mono>{version.commitSha}</Mono></dd></div>
         <div><dt>Latest stable</dt><dd><Mono>{latest?.tagName || 'Unavailable'}</Mono></dd></div>
         <div><dt>Last checked</dt><dd>{formatDate(version.checkedAt)}</dd></div>
       </dl>
-      {!taggedBuild ? <Notice>Development builds cannot use production self-update. Install a tagged release first; Silicon never updates a production installation from <Mono>main</Mono>.</Notice> : version.updateAvailable ? <Notice><strong>Update available · {latest.tagName}</strong><br />Review the release notes, then start the tagged update when an installation administrator is ready for a short service restart.</Notice> : <Notice tone="success">Silicon is up to date.</Notice>}
+      {!data.releaseCheckError && <Notice tone={presentation.tone}>{presentation.message}</Notice>}
       {latest?.notes && <div className="release-notes"><h3>{latest.name || latest.tagName}</h3><p>{latest.notes}</p>{latest.htmlUrl && <a href={latest.htmlUrl} target="_blank" rel="noreferrer">Open GitHub release</a>}</div>}
       {operation && <div className="update-progress" aria-live="polite"><Status value={operation.status} /><span>{operation.message || 'Update request accepted.'}</span><small>Target <Mono>{operation.targetVersion}</Mono>{operation.updatedAt ? ` · ${formatDate(operation.updatedAt)}` : ''}</small></div>}
-      {user.isSystemAdmin ? <div className="update-actions"><button className="button primary" type="button" disabled={!version.updateAvailable || busy} onClick={update}><DownloadSimpleIcon size={16} aria-hidden="true" /><span>{busy ? 'Update in progress…' : `Update Silicon${latest?.tagName ? ` to ${latest.tagName}` : ''}`}</span></button><p>Configuration, PostgreSQL data, encryption material, and persistent directories are validated and preserved. Forward migrations run during backend startup.</p></div> : <p className="muted">Only an installation administrator can start a Silicon update.</p>}
+      {user.isSystemAdmin ? <div className="update-actions"><button className="button primary" type="button" disabled={!presentation.canUpdate || busy} onClick={update}><DownloadSimpleIcon size={16} aria-hidden="true" /><span>{busy ? 'Update in progress…' : presentation.actionLabel}</span></button><p>Configuration, PostgreSQL data, encryption material, and persistent directories are validated and preserved. Forward migrations run during backend startup.</p></div> : <p className="muted">Only an installation administrator can start a Silicon update.</p>}
     </>}
   </Section>
 }

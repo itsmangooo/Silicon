@@ -25,10 +25,17 @@ func (a *API) checkSystemUpdates(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) writeSystemUpdateStatus(w http.ResponseWriter, r *http.Request, force bool) {
 	status, err := a.updates.Check(r.Context(), force)
-	response := map[string]any{}
+	response := map[string]any{"releaseCheckStatus": "available"}
 	if err != nil {
-		status = updates.Status{CurrentVersion: a.updates.CurrentVersion, CommitSHA: a.updates.CommitSHA, BuildTime: a.updates.BuildTime, CheckedAt: time.Now().UTC()}
-		response["releaseCheckError"] = "Silicon could not check GitHub Releases. The installed version remains unchanged."
+		if status.CurrentVersion == "" {
+			status = updates.Status{CurrentVersion: a.updates.CurrentVersion, CommitSHA: a.updates.CommitSHA, BuildTime: a.updates.BuildTime, CheckedAt: time.Now().UTC()}
+		}
+		if errors.Is(err, updates.ErrNoRelease) {
+			response["releaseCheckStatus"] = "none"
+		} else {
+			response["releaseCheckStatus"] = "error"
+			response["releaseCheckError"] = "Silicon could not check GitHub Releases because the GitHub API request failed. The installed version remains unchanged."
+		}
 	}
 	response["version"] = status
 	operation, err := a.repo.LatestSystemUpdate(r.Context())

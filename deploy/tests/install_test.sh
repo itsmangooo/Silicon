@@ -10,6 +10,7 @@ mkdir -p "$FAKE_BIN"
 
 cat > "$FAKE_BIN/docker" <<'EOF'
 #!/bin/sh
+[ -z "${FAKE_DOCKER_LOG:-}" ] || printf 'version=%s commit=%s args=%s\n' "${SILICON_BUILD_VERSION:-unset}" "${SILICON_BUILD_COMMIT:-unset}" "$*" >> "$FAKE_DOCKER_LOG"
 case "${FAKE_DOCKER_MODE:-success}:$*" in
   missing:version) exit 1 ;;
   missing-compose:"compose version") exit 1 ;;
@@ -108,12 +109,18 @@ grep -q '^CUSTOM_SETTING=preserve-me$' "$ENV_FILE"
 # exact tag and preserve both configuration bytes and persistent data.
 mkdir -p "$INSTALL_DIR/data/postgres"
 printf '%s\n' 'persistent-database-marker' > "$INSTALL_DIR/data/postgres/user-data"
+printf '%s\n' 'organizations-projects-applications' > "$INSTALL_DIR/data/postgres/workload-data"
+printf '%s\n' 'encrypted-secrets-and-integrations' > "$INSTALL_DIR/data/postgres/provider-data"
 UPDATE_CONFIG_HASH=$(sha256sum "$ENV_FILE" | cut -d ' ' -f 1)
 FAKE_GIT_LOG="$TEMP_ROOT/git-update.log"
-env PATH="$TEST_PATH" FAKE_GIT_LOG="$FAKE_GIT_LOG" SILICON_REQUIRE_TAGGED_RELEASE=true SILICON_UPDATE_RUNNER=true SILICON_INSTALL_DIR="$INSTALL_DIR" SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh" --update --version v0.4.2 >/dev/null
+FAKE_DOCKER_LOG="$TEMP_ROOT/docker-update.log"
+env PATH="$TEST_PATH" FAKE_GIT_LOG="$FAKE_GIT_LOG" FAKE_DOCKER_LOG="$FAKE_DOCKER_LOG" SILICON_REQUIRE_TAGGED_RELEASE=true SILICON_UPDATE_RUNNER=true SILICON_INSTALL_DIR="$INSTALL_DIR" SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh" --update --version v0.1.0 >/dev/null
 [ "$UPDATE_CONFIG_HASH" = "$(sha256sum "$ENV_FILE" | cut -d ' ' -f 1)" ] || { printf 'tagged update changed silicon.env\n' >&2; exit 1; }
 grep -q '^persistent-database-marker$' "$INSTALL_DIR/data/postgres/user-data"
-grep -Fq 'checkout --detach refs/tags/v0.4.2' "$FAKE_GIT_LOG"
+grep -q '^organizations-projects-applications$' "$INSTALL_DIR/data/postgres/workload-data"
+grep -q '^encrypted-secrets-and-integrations$' "$INSTALL_DIR/data/postgres/provider-data"
+grep -Fq 'checkout --detach refs/tags/v0.1.0' "$FAKE_GIT_LOG"
+grep -Fq 'version=v0.1.0 commit=0123456789abcdef0123456789abcdef01234567 args=compose --env-file' "$FAKE_DOCKER_LOG"
 expect_failure 'release-only update from main' env PATH="$TEST_PATH" SILICON_REQUIRE_TAGGED_RELEASE=true SILICON_INSTALL_DIR="$INSTALL_DIR" sh "$REPOSITORY_ROOT/install.sh" --update --version main
 grep -q 'exact stable semantic tag' "$TEMP_ROOT/output"
 

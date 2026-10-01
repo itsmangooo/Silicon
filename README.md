@@ -136,7 +136,10 @@ the complete preview set with `cd frontend && npm run preview:capture`.
 Production installations also expose **Settings → Updates**. Silicon compares
 the compiled installed version with stable tagged GitHub Releases, shows release
 notes, and lets an installation administrator apply an exact newer tag through
-the preservation-safe installer flow. It never updates production from `main`.
+the preservation-safe installer flow. A legacy `dev` installation can bootstrap
+to the first verified stable release from this panel; it never updates production
+from `main`. Successful `main` CI runs automatically allocate the next patch tag
+from `.github/release-series` and publish the exact tested commit.
 
 To run the full Compose stack instead:
 

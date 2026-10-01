@@ -4,6 +4,20 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_call:
+    inputs:
+      tag:
+        description: Exact stable tag created for the tested commit
+        required: true
+        type: string
+      sha:
+        description: Exact commit SHA that passed the main CI workflow
+        required: true
+        type: string
+
+concurrency:
+  group: silicon-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -27,14 +41,19 @@ jobs:
           --health-retries 20
     env:
       TEST_DATABASE_URL: postgres://silicon:silicon-release@localhost:5432/silicon_test?sslmode=disable
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      RELEASE_SHA: ${{ inputs.sha || github.sha }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ inputs.sha || github.sha }}
       - name: Validate stable semantic tag
         run: |
-          printf '%s\n' "$GITHUB_REF_NAME" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
-          test "$(git rev-list -n 1 "$GITHUB_REF_NAME")" = "$GITHUB_SHA"
+          printf '%s\n' "$RELEASE_TAG" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
@@ -71,16 +90,26 @@ jobs:
           SILICON_PUBLIC_URL: http://localhost
           SILICON_COOKIE_SECURE: 'false'
           SILICON_DATA_DIR: /tmp/silicon-data
-          SILICON_BUILD_VERSION: ${{ github.ref_name }}
-          SILICON_BUILD_COMMIT: ${{ github.sha }}
+          SILICON_BUILD_VERSION: ${{ env.RELEASE_TAG }}
+          SILICON_BUILD_COMMIT: ${{ env.RELEASE_SHA }}
         run: docker compose -f docker-compose.production.yml build backend frontend updater
       - name: Package release and checksums
         run: |
           mkdir -p dist
-          git archive --format=tar.gz --prefix="Silicon-$GITHUB_REF_NAME/" -o "dist/Silicon-$GITHUB_REF_NAME.tar.gz" "$GITHUB_SHA"
+          git archive --format=tar.gz --prefix="Silicon-$RELEASE_TAG/" -o "dist/Silicon-$RELEASE_TAG.tar.gz" "$RELEASE_SHA"
           cd dist
-          sha256sum "Silicon-$GITHUB_REF_NAME.tar.gz" > SHA256SUMS
+          sha256sum "Silicon-$RELEASE_TAG.tar.gz" > SHA256SUMS
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --title "Silicon $GITHUB_REF_NAME"
+        run: |
+          state=$(gh release view "$RELEASE_TAG" --json isDraft,isPrerelease --jq '"\(.isDraft):\(.isPrerelease)"' 2>/dev/null || true)
+          if [ "$state" = 'false:false' ]; then
+            echo "Stable GitHub Release $RELEASE_TAG already exists"
+            exit 0
+          fi
+          if [ -n "$state" ]; then
+            echo "Release $RELEASE_TAG already exists but is draft or prerelease; refusing to replace it" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" dist/* --verify-tag --generate-notes --title "Silicon $RELEASE_TAG"
