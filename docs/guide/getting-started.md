@@ -1,6 +1,6 @@
 # Getting started
 
-Silicon is a self-hosted control plane for applications and infrastructure. This guide covers the first useful path after installation without inventing resources or runtime state.
+Silicon is a self-hosted platform for applications and infrastructure. This guide covers the first useful path after installation without inventing resources or runtime state.
 
 ## Install Silicon
 

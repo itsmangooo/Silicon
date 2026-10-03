@@ -15,7 +15,7 @@ Docker Compose is visible only as an unsupported future source and cannot be sel
 
 The internal port describes the port listened to inside the container. It is not automatically public. Publishing requires an internal port, a valid host IP address, and a published host port. Entering a published port fills `127.0.0.1` as an explicit local-only default; review it before saving. Silicon never silently publishes on `0.0.0.0`, and the backend independently validates every combination.
 
-The target list is runtime-aware. The local control plane is selectable only when local Docker is enabled. SSH and AWS-backed servers are selectable only after the connection is `Connected` and Docker is available; unreachable or unconfigured records remain visible as unavailable rather than acting like working deployment targets.
+The target list is runtime-aware. The local Silicon host is selectable only when local Docker is enabled. SSH and AWS-backed servers are selectable only after the connection is `Connected` and Docker is available; unreachable or unconfigured records remain visible as unavailable rather than acting like working deployment targets.
 
 ## Environment variables
 

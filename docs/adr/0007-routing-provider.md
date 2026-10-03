@@ -8,7 +8,7 @@ Silicon must model application routes without becoming a reverse proxy or falsel
 
 ## Options considered
 
-- Embed a proxy in the control plane
+- Embed a proxy in the Silicon backend
 - Hardcode a third-party proxy
 - Define RoutingProvider and begin with external routing
 
@@ -18,7 +18,7 @@ Use a `RoutingProvider` contract. Milestone 1 includes only `ExternalRoutingProv
 
 ## Tradeoffs
 
-Silicon cannot provision routes automatically yet, but the product remains truthful and avoids coupling its control plane to one proxy.
+Silicon cannot provision routes automatically yet, but the product remains truthful and avoids coupling the platform to one proxy.
 
 ## Consequences
 

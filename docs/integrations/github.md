@@ -4,7 +4,7 @@ Silicon connects a GitHub App installation to one organization. Application sour
 
 ## GitHub App setup
 
-Configure the control plane with `SILICON_GITHUB_APP_ID`, `SILICON_GITHUB_PRIVATE_KEY`, and `SILICON_GITHUB_WEBHOOK_SECRET`. The private key can contain literal newlines or escaped `\n` sequences. Set the App webhook URL to `https://silicon.example.com/api/v1/webhooks/github`.
+Configure Silicon with `SILICON_GITHUB_APP_ID`, `SILICON_GITHUB_PRIVATE_KEY`, and `SILICON_GITHUB_WEBHOOK_SECRET`. The private key can contain literal newlines or escaped `\n` sequences. Set the App webhook URL to `https://silicon.example.com/api/v1/webhooks/github`.
 
 The App needs repository metadata read access and Push event subscriptions. Grant Contents read access when the configured deployment executor fetches source. Install the App only on repositories Silicon should list and deploy. In Silicon, connect the installation ID to the intended organization, then select an application, repository, branch, and auto-deploy setting.
 
@@ -18,6 +18,6 @@ An accepted push creates the same historical deployment and PostgreSQL job used 
 
 Trigger values are `manual`, `github_push`, `rollback`, and `redeploy`. This change implements manual and GitHub-push creation; rollback/redeploy values are reserved for their command paths.
 
-The shared job runner persists its real result. With `SILICON_LOCAL_DOCKER_ENABLED=true`, Git+Dockerfile applications download a GitHub archive for the exact commit, extract it with traversal/link protection, build it through the local Docker CLI, start an un-published managed container, verify it is running, and remove the preceding managed container. The feature is opt-in because it grants the control plane access to the host Docker daemon. With the option disabled, the default executor records `failed` with a safe configuration message instead of simulating success. Tests also inject a typed executor and prove the exact SHA reaches the normal state machine.
+The shared job runner persists its real result. With `SILICON_LOCAL_DOCKER_ENABLED=true`, Git+Dockerfile applications download a GitHub archive for the exact commit, extract it with traversal/link protection, build it through the local Docker CLI, start an un-published managed container, verify it is running, and remove the preceding managed container. The feature is opt-in because it grants Silicon access to the host Docker daemon. With the option disabled, the default executor records `failed` with a safe configuration message instead of simulating success. Tests also inject a typed executor and prove the exact SHA reaches the normal state machine.
 
 The App private key and webhook secret are process configuration. They must be supplied through the deployment secret mechanism, are excluded from structured logs, and are never returned by the API.

@@ -140,7 +140,7 @@ Open **Applications**, choose **Configure** for each application, and confirm th
 
 [![Application target selector and configuration](../previews/guide-deployment-target.png)](../previews/guide-deployment-target.png)
 
-The local control plane is selectable only when `SILICON_LOCAL_DOCKER_ENABLED=true`. Do not use it merely because it appears in the list; use the server intended to own the workload.
+The local Silicon host is selectable only when `SILICON_LOCAL_DOCKER_ENABLED=true`. Do not use it merely because it appears in the list; use the server intended to own the workload.
 
 ## 11. Add environment variables and secrets
 

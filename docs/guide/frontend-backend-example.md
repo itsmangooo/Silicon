@@ -29,7 +29,7 @@ backend
 
 The example assumes an existing reverse proxy on the target host. If the server is private, choose Cloudflare Tunnel instead. Silicon does not create the reverse proxy or a shared application network.
 
-## 1. Create the control-plane hierarchy
+## 1. Create the project structure
 
 1. Register and create the first organization if the Dashboard is empty.
 2. Open **Projects → Create project** and create `example-app`.
@@ -46,7 +46,7 @@ Choose exactly one initial path:
 
 - **Own Linux server:** add it under **Servers**, complete SSH host-key trust, and confirm Connected plus Docker Available.
 - **AWS:** connect the account, provision a machine with **SSH** selected, or create a generic SSH server record for an existing EC2 instance. Use SSH for this Git-and-secrets example because SSM does not transfer source archives or secret-bearing files.
-- **Control-plane host:** use only when the installation explicitly enables `SILICON_LOCAL_DOCKER_ENABLED=true` and running workloads on the control plane is intentional.
+- **Local Silicon host:** use only when the installation explicitly enables `SILICON_LOCAL_DOCKER_ENABLED=true` and running workloads on the same machine as Silicon is intentional.
 
 Do not proceed while the target selector labels the server Unreachable, Authentication failed, Host key changed, or Docker unavailable.
 
@@ -149,7 +149,7 @@ The normalized target includes the selected application, server, protocol, and r
 
 1. Open the backend health URL through `https://api.example.com` and confirm a real success response.
 2. Open `https://app.example.com`.
-3. Use browser developer tools to confirm frontend API calls go to `https://api.example.com`, not `localhost`, a container name, or the Silicon control plane.
+3. Use browser developer tools to confirm frontend API calls go to `https://api.example.com`, not `localhost`, a container name, or the Silicon server.
 4. Confirm the backend allows the exact frontend origin where CORS applies.
 5. Confirm no database port is exposed publicly.
 6. In Silicon, confirm both deployments are Healthy and runtime logs show the requests.

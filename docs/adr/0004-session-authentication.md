@@ -4,7 +4,7 @@ Status: Accepted
 
 ## Context
 
-Silicon is a browser control plane where immediate revocation, disabled-account enforcement, and avoiding long-lived browser tokens matter.
+Silicon is a browser-based infrastructure platform where immediate revocation, disabled-account enforcement, and avoiding long-lived browser tokens matter.
 
 ## Options considered
 

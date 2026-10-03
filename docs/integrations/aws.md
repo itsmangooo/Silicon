@@ -4,7 +4,7 @@ Silicon treats an AWS EC2 machine as a normal `Server`. Applications, deployment
 
 ## Account connection
 
-Create a dedicated IAM role and allow the Silicon control-plane identity to call `sts:AssumeRole`. Configure the AWS account ID, role ARN, optional External ID, default region, and a short allowlist of enabled regions. Silicon calls `sts:GetCallerIdentity` before persisting the connection and rejects an account-ID mismatch.
+Create a dedicated IAM role and allow the Silicon installation identity to call `sts:AssumeRole`. Configure the AWS account ID, role ARN, optional External ID, default region, and a short allowlist of enabled regions. Silicon calls `sts:GetCallerIdentity` before persisting the connection and rejects an account-ID mismatch.
 
 The preferred credential chain is:
 

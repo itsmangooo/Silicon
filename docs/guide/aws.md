@@ -179,7 +179,7 @@ The Compute inventory treats discovered resources as External and read-only.
 
 ### Import via SSM
 
-1. Ensure the instance has SSM Agent, network access to SSM endpoints, and an EC2 instance profile with the AWS-managed `AmazonSSMManagedInstanceCore` policy or an equivalent reviewed least-privilege policy. This instance profile is separate from Silicon's control-plane AssumeRole.
+1. Ensure the instance has SSM Agent, network access to SSM endpoints, and an EC2 instance profile with the AWS-managed `AmazonSSMManagedInstanceCore` policy or an equivalent reviewed least-privilege policy. This instance profile is separate from the role assumed by Silicon.
 2. Select **Import via SSM** on the instance row.
 3. Confirm the row becomes connected to a Silicon server after the bounded SSM and Docker checks.
 

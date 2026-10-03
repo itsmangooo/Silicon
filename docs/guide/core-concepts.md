@@ -1,6 +1,6 @@
 # Core concepts
 
-Silicon is a modular monolith. Its Go control plane owns policy and orchestration while providers isolate infrastructure-specific behavior.
+Silicon is a modular monolith. Its Go backend owns policy and orchestration while providers isolate infrastructure-specific behavior.
 
 ## Organization boundary
 

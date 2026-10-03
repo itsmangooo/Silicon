@@ -9,7 +9,7 @@ Applications deployed to local, SSH-connected, and cloud-backed Linux servers ne
 1. Require users to build all private networking outside Silicon.
 2. Build a custom overlay protocol or service mesh.
 3. Use WireGuard behind a network-provider boundary and reconcile it through existing typed server connections.
-4. Adopt Kubernetes, Swarm, or an external coordination control plane.
+4. Adopt Kubernetes, Swarm, or an external coordination service.
 
 ## Decision
 

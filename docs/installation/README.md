@@ -33,7 +33,7 @@ cd Silicon
 ./install.sh
 ```
 
-The installer verifies Linux, architecture, Docker, and Compose; generates a random PostgreSQL password and 32-byte encryption key; creates the production Compose layout; runs embedded migrations through backend startup; and waits for `/healthz`. PostgreSQL has no host port. The backend and database communicate on an internal network. No Docker socket is mounted into the control plane.
+The installer verifies Linux, architecture, Docker, and Compose; generates a random PostgreSQL password and 32-byte encryption key; creates the production Compose layout; runs embedded migrations through backend startup; and waits for `/healthz`. PostgreSQL has no host port. The backend and database communicate on an internal network. No Docker socket is mounted into the Silicon backend.
 
 The default HTTP port is `80`. The installer checks the requested host port before it writes a new configuration or starts services. When an interactive install finds a conflict, it reports the listener (including a Docker container when detectable), suggests an available alternative such as `8080`, and waits for confirmation. Piped and other non-interactive installs fail immediately with instructions to supply `--http-port`.
 
@@ -81,7 +81,7 @@ reports healthy. Silicon does not claim zero downtime.
 
 The production Compose layout includes a narrowly scoped updater. It has no HTTP
 endpoint and accepts only durable exact-tag requests written by the authenticated
-control plane. The updater is the only Silicon process with the Docker socket;
+Silicon backend. The updater is the only Silicon process with the Docker socket;
 the backend does not receive host command or Docker-socket access. Before
 replacement it verifies the GitHub Release, exact Git tag, Compose configuration,
 existing `silicon.env`, and PostgreSQL data directory, then builds all images

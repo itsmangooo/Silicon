@@ -8,7 +8,7 @@ Silicon private networks connect selected application servers through an opt-in 
 
 Prepare at least one connected server with Docker and one of Silicon's supported network connection methods:
 
-- `local`, when the control-plane process has host networking privileges and the required tools;
+- `local`, when the Silicon process has host networking privileges and the required tools;
 - `ssh`, including an EC2 instance imported as an SSH-connected Silicon server.
 
 Each member requires Linux, `wireguard-tools`, `nftables`, Docker, and either root or passwordless `sudo` for Silicon's fixed networking operations. Open the selected hub's WireGuard UDP port (51820 by default) only to the spoke addresses that need it. AWS SSM-only connections cannot currently transfer the host configuration and therefore are not selectable for private networking; configure SSH for that EC2 server.

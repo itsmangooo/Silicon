@@ -1,10 +1,10 @@
-# ADR 0002: Use Go for the control-plane backend
+# ADR 0002: Use Go for the platform backend
 
 Status: Accepted
 
 ## Context
 
-The control plane needs a small operational footprint, strong concurrency primitives, predictable binaries, and mature HTTP/PostgreSQL/security libraries.
+The backend needs a small operational footprint, strong concurrency primitives, predictable binaries, and mature HTTP/PostgreSQL/security libraries.
 
 ## Options considered
 
@@ -14,7 +14,7 @@ The control plane needs a small operational footprint, strong concurrency primit
 
 ## Decision
 
-Implement the platform backend in Go. Rust remains a possible language for the future X3 Gateway, not this control plane.
+Implement the platform backend in Go. Rust remains a possible language for the future X3 Gateway, not this backend.
 
 ## Tradeoffs
 

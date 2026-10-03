@@ -1,6 +1,6 @@
 # Docker runtime
 
-Core deployment code depends on `runtime.Provider`. `DockerRuntimeProvider` uses a `CommandExecutor` to deploy, start, stop, restart, remove, inspect, query status, and stream logs. A dispatcher selects the explicit control-plane-local provider or a server runtime backed by the chosen `ServerConnectionProvider`. Current targets include local, SSH, and supported AWS connection paths. Docker-specific labels, commands, health semantics, and ownership checks remain inside the shared adapter.
+Core deployment code depends on `runtime.Provider`. `DockerRuntimeProvider` uses a `CommandExecutor` to deploy, start, stop, restart, remove, inspect, query status, and stream logs. A dispatcher selects the explicitly enabled local provider or a server runtime backed by the chosen `ServerConnectionProvider`. Current targets include local, SSH, and supported AWS connection paths. Docker-specific labels, commands, health semantics, and ownership checks remain inside the shared adapter.
 
 ## Deployment paths
 
@@ -40,4 +40,4 @@ The remote runtime streams exact Git archives to `docker build -`, transfers env
 
 ## Current limitations
 
-Docker image and exact-revision Git + Dockerfile workloads can run on the explicitly enabled control-plane host or a selected server whose connection is healthy and whose Docker runtime is available. AWS SSM intentionally refuses secret-bearing stdin/file transfer, so workloads that require Git archives, environment files, or secrets use an SSH-capable path. The production control plane does not mount its own Docker socket. Registry credential UI, Compose execution, automatic scheduling, distributed build caching, and general remote shell access are not implemented. Fixed-port replacement is deterministic but not zero downtime.
+Docker image and exact-revision Git + Dockerfile workloads can run on the explicitly enabled local Silicon host or a selected server whose connection is healthy and whose Docker runtime is available. AWS SSM intentionally refuses secret-bearing stdin/file transfer, so workloads that require Git archives, environment files, or secrets use an SSH-capable path. The production backend does not mount its own Docker socket. Registry credential UI, Compose execution, automatic scheduling, distributed build caching, and general remote shell access are not implemented. Fixed-port replacement is deterministic but not zero downtime.

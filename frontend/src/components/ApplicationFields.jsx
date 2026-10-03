@@ -16,7 +16,7 @@ export function RuntimeTargetField({ servers = [], localRuntimeAvailable = false
   const initialValue = initialServerId || (localRuntimeAvailable ? LOCAL_RUNTIME_TARGET : '')
   return <Field label="Target server" hint="Only targets with an available Docker runtime can be selected."><select name="targetId" defaultValue={initialValue} required>
     {!localRuntimeAvailable && !initialServerId && <option value="" disabled>Select an available deployment target</option>}
-    <option value={LOCAL_RUNTIME_TARGET} disabled={!localRuntimeAvailable && !(preserveCurrent && !initialServerId)}>Local control plane — {localRuntimeAvailable ? 'Available' : 'Docker runtime disabled'}</option>
+    <option value={LOCAL_RUNTIME_TARGET} disabled={!localRuntimeAvailable && !(preserveCurrent && !initialServerId)}>Local Silicon host — {localRuntimeAvailable ? 'Available' : 'Docker runtime disabled'}</option>
     {servers.map((server) => { const available = isRuntimeTargetAvailable(server); const current = server.id === initialServerId; return <option key={server.id} value={server.id} disabled={!available && !(preserveCurrent && current)}>{runtimeTargetLabel(server)}</option> })}
   </select></Field>
 }

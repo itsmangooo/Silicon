@@ -23,7 +23,7 @@ describe('application source and target fields', () => {
       { id: 'aws-ready', name: 'aws-prod-01', connectionType: 'aws_ssm', providerType: 'aws', connectionStatus: 'connected', dockerAvailable: true },
     ]
     render(<form><RuntimeTargetField servers={servers} localRuntimeAvailable={false} /></form>)
-    expect(screen.getByRole('option', { name: 'Local control plane — Docker runtime disabled' })).toBeDisabled()
+    expect(screen.getByRole('option', { name: 'Local Silicon host — Docker runtime disabled' })).toBeDisabled()
     expect(screen.getByRole('option', { name: 'server-01 — SSH Connected' })).toBeEnabled()
     expect(screen.getByRole('option', { name: 'server-02 — SSH Unreachable' })).toBeDisabled()
     expect(screen.getByRole('option', { name: 'aws-prod-01 — AWS / Connected' })).toBeEnabled()

@@ -1,6 +1,6 @@
 # Administration
 
-Administration covers organization membership, access policy, provider configuration, audit review, and control-plane operations.
+Administration covers organization membership, access policy, provider configuration, audit review, and platform operations.
 
 ## Members and roles
 

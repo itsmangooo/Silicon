@@ -4,9 +4,9 @@ Servers are normal Silicon deployment targets. They use an explicit connection t
 
 ## Local servers
 
-Local connections operate against Docker on the control-plane host and require `SILICON_LOCAL_DOCKER_ENABLED=true`. Keep this disabled when the control plane must not manage its host Docker daemon.
+Local connections operate against Docker on the machine running Silicon and require `SILICON_LOCAL_DOCKER_ENABLED=true`. Keep this disabled when Silicon must not manage that machine's Docker daemon.
 
-Application forms show the control-plane target as unavailable while this option is disabled. A disabled local runtime is not accepted as a new deployment target.
+Application forms show the local Silicon host as unavailable while this option is disabled. A disabled local runtime is not accepted as a new deployment target.
 
 ## SSH servers
 

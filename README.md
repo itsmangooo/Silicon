@@ -2,7 +2,7 @@
 
 Silicon is a hybrid hosting platform for your own servers and the cloud. 
 
-Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, audit events, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation, Cloudflare DNS/optional Tunnel providers, local Docker, SSH-connected Linux Docker hosts, AWS hybrid infrastructure, and opt-in WireGuard private networks are part of the control plane.
+Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, audit events, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation, Cloudflare DNS/optional Tunnel providers, local Docker, SSH-connected Linux Docker hosts, AWS hybrid infrastructure, and opt-in WireGuard private networks are part of the platform.
 
 Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It remains a modular monolith. AWS support is deliberately focused on EC2-hosted Silicon workloads; Silicon does **not** include a custom reverse proxy, automatic TLS, Azure, Kubernetes, or an AWS Console clone.
 
@@ -98,7 +98,7 @@ Screenshots used by the public site are copied, sanitized assets owned by that r
 
 ```text
 Silicon/
-├── backend/            Go control-plane API and PostgreSQL migrations
+├── backend/            Go platform API and PostgreSQL migrations
 ├── frontend/           React + Vite JavaScript interface
 ├── services/           Reserved for justified future independent processes
 ├── docs/               Architecture and operating documentation
@@ -202,7 +202,7 @@ The REST API is rooted at `/api/v1`. Its maintained contract lives at [`backend/
 
 ## Current boundaries
 
-Runtime records and control-plane behavior are PostgreSQL-backed. When the local provider is enabled, Docker state—not deployment status—is authoritative for a running workload. Current boundaries are:
+Runtime records and platform behavior are PostgreSQL-backed. When the local provider is enabled, Docker state—not deployment status—is authoritative for a running workload. Current boundaries are:
 
 - Docker image deployment and exact-revision GitHub Dockerfile builds enter the same persistent job runner and `DockerRuntimeProvider`; local execution requires the explicit `SILICON_LOCAL_DOCKER_ENABLED=true` opt-in;
 - environment variables and secrets support project defaults, environment overrides, and application overrides resolved dynamically in that order at deployment time; local secrets are AES-256-GCM encrypted, write-only through the API, and require `SILICON_ENCRYPTION_KEY`;
@@ -214,7 +214,7 @@ Runtime records and control-plane behavior are PostgreSQL-backed. When the local
 - AWS Cost Explorer data is labeled as delayed actual billing data, with current/previous period, daily, service, region, forecast, and allocation-tag breakdowns. Pre-provision estimates use AWS public on-demand pricing and explicitly exclude unpredictable network, public IPv4, snapshot, IOPS, throughput, and tax charges. Silicon-local organization/account/project/environment budget policies may block only new provisioning and never stop workloads;
 - `ExternalRoutingProvider` reports externally managed routing/TLS semantics; it changes no proxy configuration;
 - OIDC/Authentik configuration records are disabled planning records; the OIDC login flow is not activated;
-- application target choices reflect runtime health: the control-plane target is selectable only when local Docker is enabled, and remote targets require a connected server with Docker available. Docker images and exact-revision GitHub Dockerfile builds share the Docker adapter; Compose is shown as unsupported and cannot be selected. Automatic scheduling, registry credential management, and distributed build caching are not implemented;
+- application target choices reflect runtime health: the local Silicon host is selectable only when local Docker is enabled, and remote targets require a connected server with Docker available. Docker images and exact-revision GitHub Dockerfile builds share the Docker adapter; Compose is shown as unsupported and cannot be selected. Automatic scheduling, registry credential management, and distributed build caching are not implemented;
 - domains reference normalized application/server origins. Cloudflare resolves A, AAAA, or CNAME records from a server public address, or installs official `cloudflared` as a managed host-network Docker container on the chosen local/SSH target.
 
 Provider credentials are handled separately: GitHub App secrets remain process configuration, while Cloudflare API/tunnel tokens and optional AWS bootstrap credentials use authenticated encryption at rest. See [GitHub integration](docs/integrations/github.md), [Cloudflare integration](docs/integrations/cloudflare.md), and [AWS hybrid infrastructure](docs/integrations/aws.md).
