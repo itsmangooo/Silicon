@@ -40,6 +40,8 @@ const (
 	BudgetRead             Permission = "budget.read"
 	BudgetManage           Permission = "budget.manage"
 	ServerAccess           Permission = "server.access"
+	NetworkRead            Permission = "network.read"
+	NetworkManage          Permission = "network.manage"
 )
 
 var rolePermissions = map[string]map[Permission]struct{}{
@@ -54,6 +56,7 @@ var rolePermissions = map[string]map[Permission]struct{}{
 		AuditRead, OrganizationRead, OrganizationManage,
 		IntegrationRead, IntegrationManage,
 		CloudRead, CloudManage, CloudProvision, CloudDelete, CostRead, BudgetRead, BudgetManage, ServerAccess,
+		NetworkRead, NetworkManage,
 	),
 	"developer": set(
 		ProjectRead, ProjectCreate, ProjectUpdate,
@@ -64,6 +67,7 @@ var rolePermissions = map[string]map[Permission]struct{}{
 		MemberRead, IdentityProviderRead, OrganizationRead,
 		IntegrationRead,
 		CloudRead, ServerAccess,
+		NetworkRead,
 	),
 	"viewer": set(
 		ProjectRead, EnvironmentRead, ApplicationRead, DeploymentRead,
@@ -71,6 +75,7 @@ var rolePermissions = map[string]map[Permission]struct{}{
 		AuditRead, OrganizationRead,
 		IntegrationRead,
 		CloudRead, BudgetRead,
+		NetworkRead,
 	),
 }
 
@@ -107,5 +112,6 @@ func allPermissions() map[Permission]struct{} {
 		AuditRead, OrganizationRead, OrganizationManage,
 		IntegrationRead, IntegrationManage,
 		CloudRead, CloudManage, CloudProvision, CloudDelete, CostRead, BudgetRead, BudgetManage, ServerAccess,
+		NetworkRead, NetworkManage,
 	)
 }

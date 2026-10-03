@@ -8,4 +8,6 @@ Provider contracts are in `internal/providers`. Runtime selection is composed th
 
 Remote access remains inside the modular-monolith control plane. SSH is an internal typed-operation transport, not an HTTP shell facility. `serverconnections` resolves credentials and server scope, while the Docker and Cloudflare modules consume normalized executors and origin targets. Future AWS/Azure providers can implement those contracts without changing deployment or domain logic.
 
+Private networking follows the same rule. Organization-owned networks, members, services, policies, and operations are core records. `NetworkProvider` owns target-host mechanics. The initial WireGuard adapter uses host-generated keys, hub-and-spoke peer configuration, hub CoreDNS, and a network-specific nftables table. The async runner never exposes a shell API and accepts only normalized, organization-scoped desired state.
+
 The root [ARCHITECTURE.md](../../ARCHITECTURE.md) contains the module matrix, dependency rule, request flow, and data ownership model.

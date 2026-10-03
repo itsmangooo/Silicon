@@ -5,6 +5,7 @@ import selfHostedProject from '../../../docs/guide/self-hosted-project.md?raw'
 import applications from '../../../docs/guide/applications.md?raw'
 import deployments from '../../../docs/guide/deployments.md?raw'
 import servers from '../../../docs/guide/servers.md?raw'
+import privateNetworking from '../../../docs/guide/private-networking.md?raw'
 import github from '../../../docs/guide/github.md?raw'
 import cloudflare from '../../../docs/guide/cloudflare.md?raw'
 import aws from '../../../docs/guide/aws.md?raw'
@@ -31,6 +32,7 @@ const contentBySlug = {
   applications,
   deployments,
   servers,
+  'private-networking': privateNetworking,
   github,
   cloudflare,
   aws,

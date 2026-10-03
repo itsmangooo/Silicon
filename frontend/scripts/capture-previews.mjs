@@ -109,6 +109,8 @@ try {
     ['/projects/project-platform/applications/app-api', 'application-detail.png'],
     ['/deployments', 'deployments.png'],
     ['/deployments/deployment-184', 'deployment-detail.png'],
+    ['/networks', 'networks.png'],
+    ['/networks/network-production', 'network-detail.png'],
     ['/domains', 'domains.png'],
     ['/integrations', 'integrations.png'],
     ['/members', 'members.png'],

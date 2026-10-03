@@ -2,4 +2,4 @@
 
 ADRs record decisions that shape multiple modules or create long-lived constraints. Accepted records are immutable except for typo clarification; superseding a decision requires a new ADR that links to the old one.
 
-Each record documents context, options, decision, tradeoffs, and consequences. The set covers process topology, backend language, database, session authentication, authorization, provider boundaries, SSH-connected servers, host identity, and universal origin routing.
+Each record documents context, options, decision, tradeoffs, and consequences. The set covers process topology, backend language, database, session authentication, authorization, provider boundaries, SSH-connected servers, host identity, universal origin routing, and provider-backed private networking.

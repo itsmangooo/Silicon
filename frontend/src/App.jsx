@@ -18,6 +18,7 @@ import { SettingsPage } from './pages/SettingsPage.jsx'
 import { IntegrationsPage } from './pages/IntegrationsPage.jsx'
 import { DomainsPage } from './pages/DomainsPage.jsx'
 import { AWSPage } from './pages/AWSPage.jsx'
+import { NetworksPage, NetworkDetailPage } from './pages/NetworksPage.jsx'
 
 const DocsArticlePage = lazy(() => import('./pages/DocsPage.jsx').then((module) => ({ default: module.DocsArticlePage })))
 
@@ -55,6 +56,8 @@ export function App() {
         <Route path="identity" element={<IdentityProvidersPage />} />
         <Route path="audit" element={<AuditPage />} />
 		<Route path="domains" element={<DomainsPage />} />
+		<Route path="networks" element={<NetworksPage />} />
+		<Route path="networks/:networkId" element={<NetworkDetailPage />} />
 		<Route path="integrations" element={<IntegrationsPage />} />
         <Route path="aws/accounts" element={<AWSPage section="accounts" />} />
         <Route path="aws/compute" element={<AWSPage section="compute" />} />

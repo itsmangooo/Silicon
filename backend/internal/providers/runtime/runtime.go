@@ -18,6 +18,15 @@ type DeploymentSpec struct {
 	HostPort       int
 	Environment    map[string]string
 	ServerID       string
+	PortBindings   []PortBinding
+	DNSServers     []string
+	DNSSearch      []string
+}
+
+type PortBinding struct {
+	HostAddress  string
+	HostPort     int
+	InternalPort int
 }
 
 type BuildSpec struct {

@@ -58,6 +58,14 @@ Discovered AWS resources are `external` and read-only. Start, stop, reboot, netw
 
 AWS SSM is used only through bounded internal operations; there is no public command or shell endpoint. The initial SSM transport intentionally refuses stdin and secret-bearing file transfer because SSM Run Command parameters are retained by AWS. Use SSH—with mandatory host-key pinning—for exact-revision builds, encrypted application secrets, environment files, and Cloudflare Tunnel token installation. This avoids placing workload credentials in SSM command history.
 
+## Private network security
+
+WireGuard private keys are generated on each target and stored with mode `0600` under the host's Silicon data directory. Only public keys return to the control plane. Key material is never an API value, command argument, audit field, or log attribute. The provider writes a validated candidate, preserves the previous WireGuard file, and restores it if activation fails.
+
+Private networks use organization-qualified foreign keys for the network, member, service, policy, operation, application, project, and server relationships. CIDRs are private canonical IPv4 ranges and cannot overlap another Silicon network in the same organization. Same-project service access is allowed; cross-project access is denied without an explicit application-to-service rule. The first enforcement model gives each member one attached application identity, preventing ambiguous policy when workloads share a host.
+
+Silicon changes only a network-specific nftables table and its labelled CoreDNS container. It does not flush the host firewall or mutate unrelated AWS security groups. Operators must explicitly allow the hub UDP port in host/cloud firewalls. AWS SSM-only hosts are rejected because the current SSM transport cannot safely stage configuration; EC2 participation currently requires verified SSH.
+
 Cloud-init contains only public package/bootstrap instructions and no permanent AWS or Silicon credential. Security-group helpers do not open ports automatically; a `0.0.0.0/0` rule requires an explicit description. Cost Explorer output is delayed provider data, and estimates are never labeled as actual billing. Per-account cost snapshots prevent organization totals from being overwritten by one account, and tag-scoped budgets remain unevaluated when attribution is unavailable. Budget enforcement can reject only new Silicon provisioning and never stops or terminates running infrastructure.
 
 ## External identity

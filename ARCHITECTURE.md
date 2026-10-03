@@ -17,6 +17,9 @@ flowchart LR
     Cloud --> EC2[EC2 / VPC / EBS]
     Cloud --> Billing[Cost Explorer / Pricing]
     Platform --> Routing[RoutingProvider]
+    Platform --> PrivateNetwork[NetworkProvider]
+    PrivateNetwork --> WireGuard[WireGuardProvider]
+    PrivateNetwork --> Connection
     Routing --> Origin[Origin target resolver]
     Auth --> Identity[IdentityProvider]
     Platform --> Secret[SecretProvider]
@@ -51,6 +54,7 @@ flowchart LR
 | `providers/dns` | Provider-independent DNS desired state | `Provider` | Cloudflare adapter | Future DNS adapters | Ownership metadata prevents unrelated record overwrite/deletion |
 | `providers/tunnel` | Optional multi-host tunnel routing | `Provider` | Cloudflare adapter | Future tunnel adapters | External/shared ownership is explicit and externally managed tunnels are read-only |
 | `providers/routing` | Routing description boundary | `Provider`, `ExternalProvider` | None | Future X3 Gateway, Traefik or Nginx adapters | External provider truthfully leaves TLS/routing operator-managed |
+| `providers/network` | Organization-private overlays, host identity, internal DNS and east-west policy desired state | `Provider`, `NodeConfiguration` | Typed server connections, WireGuard, CoreDNS, nftables | Additional private-network providers | Private keys stay host-side; cross-org links are impossible; only Silicon-owned firewall tables are changed |
 | `providers/identity` | Federated identity boundary | `Provider` | Future mature OIDC library | Generic OIDC implementation and Authentik preset | Contract requires state/nonce and token validation; no crypto implementation here |
 | `providers/secrets` | Project/environment/application secret write, resolve, and delete boundary | `Provider`, `LocalEncryptedSecretProvider` | AES-256-GCM envelope, PostgreSQL | Future Vault/cloud stores | Application > environment > project precedence; plaintext is write-only and never enters audit metadata or normal reads |
 | `providers/logs` | Runtime-log query and streaming boundary | `Provider` | Runtime adapter | Local and external log backends | Workload output remains untrusted |
@@ -61,6 +65,8 @@ flowchart LR
 ## Dependency rule
 
 Business decisions depend on interfaces and domain vocabulary. Concrete adapters depend inward on those contracts. Code must not branch throughout the domain on provider names. Provider selection belongs at the composition boundary.
+
+Private network changes create organization-scoped reconciliation jobs. The runner resolves members through `ServerConnectionProvider`, asks the selected `NetworkProvider` to ensure host identity and apply validated desired state, and persists per-member and operation status. The first provider uses a public hub plus NAT-capable spokes. CoreDNS runs on the hub, while application deployments bind private service ports to member overlay addresses and receive the `.internal` resolver. Cloudflare routing remains a separate north-south ingress path.
 
 ## Request flow
 

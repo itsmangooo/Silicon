@@ -53,6 +53,17 @@ Automated encryption-key rotation, registry credential management, and zero-down
 
 SSM secret-safe file transfer is not implemented; SSH remains required for source archives, application secrets, and cloudflared tunnel tokens. RDS, S3 management, Route53, ECS, EKS, Lambda, Auto Scaling Groups, and generic Terraform execution remain out of scope.
 
+## Private networking increment
+
+- Organization-owned WireGuard networks with serialized CIDR address allocation
+- Local and SSH member reconciliation with host-generated private keys
+- Hub-and-spoke routing for NATed/private spokes without custom NAT traversal
+- CoreDNS `.internal` application discovery and overlay-only Docker bindings
+- Same-project default access plus explicit application-to-service allow/deny policy
+- Network/member/service/policy audit records, RBAC, operational UI, and persistent reconciliation state
+
+Direct peer optimization, high-availability hubs, SSM configuration transfer, automatic mutation of imported AWS security groups, IPv6 overlay CIDRs, and per-workload identity on mixed-project hosts remain future work. They are not reported as implemented.
+
 ## Later milestones
 
 - Generic OIDC login and secure explicit account linking; Authentik preset

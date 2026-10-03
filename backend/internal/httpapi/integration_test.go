@@ -30,6 +30,7 @@ import (
 	cloudaws "github.com/itsmangooo/Silicon/backend/internal/providers/cloud/aws"
 	"github.com/itsmangooo/Silicon/backend/internal/providers/connection"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
+	"github.com/itsmangooo/Silicon/backend/internal/store"
 	"github.com/itsmangooo/Silicon/backend/internal/updates"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -356,6 +357,73 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	applicationID := stringField(t, application, "id")
 	owner.put("/organizations/"+orgA+"/applications/"+applicationID+"/server", map[string]any{"serverId": serverID}, http.StatusOK)
 	viewer.put("/organizations/"+orgB+"/applications/"+applicationID+"/server", map[string]any{"serverId": stringField(t, serverB, "id")}, http.StatusNotFound)
+
+	// Private networks retain organization context through the network, member,
+	// application service, and queued reconciliation relationship.
+	networkResult := owner.post("/organizations/"+orgA+"/networks", map[string]any{"name": "Production private", "cidr": "10.44.0.0/24", "hubServerId": serverID, "listenPort": 51820}, http.StatusCreated)
+	networkID := stringField(t, mapField(t, networkResult, "network"), "id")
+	viewer.get("/organizations/"+orgB+"/networks/"+networkID, http.StatusNotFound)
+	owner.post("/organizations/"+orgA+"/networks/"+networkID+"/members", map[string]any{"serverId": stringField(t, serverB, "id")}, http.StatusNotFound)
+	spokeServer := owner.post("/organizations/"+orgA+"/servers", map[string]any{"name": "edge-spoke", "connectionType": "local", "connectivityType": "private", "publicAddress": "198.51.100.22"}, http.StatusCreated)
+	spokeServerID := stringField(t, spokeServer, "id")
+	owner.post("/organizations/"+orgA+"/servers/"+spokeServerID+"/check", map[string]any{}, http.StatusOK)
+	memberResult := owner.post("/organizations/"+orgA+"/networks/"+networkID+"/members", map[string]any{"serverId": spokeServerID}, http.StatusCreated)
+	memberID := stringField(t, mapField(t, memberResult, "member"), "id")
+	owner.delete("/organizations/"+orgA+"/networks/"+networkID+"/members/"+memberID, http.StatusAccepted)
+	var memberStatus string
+	if err := pool.QueryRow(ctx, `SELECT status FROM silicon_network_members WHERE id=$1 AND organization_id=$2`, memberID, orgA).Scan(&memberStatus); err != nil || memberStatus != "removing" {
+		t.Fatalf("network member removal state=%q err=%v", memberStatus, err)
+	}
+	serviceResult := owner.post("/organizations/"+orgA+"/networks/"+networkID+"/services", map[string]any{"applicationId": applicationID, "hostname": "", "protocol": "tcp", "port": 3000}, http.StatusCreated)
+	service := mapField(t, serviceResult, "service")
+	if service["hostname"] != "api.production.backend.internal" || service["status"] != "pending" {
+		t.Fatalf("unexpected private service: %#v", service)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO silicon_network_members(organization_id,network_id,server_id,address) VALUES($1,$2,$3,'10.44.0.5')`, orgB, networkID, stringField(t, serverB, "id")); err == nil {
+		t.Fatal("cross-organization private network membership was accepted")
+	}
+	var networkJobs int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM jobs WHERE organization_id=$1 AND job_type='reconcile_network' AND payload->>'networkId'=$2`, orgA, networkID).Scan(&networkJobs); err != nil || networkJobs != 4 {
+		t.Fatalf("private network jobs=%d err=%v", networkJobs, err)
+	}
+	networkRepository := store.Repository{Pool: pool}
+	jobID, jobOrganizationID, claimedNetworkID, operationID, operationType, attempts, err := networkRepository.ClaimNetworkJob(ctx, "network-test")
+	if err != nil || jobOrganizationID.String() != orgA || claimedNetworkID.String() != networkID || operationType != "reconcile" || attempts != 1 {
+		t.Fatalf("claim private network reconciliation job=%s organization=%s network=%s operation=%q attempts=%d err=%v", jobID, jobOrganizationID, claimedNetworkID, operationType, attempts, err)
+	}
+	if err = networkRepository.StartNetworkOperation(ctx, jobOrganizationID, claimedNetworkID, operationID); err != nil {
+		t.Fatalf("start private network reconciliation: %v", err)
+	}
+	if err = networkRepository.RetryNetworkOperation(ctx, jobOrganizationID, claimedNetworkID, operationID, jobID, errors.New("bounded test failure"), time.Millisecond); err != nil {
+		t.Fatalf("retry private network reconciliation: %v", err)
+	}
+	var retryJobStatus, retryOperationStatus, retryError string
+	if err = pool.QueryRow(ctx, `SELECT j.status,o.status,o.error FROM jobs j JOIN silicon_network_operations o ON o.job_id=j.id AND o.organization_id=j.organization_id WHERE j.id=$1 AND j.organization_id=$2`, jobID, jobOrganizationID).Scan(&retryJobStatus, &retryOperationStatus, &retryError); err != nil || retryJobStatus != "queued" || retryOperationStatus != "queued" || retryError != "bounded test failure" {
+		t.Fatalf("network retry state job=%q operation=%q error=%q err=%v", retryJobStatus, retryOperationStatus, retryError, err)
+	}
+	if err = networkRepository.CompleteNetworkOperation(ctx, jobOrganizationID, claimedNetworkID, operationID, jobID, errors.New("terminal test failure")); err != nil {
+		t.Fatalf("complete failed private network reconciliation: %v", err)
+	}
+	var failureAudits int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE organization_id=$1 AND action='network.reconciliation_failed' AND resource_id=$2 AND metadata->>'error'='terminal test failure'`, orgA, networkID).Scan(&failureAudits); err != nil || failureAudits != 1 {
+		t.Fatalf("network failure audits=%d err=%v", failureAudits, err)
+	}
+	owner.delete("/organizations/"+orgA+"/networks/"+networkID, http.StatusConflict)
+	disposableNetworkResult := owner.post("/organizations/"+orgA+"/networks", map[string]any{"name": "Disposable private", "cidr": "10.45.0.0/24", "hubServerId": serverID, "listenPort": 51821}, http.StatusCreated)
+	disposableNetworkID := stringField(t, mapField(t, disposableNetworkResult, "network"), "id")
+	deleteResult := owner.delete("/organizations/"+orgA+"/networks/"+disposableNetworkID, http.StatusAccepted)
+	deleteOperation := mapField(t, deleteResult, "operation")
+	if deleteOperation["operationType"] != "delete" {
+		t.Fatalf("network deletion operation=%#v", deleteOperation)
+	}
+	if err = networkRepository.CompleteNetworkDeletion(ctx, uuid.MustParse(orgA), uuid.MustParse(disposableNetworkID), uuid.MustParse(stringField(t, deleteOperation, "id")), uuid.MustParse(stringField(t, deleteOperation, "jobId"))); err != nil {
+		t.Fatalf("complete private network deletion: %v", err)
+	}
+	owner.get("/organizations/"+orgA+"/networks/"+disposableNetworkID, http.StatusNotFound)
+	var deletionAudits int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE organization_id=$1 AND action='network.deleted' AND resource_id=$2`, orgA, disposableNetworkID).Scan(&deletionAudits); err != nil || deletionAudits != 1 {
+		t.Fatalf("network deletion audits=%d err=%v", deletionAudits, err)
+	}
 	if _, err := pool.Exec(ctx, `INSERT INTO domains(organization_id,environment_id,application_id,hostname,target_port) VALUES($1,$2,$3,'api.example.test',3000)`, orgA, environmentID, applicationID); err != nil {
 		t.Fatalf("insert scoped domain: %v", err)
 	}

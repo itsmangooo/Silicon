@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("record not found")
-	ErrConflict = errors.New("resource has dependent records")
+	ErrNotFound           = errors.New("record not found")
+	ErrConflict           = errors.New("resource has dependent records")
+	ErrNetworkHasServices = errors.New("detach all application services before deleting the network")
 )
 
 type Repository struct{ Pool *pgxpool.Pool }

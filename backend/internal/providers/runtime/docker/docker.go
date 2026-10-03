@@ -64,6 +64,15 @@ func (p Provider) Deploy(ctx context.Context, spec runtimeprovider.DeploymentSpe
 	if spec.HostPort > 0 {
 		args = append(args, "--publish", publishBinding(spec.HostAddress, spec.HostPort, spec.InternalPort))
 	}
+	for _, binding := range spec.PortBindings {
+		args = append(args, "--publish", publishBinding(binding.HostAddress, binding.HostPort, binding.InternalPort))
+	}
+	for _, server := range spec.DNSServers {
+		args = append(args, "--dns", server)
+	}
+	for _, search := range spec.DNSSearch {
+		args = append(args, "--dns-search", search)
+	}
 	args = append(args, "--", spec.Image)
 	output, err := p.output(ctx, args...)
 	if err != nil {
@@ -297,6 +306,26 @@ func validateSpec(spec runtimeprovider.DeploymentSpec) error {
 	}
 	if spec.HostPort == 0 && spec.HostAddress != "" {
 		return errors.New("host address requires a published host port")
+	}
+	for _, binding := range spec.PortBindings {
+		if binding.HostPort < 1 || binding.HostPort > 65535 || binding.InternalPort < 1 || binding.InternalPort > 65535 {
+			return errors.New("network binding ports must be between 1 and 65535")
+		}
+		address := net.ParseIP(binding.HostAddress)
+		if address == nil || address.IsUnspecified() || !address.IsPrivate() {
+			return errors.New("network binding host address must be a private IPv4 or IPv6 address")
+		}
+	}
+	for _, server := range spec.DNSServers {
+		address := net.ParseIP(server)
+		if address == nil || address.IsUnspecified() || !address.IsPrivate() {
+			return errors.New("DNS server must be a private IPv4 or IPv6 address")
+		}
+	}
+	for _, search := range spec.DNSSearch {
+		if search == "" || strings.ContainsAny(search, " \t\r\n\x00") {
+			return errors.New("DNS search domain is invalid")
+		}
 	}
 	for name, value := range spec.Environment {
 		if !validEnvironmentName(name) || strings.ContainsAny(value, "\x00\r\n") {

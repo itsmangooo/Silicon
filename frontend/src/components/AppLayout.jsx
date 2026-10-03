@@ -20,6 +20,7 @@ import {
 	GitBranchIcon,
 	CurrencyDollarIcon,
 	DesktopTowerIcon,
+	ShareNetworkIcon,
 } from '@phosphor-icons/react'
 import { useAuth } from '../state/AuthContext.jsx'
 import { TenantScope, useWorkspace } from '../state/WorkspaceContext.jsx'
@@ -29,7 +30,7 @@ import { UpdateIndicator } from './UpdateIndicator.jsx'
 
 const groups = [
   ['PLATFORM', [['Projects', '/projects', FolderIcon], ['Environments', '/environments', StackIcon], ['Applications', '/applications', CubeIcon], ['Deployments', '/deployments', RocketLaunchIcon], ['Servers', '/servers', HardDrivesIcon]]],
-  ['OPERATIONS', [['Domains', '/domains', CloudIcon]]],
+  ['OPERATIONS', [['Networks', '/networks', ShareNetworkIcon], ['Domains', '/domains', CloudIcon]]],
   ['AWS', [['Accounts', '/aws/accounts', CloudIcon], ['Compute', '/aws/compute', DesktopTowerIcon], ['Network', '/aws/network', StackIcon], ['Storage', '/aws/storage', HardDrivesIcon], ['Costs & Budgets', '/aws/costs', CurrencyDollarIcon]]],
   ['ORGANIZATION', [['Members', '/members', UsersIcon], ['Access', '/access', ShieldCheckIcon], ['Identity', '/identity', IdentificationCardIcon], ['Audit', '/audit', ClipboardTextIcon]]],
   ['SYSTEM', [['Integrations', '/integrations', GitBranchIcon], ['Docs', '/docs', BookOpenTextIcon], ['Settings', '/settings', GearSixIcon]]],

@@ -33,10 +33,18 @@ export const previewFixtures = {
   ],
   servers: [
     { id: 'server-edge', organizationId: 'org-preview', name: 'edge-production', hostname: 'edge.example.test', connectionType: 'ssh', connectionStatus: 'connected', dockerAvailable: true, dockerVersion: '28.0.1', connectivityType: 'public', publicAddress: '203.0.113.10', sshPort: 22, sshUsername: 'silicon', sshHostKeyFingerprint: 'SHA256:examplePreviewFingerprint', credentialConfigured: true, operatingSystem: 'Ubuntu 24.04 LTS', architecture: 'x86_64', lastCheckedAt: '2026-09-29T13:24:00Z' },
-    { id: 'server-aws', organizationId: 'org-preview', name: 'aws-production-01', hostname: 'ip-10-20-1-24.eu-central-1.compute.internal', connectionType: 'aws_ssm', providerType: 'aws', connectionStatus: 'connected', dockerAvailable: true, dockerVersion: '28.0.1', connectivityType: 'private', publicAddress: '', awsRegion: 'eu-central-1', awsInstanceId: 'i-0123456789abcdef0', operatingSystem: 'Amazon Linux 2023', architecture: 'x86_64', lastCheckedAt: '2026-09-29T13:22:00Z' },
+    { id: 'server-aws', organizationId: 'org-preview', name: 'aws-production-01', hostname: 'ec2-198-51-100-24.example.test', connectionType: 'ssh', providerType: 'aws', connectionStatus: 'connected', dockerAvailable: true, dockerVersion: '28.0.1', connectivityType: 'public', publicAddress: '198.51.100.24', awsRegion: 'eu-central-1', awsInstanceId: 'i-0123456789abcdef0', operatingSystem: 'Amazon Linux 2023', architecture: 'x86_64', lastCheckedAt: '2026-09-29T13:22:00Z' },
   ],
   domains: [
     { id: 'domain-api', organizationId: 'org-preview', environmentId: 'environment-production', applicationId: 'app-api', targetServerId: 'server-edge', hostname: 'api.example.test', targetPort: 3000, protocol: 'http', routingMode: 'cloudflare_proxied', dnsState: 'active', proxied: true },
+  ],
+  networks: [
+    { id: 'network-production', organizationId: 'org-preview', name: 'Production private', cidr: '10.44.0.0/24', provider: 'wireguard', topology: 'hub_spoke', hubServerId: 'server-edge', listenPort: 51820, status: 'active', lastError: '', createdAt: '2026-09-29T09:00:00Z', updatedAt: '2026-09-29T13:20:00Z', lastReconciledAt: '2026-09-29T13:20:00Z', members: [
+      { id: 'member-edge', serverId: 'server-edge', serverName: 'edge-production', connectionType: 'ssh', publicAddress: '203.0.113.10', address: '10.44.0.1', status: 'active', publicKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', lastReconciledAt: '2026-09-29T13:20:00Z' },
+      { id: 'member-aws', serverId: 'server-aws', serverName: 'aws-production-01', connectionType: 'ssh', publicAddress: '198.51.100.24', address: '10.44.0.2', status: 'active', publicKey: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=', lastReconciledAt: '2026-09-29T13:20:00Z' },
+    ], services: [
+      { id: 'service-api', applicationId: 'app-api', application: 'api', projectId: 'project-platform', project: 'Platform', environment: 'Production', serverId: 'server-edge', hostname: 'api.production.platform.internal', protocol: 'tcp', port: 3000, status: 'active' },
+    ], policies: [], operations: [{ id: 'network-operation-1', operationType: 'reconcile', status: 'succeeded', createdAt: '2026-09-29T13:19:40Z', completedAt: '2026-09-29T13:20:00Z', error: '' }] },
   ],
   searchResults: [
     { id: 'server-edge', type: 'server', title: 'edge-production', subtitle: 'ssh · edge.example.test', route: '/servers', status: 'connected' },
@@ -51,6 +59,7 @@ export const previewFixtures = {
     { id: 'identity-authentik', name: 'Acme Authentik', providerType: 'authentik', issuerUrl: 'https://identity.example.test/application/o/silicon/', enabled: false, createdAt: '2026-09-20T08:00:00Z' },
   ],
   auditEvents: [
+	{ id: 'audit-network', actorName: 'Preview Operator', action: 'network.created', resourceType: 'network', resourceId: 'network-production', requestId: 'req-68a21d40', createdAt: '2026-09-29T13:25:00Z' },
     { id: 'audit-deploy', actorName: 'Preview Operator', action: 'deployment.triggered', resourceType: 'deployment', resourceId: 'deployment-184', requestId: 'req-18f70c2a', createdAt: '2026-09-29T13:21:00Z' },
     { id: 'audit-domain', actorName: 'Preview Operator', action: 'domain.synchronized', resourceType: 'domain', resourceId: 'domain-api', requestId: 'req-7c3ea916', createdAt: '2026-09-29T12:45:00Z' },
   ],
@@ -113,8 +122,9 @@ export function previewResponse(path, options = {}) {
   if (path === `${root}/deployments`) return { deployments: previewFixtures.deployments }
   if (path === `${root}/servers`) return { servers: previewFixtures.servers, localRuntimeAvailable: true }
   if (path === `${root}/domains`) return { domains: previewFixtures.domains }
+  if (path === `${root}/networks`) return { networks: previewFixtures.networks }
   if (path === `${root}/members`) return { members: previewFixtures.members }
-  if (path === `${root}/access`) return { role: 'owner', permissions: ['audit.read', 'application.create', 'application.delete', 'application.read', 'application.update', 'deployment.create', 'deployment.read', 'deployment.rollback', 'domain.manage', 'identity_provider.manage', 'logs.read', 'project.create', 'project.delete', 'project.read', 'project.update', 'secret.write', 'server.manage', 'server.read'] }
+  if (path === `${root}/access`) return { role: 'owner', permissions: ['audit.read', 'application.create', 'application.delete', 'application.read', 'application.update', 'deployment.create', 'deployment.read', 'deployment.rollback', 'domain.manage', 'identity_provider.manage', 'logs.read', 'network.manage', 'network.read', 'project.create', 'project.delete', 'project.read', 'project.update', 'secret.write', 'server.manage', 'server.read'] }
   if (path === `${root}/identity-providers`) return { identityProviders: previewFixtures.identityProviders }
   if (path === `${root}/audit-events`) return { auditEvents: previewFixtures.auditEvents }
   if (path === `${root}/integrations/github`) return previewFixtures.github
@@ -126,6 +136,8 @@ export function previewResponse(path, options = {}) {
   if (path === `${root}/aws/operations`) return { operations: previewFixtures.awsOperations }
   if (path === `${root}/budgets`) return { budgets: previewFixtures.budgets }
   if (path === `${root}/aws/accounts/aws-preview/inventory?region=eu-central-1`) return previewFixtures.awsInventory
+  const networkMatch = path.match(new RegExp(`^${root}/networks/([^/]+)$`))
+  if (networkMatch) return { network: previewFixtures.networks.find((item) => item.id === networkMatch[1]) }
   const projectMatch = path.match(new RegExp(`^${root}/projects/([^/]+)$`))
   if (projectMatch) return previewFixtures.projects.find((item) => item.id === projectMatch[1])
   const projectEnvironmentsMatch = path.match(new RegExp(`^${root}/projects/([^/]+)/environments$`))

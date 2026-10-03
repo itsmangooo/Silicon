@@ -18,6 +18,7 @@ tags:
   - name: Deployments
   - name: Configuration
   - name: Servers
+  - name: Networks
   - name: Identity
   - name: Audit
   - name: GitHub
@@ -947,6 +948,89 @@ paths:
       summary: Delete a Silicon budget policy
       parameters: [{$ref: '#/components/parameters/CSRFToken'}]
       responses: {'204': {description: Deleted}}
+  /organizations/{organizationID}/networks:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Networks]
+      summary: List organization-private networks
+      responses: {'200': {description: Private networks}}
+    post:
+      tags: [Networks]
+      summary: Create a WireGuard network and queue reconciliation
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, cidr, hubServerId]
+              properties:
+                name: {type: string, maxLength: 120}
+                cidr: {type: string, example: 10.44.0.0/24}
+                hubServerId: {$ref: '#/components/schemas/UUID'}
+                listenPort: {type: integer, minimum: 1, maximum: 65535, default: 51820}
+      responses: {'201': {description: Network and queued operation}, '409': {$ref: '#/components/responses/ConflictError'}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /organizations/{organizationID}/networks/{networkID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: networkID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    get: {tags: [Networks], summary: Read network members services policies and operations, responses: {'200': {description: Network detail}, '404': {$ref: '#/components/responses/NotFoundError'}}}
+    delete: {tags: [Networks], summary: Queue ownership-safe network teardown after services are detached, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'202': {description: Network deletion queued}, '409': {$ref: '#/components/responses/ConflictError'}}}
+  /organizations/{organizationID}/networks/{networkID}/members:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: networkID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    post:
+      tags: [Networks]
+      summary: Allocate an overlay address and queue a server membership reconciliation
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [serverId], properties: {serverId: {$ref: '#/components/schemas/UUID'}}}}}}
+      responses: {'201': {description: Network member and queued operation}, '409': {$ref: '#/components/responses/ConflictError'}}
+  /organizations/{organizationID}/networks/{networkID}/members/{memberID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: networkID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+      - {name: memberID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    delete: {tags: [Networks], summary: Queue safe removal of a non-hub network member, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'202': {description: Removal queued}, '409': {$ref: '#/components/responses/ConflictError'}}}
+  /organizations/{organizationID}/networks/{networkID}/services:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: networkID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    post:
+      tags: [Networks]
+      summary: Attach an application service to private discovery and routing
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [applicationId, port], properties: {applicationId: {$ref: '#/components/schemas/UUID'}, hostname: {type: string, example: backend.production.shop.internal}, protocol: {type: string, enum: [tcp, udp], default: tcp}, port: {type: integer, minimum: 1, maximum: 65535}}}}}}
+      responses: {'201': {description: Service attachment and queued operation}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /organizations/{organizationID}/networks/{networkID}/services/{serviceID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: networkID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+      - {name: serviceID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    delete: {tags: [Networks], summary: Detach a private application service and reconcile, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'202': {description: Detachment accepted}}}
+  /organizations/{organizationID}/networks/{networkID}/policies:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: networkID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    post:
+      tags: [Networks]
+      summary: Add an explicit application-to-service private network policy
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [name, sourceApplicationId, destinationServiceId, protocol, port, action], properties: {name: {type: string}, sourceApplicationId: {$ref: '#/components/schemas/UUID'}, destinationServiceId: {$ref: '#/components/schemas/UUID'}, protocol: {type: string, enum: [tcp, udp]}, port: {type: integer, minimum: 1, maximum: 65535}, action: {type: string, enum: [allow, deny]}}}}}}
+      responses: {'201': {description: Policy and queued operation}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /organizations/{organizationID}/networks/{networkID}/policies/{policyID}:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: networkID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+      - {name: policyID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    delete: {tags: [Networks], summary: Delete a private network policy and reconcile, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'202': {description: Deletion accepted}}}
+  /organizations/{organizationID}/networks/{networkID}/reconcile:
+    parameters:
+      - {$ref: '#/components/parameters/OrganizationID'}
+      - {name: networkID, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    post: {tags: [Networks], summary: Queue idempotent desired-state reconciliation, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'202': {description: Reconciliation queued}}}
 components:
   securitySchemes:
     sessionCookie:

@@ -19,6 +19,7 @@ import (
 	cloudaws "github.com/itsmangooo/Silicon/backend/internal/providers/cloud/aws"
 	awsssmconnection "github.com/itsmangooo/Silicon/backend/internal/providers/connection/awsssm"
 	githubprovider "github.com/itsmangooo/Silicon/backend/internal/providers/git/github"
+	wireguardnetwork "github.com/itsmangooo/Silicon/backend/internal/providers/network/wireguard"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 	dockerruntime "github.com/itsmangooo/Silicon/backend/internal/providers/runtime/docker"
 	serverruntime "github.com/itsmangooo/Silicon/backend/internal/providers/runtime/server"
@@ -89,6 +90,8 @@ func main() {
 	go runner.Run(ctx)
 	awsRunner := jobs.AWSRunner{Repository: repository, Resolver: awsResolver, Box: box, Logger: logger, WorkerID: "silicon-aws-control-plane"}
 	go awsRunner.Run(ctx)
+	networkRunner := jobs.NetworkRunner{Repository: repository, Connections: connections, Provider: wireguardnetwork.Provider{}, Logger: logger, WorkerID: "silicon-network-control-plane"}
+	go networkRunner.Run(ctx)
 	server := &http.Server{
 		Addr:              cfg.Address,
 		Handler:           api.Handler(),

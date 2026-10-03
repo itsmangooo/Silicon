@@ -113,12 +113,30 @@ func (e DockerDeploymentExecutor) Execute(ctx context.Context, spec jobs.Deploym
 	if application.PublishedPort != nil {
 		runtimeSpec.HostPort = *application.PublishedPort
 	}
+	bindings, bindingErr := repository.NetworkDeploymentBindings(ctx, spec.OrganizationID, application.ID)
+	if bindingErr != nil {
+		return fmt.Errorf("resolve private network bindings: %w", bindingErr)
+	}
+	if len(bindings) > 0 {
+		if runtimeSpec.InternalPort == 0 {
+			return errors.New("private network service requires an application internal port")
+		}
+		seenDNS := map[string]bool{}
+		for _, binding := range bindings {
+			runtimeSpec.PortBindings = append(runtimeSpec.PortBindings, runtimeprovider.PortBinding{HostAddress: binding.Address, HostPort: binding.Port, InternalPort: runtimeSpec.InternalPort})
+			if !seenDNS[binding.DNS] {
+				runtimeSpec.DNSServers = append(runtimeSpec.DNSServers, binding.DNS)
+				seenDNS[binding.DNS] = true
+			}
+		}
+		runtimeSpec.DNSSearch = []string{"internal"}
+	}
 	previous, err := repository.PreviousRuntimeInstances(ctx, spec.OrganizationID, spec.ApplicationID, spec.DeploymentID)
 	if err != nil {
 		return fmt.Errorf("load previous runtime instances: %w", err)
 	}
 	stoppedForBinding := make([]store.RuntimeInstance, 0, len(previous))
-	if runtimeSpec.HostPort > 0 {
+	if runtimeSpec.HostPort > 0 || len(runtimeSpec.PortBindings) > 0 {
 		for _, old := range previous {
 			if err = e.Runtime.Stop(ctx, old.ExternalID); err != nil {
 				for _, stopped := range stoppedForBinding {

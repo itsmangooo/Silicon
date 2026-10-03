@@ -1,6 +1,6 @@
 # Silicon
 
-Silicon is a self-hosted infrastructure and application control plane. Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, audit events, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation, Cloudflare DNS/optional Tunnel providers, local Docker, SSH-connected Linux Docker hosts, and AWS hybrid infrastructure are part of the control plane.
+Silicon is a self-hosted infrastructure and application control plane. Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, audit events, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation, Cloudflare DNS/optional Tunnel providers, local Docker, SSH-connected Linux Docker hosts, AWS hybrid infrastructure, and opt-in WireGuard private networks are part of the control plane.
 
 Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It remains a modular monolith. AWS support is deliberately focused on EC2-hosted Silicon workloads; Silicon does **not** include a custom reverse proxy, automatic TLS, Azure, Kubernetes, or an AWS Console clone.
 
@@ -51,6 +51,10 @@ These previews were captured from the running application at a consistent deskto
 | Domains | Integrations |
 | --- | --- |
 | [![Silicon domains page](docs/previews/domains.png)](docs/previews/domains.png) | [![Silicon integrations page](docs/previews/integrations.png)](docs/previews/integrations.png) |
+
+| Private networks | Network reconciliation and policy |
+| --- | --- |
+| [![Silicon private networks](docs/previews/networks.png)](docs/previews/networks.png) | [![Silicon private network detail](docs/previews/network-detail.png)](docs/previews/network-detail.png) |
 
 | Members | Access |
 | --- | --- |
@@ -234,5 +238,7 @@ Runtime records and control-plane behavior are PostgreSQL-backed. When the local
 - domains reference normalized application/server origins. Cloudflare resolves A, AAAA, or CNAME records from a server public address, or installs official `cloudflared` as a managed host-network Docker container on the chosen local/SSH target.
 
 Provider credentials are handled separately: GitHub App secrets remain process configuration, while Cloudflare API/tunnel tokens and optional AWS bootstrap credentials use authenticated encryption at rest. See [GitHub integration](docs/integrations/github.md), [Cloudflare integration](docs/integrations/cloudflare.md), and [AWS hybrid infrastructure](docs/integrations/aws.md).
+
+Private networking uses organization-owned WireGuard hub-and-spoke overlays reconciled through existing local/SSH connections. Host private keys never leave their server; CoreDNS supplies `.internal` application names; Docker binds attached services only to overlay addresses; and a Silicon-owned nftables table enforces same-project-by-default policy. AWS EC2 participates when configured as an SSH-connected Silicon server; SSM-only network configuration is intentionally unsupported. See the [private networking guide](docs/guide/private-networking.md).
 
 See [ROADMAP.md](ROADMAP.md) for future milestones and [SECURITY.md](SECURITY.md) for the security model.

@@ -38,6 +38,18 @@ func TestValidateSpecAndEnvironmentFile(t *testing.T) {
 	if got := publishBinding("::1", 32781, 80); got != "[::1]:32781:80" {
 		t.Fatalf("IPv6 binding=%q", got)
 	}
+	privateSpec := runtimeprovider.DeploymentSpec{DeploymentID: "d", OrganizationID: "o", ApplicationID: "a", Image: "nginx", PortBindings: []runtimeprovider.PortBinding{{HostAddress: "10.44.0.2", HostPort: 3000, InternalPort: 3000}}, DNSServers: []string{"10.44.0.1"}, DNSSearch: []string{"internal"}}
+	if err := validateSpec(privateSpec); err != nil {
+		t.Fatalf("valid private network binding rejected: %v", err)
+	}
+	privateSpec.PortBindings[0].HostAddress = "0.0.0.0;unsafe"
+	if err := validateSpec(privateSpec); err == nil {
+		t.Fatal("invalid private network binding was accepted")
+	}
+	privateSpec.PortBindings[0].HostAddress = "0.0.0.0"
+	if err := validateSpec(privateSpec); err == nil {
+		t.Fatal("unspecified private network binding was accepted")
+	}
 }
 
 func TestStatusFromDockerInspectUsesRealHealth(t *testing.T) {
