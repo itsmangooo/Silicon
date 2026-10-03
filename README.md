@@ -6,7 +6,7 @@ Its foundation includes local identities, secure browser sessions, organizations
 
 Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It remains a modular monolith. AWS support is deliberately focused on EC2-hosted Silicon workloads; Silicon does **not** include a custom reverse proxy, automatic TLS, Azure, Kubernetes, or an AWS Console clone.
 
-The independent [Silicon public documentation](https://itsmangooo.github.io/Silicon-Docs/) is the main operator and contributor manual. Its source lives in the separate [Silicon-Docs project](https://github.com/itsmangooo/Silicon-Docs); it does not depend on the panel, backend, PostgreSQL, or a running installation. Installation-local procedures remain available in the authenticated in-panel Docs area.
+The independent [Silicon public documentation](https://itsmangooo.github.io/Silicon-Docs/) is the main operator and contributor manual. Its source lives in the separate [Silicon-Docs project](https://github.com/itsmangooo/Silicon-Docs), while installation-local procedures remain available in the authenticated in-panel Docs area.
 
 ## Interface previews
 
@@ -71,6 +71,28 @@ These previews were captured from the running application at a consistent deskto
 | Settings | |
 | --- | --- |
 | [![Silicon settings page](docs/previews/settings.png)](docs/previews/settings.png) | |
+
+## Documentation
+
+Silicon intentionally maintains two separate documentation products:
+
+| Documentation | Purpose | Source and runtime |
+| --- | --- | --- |
+| In-panel Docs | Operate the Silicon installation currently open in the browser | Markdown in [`docs/guide/`](docs/guide/), rendered by the Silicon frontend |
+| Public documentation | Install, operate, understand, develop, secure, and contribute to Silicon | Standalone Docusaurus repository at [`itsmangooo/Silicon-Docs`](https://github.com/itsmangooo/Silicon-Docs) |
+
+The public site is an independently built static website. It does not import Silicon frontend code, call the Silicon API, require PostgreSQL, share the panel build, or require a running Silicon installation. Local development is self-contained:
+
+```sh
+git clone https://github.com/itsmangooo/Silicon-Docs.git
+cd Silicon-Docs
+npm install
+npm run docs:dev
+```
+
+Documentation is Markdown-first: add a normal `.md` file under `docs/` and register it in `sidebars.js`. `npm run docs:build` produces the static site and `npm run docs:preview` serves that output locally. The independent repository includes local search, Mermaid diagrams, light/dark themes, syntax highlighting, responsive navigation, and a GitHub Pages workflow; the same static output is compatible with Cloudflare Pages.
+
+Screenshots used by the public site are copied, sanitized assets owned by that repository, not runtime imports from Silicon. When the panel UI changes, refresh Silicon's complete preview set with `cd frontend && npm run preview:capture`, review the images for private data, and then deliberately copy the approved assets during documentation maintenance. The current **In-panel documentation** preview above includes the external Docusaurus link and current navigation.
 
 ## Repository layout
 
