@@ -39,6 +39,10 @@ Silicon never publishes an internal container port implicitly. A deployment rema
 
 Press `Ctrl+K` on Windows/Linux or `Command+K` on macOS. Search includes pages, commands, documentation, and permitted resources from the active organization. Use the arrow keys to move, Enter to open, and Escape to close.
 
+## External technical documentation
+
+Use **Developer documentation ↗ External Docs** in the Docs sidebar for the independent public manual at [itsmangooo.github.io/Silicon-Docs](https://itsmangooo.github.io/Silicon-Docs/). It covers source setup, repository structure, API/provider internals, migrations, testing, releases, and contribution workflows. It is a standalone static website and does not call this Silicon installation.
+
 ## What is not implemented
 
 Silicon does not currently provide Kubernetes, Azure, Docker Compose workload execution, X3 Gateway, a custom reverse proxy, or automatic TLS. OIDC records can be configured, but the external-login flow is not activated.

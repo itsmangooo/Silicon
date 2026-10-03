@@ -15,6 +15,7 @@ describe('in-panel documentation', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Servers and SSH' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: 'Trust the host identity' })).toHaveAttribute('id', 'trust-the-host-identity')
     expect(screen.getByRole('link', { name: 'Trust the host identity' })).toHaveAttribute('href', '#trust-the-host-identity')
+    expect(screen.getByRole('link', { name: 'Developer documentation' })).toHaveAttribute('href', 'https://itsmangooo.github.io/Silicon-Docs/')
   })
 
   it('renders procedural guide images and converts relative Markdown guides to panel routes', () => {

@@ -2,6 +2,8 @@
 
 These Markdown articles are the source for Silicon's in-panel documentation and remain readable directly on GitHub.
 
+The in-panel guide is installation-focused: it explains how to operate the Silicon instance currently open in the browser. The independent [Silicon public documentation](https://itsmangooo.github.io/Silicon-Docs/) contains the broader operator, architecture, source-code, security, and contribution manual. The public site is a standalone static Docusaurus build and is not loaded from the panel or backend.
+
 ## Getting started
 
 - [Getting started](getting-started.md)
@@ -17,6 +19,7 @@ These Markdown articles are the source for Silicon's in-panel documentation and 
 ## Infrastructure and integrations
 
 - [Servers and SSH](servers.md)
+- [Private networking](private-networking.md)
 - [GitHub setup and auto-deploy](github.md)
 - [Cloudflare DNS and Tunnel](cloudflare.md)
 - [AWS project](aws.md)

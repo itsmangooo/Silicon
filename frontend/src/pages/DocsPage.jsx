@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { BookOpenTextIcon, CaretDownIcon, MagnifyingGlassIcon } from '@phosphor-icons/react'
+import { ArrowSquareOutIcon, BookOpenTextIcon, CaretDownIcon, MagnifyingGlassIcon } from '@phosphor-icons/react'
 import ReactMarkdown from 'react-markdown'
 import rehypeSlug from 'rehype-slug'
 import remarkGfm from 'remark-gfm'
@@ -60,6 +60,7 @@ export function DocsArticlePage() {
     </header>
     <aside className={`docs-sidebar${navOpen ? ' open' : ''}`}>
       <label className="docs-search"><MagnifyingGlassIcon size={16} aria-hidden="true" /><span className="sr-only">Search documentation</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search docs" /></label>
+      <a className="docs-external-link" href="https://itsmangooo.github.io/Silicon-Docs/" target="_blank" rel="noreferrer"><ArrowSquareOutIcon size={15} aria-hidden="true" /><span>Developer documentation</span></a>
       {query.trim() ? <div className="docs-search-results" aria-label="Documentation search results">{results.length ? results.map((item) => <Link key={item.route} to={item.route} onClick={() => { setNavOpen(false); setQuery('') }}><strong>{item.title}</strong><small>{item.summary}</small></Link>) : <p>No documentation found.</p>}</div> : <DocsNavigation onNavigate={() => setNavOpen(false)} />}
     </aside>
     <article className="docs-article">

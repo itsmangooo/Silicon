@@ -4,6 +4,8 @@ Silicon is a self-hosted infrastructure and application control plane. Its found
 
 Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It remains a modular monolith. AWS support is deliberately focused on EC2-hosted Silicon workloads; Silicon does **not** include a custom reverse proxy, automatic TLS, Azure, Kubernetes, or an AWS Console clone.
 
+The independent [Silicon public documentation](https://itsmangooo.github.io/Silicon-Docs/) is the main operator and contributor manual. Its source lives in the separate [Silicon-Docs project](https://github.com/itsmangooo/Silicon-Docs); it does not depend on the panel, backend, PostgreSQL, or a running installation. Installation-local procedures remain available in the authenticated in-panel Docs area.
+
 ## Interface previews
 
 These previews were captured from the running application at a consistent desktop viewport. Authenticated views use temporary, isolated preview fixtures so the implemented data-backed states are visible; Silicon does not ship with seeded users, organizations, or workload records. The current previews include local, SSH, and AWS-backed targets plus provider-independent Cloudflare routing.
@@ -172,53 +174,7 @@ That flow verifies a fresh migration, registration, sessions, organization creat
 
 ## API
 
-The REST API is rooted at `/api/v1`. Its OpenAPI contract lives at [`backend/openapi/openapi.yaml`](backend/openapi/openapi.yaml). Important resource groups are:
-
-- `/auth/register`, `/auth/login`, `/auth/logout`, `/auth/session`
-- `/system/updates`, `/system/updates/check`
-- `/organizations`
-- `/organizations/{organizationID}/projects`
-- `/organizations/{organizationID}/search`
-- `/organizations/{organizationID}/projects/{projectID}/environments`
-- `/organizations/{organizationID}/projects/{projectID}/environment-variables`
-- `/organizations/{organizationID}/projects/{projectID}/secrets`
-- `/organizations/{organizationID}/environments/{environmentID}`
-- `/organizations/{organizationID}/environments/{environmentID}/environment-variables`
-- `/organizations/{organizationID}/environments/{environmentID}/secrets`
-- `/organizations/{organizationID}/environments/{environmentID}/applications`
-- `/organizations/{organizationID}/applications/{applicationID}`
-- `/organizations/{organizationID}/applications/{applicationID}/deployments`
-- `/organizations/{organizationID}/deployments/{deploymentID}`
-- `/organizations/{organizationID}/applications/{applicationID}/environment-variables`
-- `/organizations/{organizationID}/applications/{applicationID}/secrets`
-- `/organizations/{organizationID}/applications/{applicationID}/configuration`
-- `/organizations/{organizationID}/applications/{applicationID}/runtime`
-- `/organizations/{organizationID}/applications/{applicationID}/runtime/logs`
-- `/organizations/{organizationID}/servers`
-- `/organizations/{organizationID}/servers/{serverID}/connection`
-- `/organizations/{organizationID}/servers/{serverID}/check`
-- `/organizations/{organizationID}/servers/{serverID}/trust-host-key`
-- `/organizations/{organizationID}/applications/{applicationID}/server`
-- `/organizations/{organizationID}/members`
-- `/organizations/{organizationID}/identity-providers`
-- `/organizations/{organizationID}/audit-events`
-- `/organizations/{organizationID}/integrations/github`
-- `/organizations/{organizationID}/integrations/cloudflare`
-- `/organizations/{organizationID}/domains`
-- `/organizations/{organizationID}/domains/{domainID}/sync`
-- `/organizations/{organizationID}/integrations/cloudflare/tunnels`
-- `/organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/install`
-- `/organizations/{organizationID}/integrations/cloudflare/tunnels/{tunnelID}/routes`
-- `/organizations/{organizationID}/aws/accounts`
-- `/organizations/{organizationID}/aws/accounts/{accountID}/inventory`
-- `/organizations/{organizationID}/aws/accounts/{accountID}/machines`
-- `/organizations/{organizationID}/aws/accounts/{accountID}/instances/{instanceID}/actions/{action}`
-- `/organizations/{organizationID}/aws/costs`
-- `/organizations/{organizationID}/aws/operations`
-- `/organizations/{organizationID}/budgets`
-- `/webhooks/github`
-
-Authentication uses an opaque server-side session in an HTTP-only cookie. Unsafe requests also require a CSRF header. Authorization is always enforced by the backend against the organization in the route.
+The REST API is rooted at `/api/v1`. Its maintained contract lives at [`backend/openapi/openapi.yaml`](backend/openapi/openapi.yaml), with architecture and endpoint-extension guidance in the [external API documentation](https://itsmangooo.github.io/Silicon-Docs/developers/api). Authentication uses an opaque server-side session in an HTTP-only cookie. Unsafe requests also require a CSRF header, and organization authorization is enforced by the backend.
 
 ## Current boundaries
 
