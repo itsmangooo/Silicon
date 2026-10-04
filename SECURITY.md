@@ -38,7 +38,7 @@ GitHub webhooks are size-limited and HMAC-SHA-256 verified before JSON decoding.
 
 Cloudflare API and tunnel tokens are encrypted with AES-256-GCM and organization-bound authenticated context. `SILICON_ENCRYPTION_KEY` must be supplied by the deployment secret manager, backed up securely, and never committed. DNS updates and deletes require Silicon ownership metadata; an existing unrelated record becomes a conflict. Externally managed tunnels cannot be modified through Silicon.
 
-The optional local Docker provider grants the control plane high privilege over the host Docker daemon. Leave it disabled unless the control-plane host is an intended workload target, restrict host access, and run only reviewed images/repositories. Source archives are bounded, reject links and path traversal, and containers receive no published host port automatically. Lifecycle APIs resolve a tenant-scoped database instance and the provider verifies Silicon ownership labels before every action, including logs and removal.
+The optional local Docker provider grants Silicon high privilege over the host Docker daemon. Leave it disabled unless the Silicon host is an intended workload target, restrict host access, and run only reviewed images/repositories. Source archives are bounded, reject links and path traversal, and containers receive no published host port automatically. Lifecycle APIs resolve a tenant-scoped database instance and the provider verifies Silicon ownership labels before every action, including logs and removal.
 
 ## SSH server security
 
@@ -52,7 +52,7 @@ Official cloudflared runs as a Silicon-labeled, restart-managed Docker container
 
 ## AWS security and ownership
 
-AWS connections prefer a scoped IAM role assumed through STS. The control plane keeps only temporary SDK credentials in memory. If static access keys are required to bootstrap AssumeRole, both fields and the role External ID are AES-256-GCM encrypted with organization-and-account authenticated context, omitted from reads, and never included in logs, errors, jobs, or audit metadata. `GetCallerIdentity` must succeed before an account is stored.
+AWS connections prefer a scoped IAM role assumed through STS. Silicon keeps only temporary SDK credentials in memory. If static access keys are required to bootstrap AssumeRole, both fields and the role External ID are AES-256-GCM encrypted with organization-and-account authenticated context, omitted from reads, and never included in logs, errors, jobs, or audit metadata. `GetCallerIdentity` must succeed before an account is stored.
 
 Discovered AWS resources are `external` and read-only. Start, stop, reboot, network attachment, storage attachment, and destructive actions all require an explicit managed/imported ownership record. An explicit import changes only Silicon's ownership record to `imported`; it does not claim that Silicon created the resource. Resources created by Silicon are `managed` and receive `silicon:managed`, `silicon:organization`, `silicon:resource`, and applicable project/environment tags. VPC, EIP, EBS, and snapshot deletion/release requires managed ownership. Silicon never infers authority from AWS visibility.
 
@@ -60,7 +60,7 @@ AWS SSM is used only through bounded internal operations; there is no public com
 
 ## Private network security
 
-WireGuard private keys are generated on each target and stored with mode `0600` under the host's Silicon data directory. Only public keys return to the control plane. Key material is never an API value, command argument, audit field, or log attribute. The provider writes a validated candidate, preserves the previous WireGuard file, and restores it if activation fails.
+WireGuard private keys are generated on each target and stored with mode `0600` under the host's Silicon data directory. Only public keys return to Silicon. Key material is never an API value, command argument, audit field, or log attribute. The provider writes a validated candidate, preserves the previous WireGuard file, and restores it if activation fails.
 
 Private networks use organization-qualified foreign keys for the network, member, service, policy, operation, application, project, and server relationships. CIDRs are private canonical IPv4 ranges and cannot overlap another Silicon network in the same organization. Same-project service access is allowed; cross-project access is denied without an explicit application-to-service rule. The first enforcement model gives each member one attached application identity, preventing ambiguous policy when workloads share a host.
 
@@ -80,9 +80,19 @@ The schema and `SecretProvider` contract distinguish secrets from normal environ
 
 In-panel updates accept only stable exact semantic tags (`vMAJOR.MINOR.PATCH`) that exist as non-draft, non-prerelease GitHub Releases and resolve to an exact Git tag. The literal development version `dev` may bootstrap once to such a release; it does not permit `main`, a branch, an arbitrary ref, or a prerelease. Tagged installations reject malformed versions, downgrades, and duplicate concurrent updates. Trigger authorization is installation-global (`users.is_system_admin`) and deliberately independent from organization RBAC. The request and every progress state are persisted in PostgreSQL so a backend restart cannot erase update state.
 
-The backend never receives a Docker socket or a generic host-command API. A dedicated updater service owns the minimum host-side capability required to call the fixed `install.sh --update --version <verified-tag>` flow. It has no HTTP listener. Its nested mounts make the existing configuration and PostgreSQL data directory read-only even though the installer-owned source checkout must be writable. The production Docker socket remains a highly privileged trust boundary; operators must restrict host access and image modification accordingly.
+The backend never receives a Docker socket or a generic host-command API. A dedicated privileged helper owns the minimum host-side capability required to call the fixed `install.sh --update --version <verified-tag>` flow and apply the typed public-access configuration operation. It has no HTTP listener. PostgreSQL data remains mounted read-only; installation configuration is writable only because the public-access operation must atomically update four allowlisted keys and restore the prior bytes on failure. The production Docker socket remains a highly privileged trust boundary; operators must restrict host access and image modification accordingly.
 
 Before service replacement the updater verifies the release, tag, existing configuration, PostgreSQL data path, source cleanliness, Compose configuration, and image build. It hashes `config/silicon.env` before and after and aborts if required persistent state is absent. The update path never invokes `down -v`, volume pruning, schema reset, or secret regeneration. Forward database migrations still require normal backup and restore discipline.
+
+## Installation public access trust boundary
+
+Only an installation administrator who is also Owner/Admin in the organization that owns the selected Cloudflare connection may configure installation public access. Composite organization foreign keys bind the connection, zone, and Tunnel to that organization. The selected Tunnel must be installed on the local Silicon host. API responses omit the encrypted provider token, Tunnel token, provider record ownership ID, and rollback snapshot.
+
+The backend only validates and enqueues a typed operation. The non-networked privileged helper may mutate exactly `SILICON_PUBLIC_URL`, `SILICON_COOKIE_SECURE`, `SILICON_TRUST_FORWARDED_PROTO`, and `SILICON_BIND_ADDRESS`; newline values and other keys are rejected. It preserves `SILICON_HTTP_PORT`, database credentials, the encryption key, unrelated environment values, PostgreSQL, and persistent data byte-for-byte. Compose commands contain fixed arguments and recreate only `backend` and `frontend`.
+
+Before host mutation, the helper persists the prior allowlisted settings. A failed validation or Cloudflare preparation leaves the host unchanged. A failed Compose validation, recreation, or health check atomically restores the previous `silicon.env` and prior application services. DNS and Tunnel reconciliation rejects unrelated hostname ownership and preserves shared routes. Disabling removes only the installation-owned record and ingress hostname; it never deletes the shared Tunnel.
+
+When active, the frontend host port binds only to `127.0.0.1`, the canonical URL uses HTTPS, session/CSRF cookies are Secure, and forwarded HTTPS is trusted only when explicitly enabled. Unsafe browser requests must match the configured frontend/public origin; a mismatched origin or downgraded forwarded protocol is rejected.
 
 ## Reporting
 

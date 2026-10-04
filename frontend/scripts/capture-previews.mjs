@@ -122,6 +122,7 @@ try {
   for (const [route, filename] of previews) await capture(page, previewUrl, route, filename)
 
   await capture(page, previewUrl, '/settings#updates', 'settings-updates.png', '.update-version-grid', false)
+  await capture(page, previewUrl, '/settings', 'settings-public-access.png', '.section:first-of-type', false)
 
   await page.goto(`${previewUrl}/servers`, { waitUntil: 'networkidle0' })
   await settle(page, '.section')

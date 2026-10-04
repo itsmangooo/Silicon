@@ -4,7 +4,7 @@ Silicon is a modular monolith. One Go process owns HTTP delivery and coordinates
 
 ```mermaid
 flowchart LR
-    Browser[React web interface] -->|REST + secure session| API[Go control plane]
+    Browser[React web interface] -->|REST + secure session| API[Go backend]
     API --> Auth[Authentication]
     API --> Policy[Authorization policy]
     API --> Platform[Platform records]
@@ -33,6 +33,10 @@ flowchart LR
     API -->|durable exact-tag request| UpdateDB[(System update state)]
     Updater[Scoped host update runner] --> UpdateDB
     Updater -->|fixed installer flow| Services[Backend + frontend services]
+    API -->|durable typed request| PublicAccessDB[(Public access state)]
+    PublicAccess[Scoped public access runner] --> PublicAccessDB
+    PublicAccess -->|owned DNS + ingress route| Cloudflare[Cloudflare]
+    PublicAccess -->|four allowed settings| Services
 ```
 
 ## Module responsibilities
@@ -60,6 +64,7 @@ flowchart LR
 | `providers/logs` | Runtime-log query and streaming boundary | `Provider` | Runtime adapter | Local and external log backends | Workload output remains untrusted |
 | `httpapi` | Routing, validation, sessions, CSRF, organization authorization, response shape and request logs | `/api/v1` | Feature policy/repository | SSE can be added to specific live resources | Size limits, unknown-field rejection, safe errors, request IDs; integration tested |
 | `updates` / `silicon-updater` | Stable GitHub Release discovery, durable update state, exact-tag verification and fixed installer execution | `/api/v1/system/updates`, database queue | GitHub Releases, PostgreSQL, production installer | Alternate signed release sources can implement the narrow source interface | Installation-admin authorization; no generic command API; configuration hash and persistent-state preflight |
+| `publicaccess` / `silicon-updater` | Installation-global custom hostname state, Cloudflare route reconciliation, allowlisted host configuration and scoped service recreation | `/api/v1/system/public-access`, database queue | Organization-owned Cloudflare records, encrypted token, production Compose | Additional carefully bounded installation ingress mechanisms | System-admin plus provider-organization authorization; exact rollback snapshot; no generic shell or filesystem API |
 | `db` | Ordered transactional migrations | `Migrate` | PostgreSQL | Additive numbered SQL migrations | Empty-database integration test; constraints reinforce invariants |
 
 ## Dependency rule

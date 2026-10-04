@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import { updatePanelState } from './SettingsPage.jsx'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { updatePanelState, waitForPublicURL } from './SettingsPage.jsx'
+
+afterEach(() => vi.unstubAllGlobals())
 
 describe('update panel state', () => {
   it('offers the first stable release to a development build', () => {
@@ -20,5 +22,14 @@ describe('update panel state', () => {
     const state = updatePanelState({ currentVersion: 'v0.1.0', updateAvailable: true, latestRelease: { tagName: 'v0.1.1' } })
     expect(state.canUpdate).toBe(true)
     expect(state.actionLabel).toBe('Update Silicon to v0.1.1')
+  })
+})
+
+describe('public access reconnect', () => {
+  it('checks the exact HTTPS target health endpoint before navigation', async () => {
+    const fetch = vi.fn().mockResolvedValue({ type: 'opaque' })
+    vi.stubGlobal('fetch', fetch)
+    await waitForPublicURL('https://silicon.example.com')
+    expect(fetch).toHaveBeenCalledWith('https://silicon.example.com/healthz', expect.objectContaining({ mode: 'no-cors', cache: 'no-store' }))
   })
 })

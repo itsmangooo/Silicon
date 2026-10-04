@@ -35,6 +35,8 @@ services:
       SILICON_AUTO_MIGRATE: "true"
       SILICON_ENCRYPTION_KEY: ${SILICON_ENCRYPTION_KEY}
       SILICON_TRUST_FORWARDED_PROTO: ${SILICON_TRUST_FORWARDED_PROTO:-false}
+      SILICON_HTTP_PORT: ${SILICON_HTTP_PORT:-80}
+      SILICON_BIND_ADDRESS: ${SILICON_BIND_ADDRESS:-0.0.0.0}
       SILICON_LOG_LEVEL: ${SILICON_LOG_LEVEL:-info}
       SILICON_LOCAL_DOCKER_ENABLED: "false"
       SILICON_RELEASE_API_URL: ${SILICON_RELEASE_API_URL:-https://api.github.com}
@@ -61,10 +63,12 @@ services:
       SILICON_RELEASE_API_URL: ${SILICON_RELEASE_API_URL:-https://api.github.com}
       SILICON_RELEASE_REPOSITORY: ${SILICON_RELEASE_REPOSITORY:-itsmangooo/Silicon}
       SILICON_READINESS_URL: http://frontend/healthz
+      SILICON_ENCRYPTION_KEY: ${SILICON_ENCRYPTION_KEY}
+      SILICON_CLOUDFLARE_API_URL: ${SILICON_CLOUDFLARE_API_URL:-https://api.cloudflare.com/client/v4}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${SILICON_DATA_DIR}/..:/opt/silicon
-      - ${SILICON_DATA_DIR}/../config:/opt/silicon/config:ro
+      - ${SILICON_DATA_DIR}/../config:/opt/silicon/config
       - ${SILICON_DATA_DIR}/postgres:/opt/silicon/data/postgres:ro
     depends_on:
       backend:

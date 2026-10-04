@@ -18,7 +18,7 @@ export const pageSearchEntries = [
   { kind: 'page', group: 'Pages', title: 'Identity Providers', subtitle: 'OIDC configuration records', route: '/identity', sections: ['Provider configuration'], aliases: ['identity', 'oidc', 'authentik'], keywords: ['login', 'authentication'] },
   { kind: 'page', group: 'Pages', title: 'Audit', subtitle: 'Organization-scoped security and operational events', route: '/audit', sections: ['Audit events'], aliases: ['history'], keywords: ['security', 'actor', 'request id'] },
   { kind: 'page', group: 'Pages', title: 'Integrations', subtitle: 'GitHub, Cloudflare, and provider connections', route: '/integrations', sections: ['GitHub App', 'Cloudflare', 'Cloudflare Tunnel'], aliases: ['providers'], keywords: ['webhook', 'dns', 'token', 'repository'] },
-  { kind: 'page', group: 'Pages', title: 'Settings', subtitle: 'Control-plane and organization settings', route: '/settings', sections: ['Platform boundaries', 'Security posture'], aliases: ['configuration'], keywords: ['system', 'organization'] },
+  { kind: 'page', group: 'Pages', title: 'Settings', subtitle: 'Installation and organization settings', route: '/settings', sections: ['Public access', 'Updates', 'Platform boundaries', 'Security posture'], aliases: ['configuration'], keywords: ['system', 'organization'] },
 ]
 
 export const commandSearchEntries = [

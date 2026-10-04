@@ -2,7 +2,7 @@
 
 ## Principles
 
-- Keep the control plane a modular monolith until an independently deployable process has a demonstrated need.
+- Keep Silicon as a modular monolith until an independently deployable process has a demonstrated need.
 - Depend on provider interfaces from core behavior; keep implementation-specific checks inside adapters.
 - Preserve organization scope in every query, transaction, cache key, job payload, and event.
 - Prefer explicit SQL, constraints, small migrations, and reviewable transactions.

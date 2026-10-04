@@ -24,7 +24,7 @@ export async function waitForUpdatedSilicon({ targetVersion, loadStatus, checkHe
       }
     } catch (error) {
       if (error.name === 'AbortError' || error.updateFailed) throw error
-      onStatus?.({ status: 'reconnecting', message: 'Silicon is restarting. Reconnecting to the control plane…' })
+      onStatus?.({ status: 'reconnecting', message: 'Silicon is restarting. Reconnecting…' })
       try { await checkHealth() } catch { /* Restart downtime is expected. */ }
     }
     await wait(1500, signal)

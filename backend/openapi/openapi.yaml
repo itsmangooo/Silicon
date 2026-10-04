@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
-  title: Silicon Control Plane API
+  title: Silicon Platform API
   version: 0.6.0
   description: >-
-    Silicon control-plane API with local authentication, organization-scoped
+    Silicon platform API with local authentication, organization-scoped
     records, GitHub push automation, Cloudflare DNS/tunnel integration, and a
-    local, SSH-connected, and AWS-backed Docker runtime providers, AWS
+    local, SSH-connected, and AWS-backed Docker runtime providers, plus AWS
     infrastructure inventory, cost reporting, and budgets.
 servers:
   - url: http://localhost:8080/api/v1
@@ -118,6 +118,35 @@ paths:
       responses:
         '200': {description: Refreshed update state, content: {application/json: {schema: {$ref: '#/components/schemas/SystemUpdateStatus'}}}}
         '403': {$ref: '#/components/responses/ForbiddenError'}
+  /system/public-access:
+    get:
+      tags: [System]
+      summary: Read installation public access state and eligible Cloudflare resources
+      description: Requires an installation-level system administrator.
+      responses:
+        '200': {description: Public access state, content: {application/json: {schema: {$ref: '#/components/schemas/SystemPublicAccessStatus'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+    post:
+      tags: [System]
+      summary: Queue installation public access through a local Cloudflare Tunnel
+      description: Uses organization-owned Cloudflare resources without transferring ownership.
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SystemPublicAccessInput'}}}
+      responses:
+        '202': {description: Durable operation, content: {application/json: {schema: {$ref: '#/components/schemas/SystemPublicAccessOperation'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+        '409': {$ref: '#/components/responses/ConflictError'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+    delete:
+      tags: [System]
+      summary: Disable installation public access and restore the previous local settings
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      responses:
+        '202': {description: Durable operation, content: {application/json: {schema: {$ref: '#/components/schemas/SystemPublicAccessOperation'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+        '409': {$ref: '#/components/responses/ConflictError'}
   /auth/logout:
     post:
       tags: [Authentication]
@@ -399,7 +428,7 @@ paths:
         '200': {description: Updated application, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}
     delete:
       tags: [Applications]
-      summary: Delete an application and its dependent control-plane records
+      summary: Delete an application and its dependent Silicon records
       parameters: [{$ref: '#/components/parameters/CSRFToken'}]
       responses:
         '204': {description: Deleted}
@@ -1170,6 +1199,53 @@ components:
       required: [targetVersion]
       properties:
         targetVersion: {type: string, pattern: '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'}
+    SystemPublicAccessInput:
+      type: object
+      additionalProperties: false
+      required: [organizationId, integrationId, zoneId, tunnelId, hostname]
+      properties:
+        organizationId: {$ref: '#/components/schemas/UUID'}
+        integrationId: {$ref: '#/components/schemas/UUID'}
+        zoneId: {$ref: '#/components/schemas/UUID'}
+        tunnelId: {$ref: '#/components/schemas/UUID'}
+        hostname: {type: string, format: hostname}
+    SystemPublicAccessOperation:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        action: {type: string, enum: [configure, disable]}
+        status: {type: string, enum: [pending, validating, configuring_cloudflare, updating_configuration, restarting, waiting_for_health, active, disabled, failed]}
+        hostname: {type: string}
+        localOrigin: {type: string, format: uri}
+        message: {type: string}
+        failedStage: {type: string}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+        updatedAt: {$ref: '#/components/schemas/Timestamp'}
+    SystemPublicAccessStatus:
+      type: object
+      required: [connections, installation]
+      properties:
+        active: {oneOf: [{$ref: '#/components/schemas/SystemPublicAccess'}, {type: 'null'}]}
+        operation: {oneOf: [{$ref: '#/components/schemas/SystemPublicAccessOperation'}, {type: 'null'}]}
+        connections: {type: array, items: {type: object}}
+        installation:
+          type: object
+          properties:
+            publicUrl: {type: string, format: uri}
+            httpPort: {type: integer, minimum: 1, maximum: 65535}
+            bindAddress: {type: string}
+            localOrigin: {type: string, format: uri}
+    SystemPublicAccess:
+      type: object
+      properties:
+        organizationId: {$ref: '#/components/schemas/UUID'}
+        integrationId: {$ref: '#/components/schemas/UUID'}
+        zoneId: {$ref: '#/components/schemas/UUID'}
+        tunnelId: {$ref: '#/components/schemas/UUID'}
+        hostname: {type: string, format: hostname}
+        localOrigin: {type: string, format: uri}
+        publicUrl: {type: string, format: uri}
+        localAccessUrl: {type: string, format: uri}
     NamedSlugInput:
       type: object
       additionalProperties: false

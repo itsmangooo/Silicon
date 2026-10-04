@@ -12,6 +12,7 @@ import aws from '../../../docs/guide/aws.md?raw'
 import security from '../../../docs/guide/security.md?raw'
 import administration from '../../../docs/guide/administration.md?raw'
 import troubleshooting from '../../../docs/guide/troubleshooting.md?raw'
+import publicAccess from '../../../docs/guide/public-access.md?raw'
 import { docCatalog } from './catalog.js'
 
 export { docCategories, docRoute, docSearchEntries } from './catalog.js'
@@ -39,6 +40,7 @@ const contentBySlug = {
   security,
   administration,
   troubleshooting,
+  'public-access': publicAccess,
 }
 
 export const docs = docCatalog.map((article) => ({

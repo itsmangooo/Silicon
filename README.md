@@ -4,6 +4,8 @@ Silicon is a hybrid hosting platform for your own servers and the cloud.
 
 Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, audit events, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation, Cloudflare DNS/optional Tunnel providers, local Docker, SSH-connected Linux Docker hosts, AWS hybrid infrastructure, and opt-in WireGuard private networks are part of the platform.
 
+Installation administrators can also publish the Silicon panel itself from **Settings → Public access** through an existing organization-owned Cloudflare Tunnel. The safe helper creates only the owned hostname route, switches the existing frontend exposure to loopback, preserves the configured HTTP port and all secrets/data, and recreates only the backend/frontend services. Cloudflare—not Silicon—terminates public HTTPS.
+
 Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It remains a modular monolith. AWS support is deliberately focused on EC2-hosted Silicon workloads; Silicon does **not** include a custom reverse proxy, automatic TLS, Azure, Kubernetes, or an AWS Console clone.
 
 The independent [Silicon public documentation](https://itsmangooo.github.io/Silicon-Docs/) is the main operator and contributor manual. Its source lives in the separate [Silicon-Docs project](https://github.com/itsmangooo/Silicon-Docs), while installation-local procedures remain available in the authenticated in-panel Docs area.
@@ -27,6 +29,10 @@ These previews were captured from the running application at a consistent deskto
 | Safe tagged updates |
 | --- |
 | [![Silicon safe tagged update settings](docs/previews/settings-updates.png)](docs/previews/settings-updates.png) |
+
+| Installation public access |
+| --- |
+| [![Silicon installation public access settings](docs/previews/settings-public-access.png)](docs/previews/settings-public-access.png) |
 
 | Project detail | Environments |
 | --- | --- |

@@ -28,6 +28,7 @@ The in-panel guide is installation-focused: it explains how to operate the Silic
 
 - [Security model](security.md)
 - [Administration](administration.md)
+- [Expose Silicon on a custom domain](public-access.md)
 - [Troubleshooting](troubleshooting.md)
 
 The panel route for each article is stable and includes generated heading anchors. Search documentation from the Docs sidebar, or use the global `Ctrl+K` / `Command+K` palette to search pages, resources, commands, and these articles together.
@@ -41,6 +42,10 @@ The panel route for each article is stable and includes generated heading anchor
 | Safe tagged updates |
 | --- |
 | [![Silicon safe tagged update settings](../previews/settings-updates.png)](../previews/settings-updates.png) |
+
+| Installation public access |
+| --- |
+| [![Silicon installation public access settings](../previews/settings-public-access.png)](../previews/settings-public-access.png) |
 
 | Application creation |
 | --- |

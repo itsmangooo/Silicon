@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"log/slog"
 	"net/http"
 	"os"
@@ -9,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/itsmangooo/Silicon/backend/internal/cryptoenvelope"
+	"github.com/itsmangooo/Silicon/backend/internal/publicaccess"
 	"github.com/itsmangooo/Silicon/backend/internal/store"
 	"github.com/itsmangooo/Silicon/backend/internal/updates"
 )
@@ -28,8 +31,19 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	key, err := base64.StdEncoding.DecodeString(os.Getenv("SILICON_ENCRYPTION_KEY"))
+	if err != nil || len(key) != 32 {
+		logger.Error("SILICON_ENCRYPTION_KEY must be base64 for exactly 32 bytes")
+		os.Exit(1)
+	}
+	box, err := cryptoenvelope.New(key)
+	if err != nil {
+		logger.Error("encryption initialization failed", "error", err)
+		os.Exit(1)
+	}
+	repository := store.Repository{Pool: pool}
 	runner := updates.Runner{
-		Repository: store.Repository{Pool: pool},
+		Repository: repository,
 		Releases: updates.GitHubSource{
 			Client:     &http.Client{Timeout: 15 * time.Second},
 			APIBaseURL: value("SILICON_RELEASE_API_URL", "https://api.github.com"),
@@ -38,7 +52,15 @@ func main() {
 		Applier: updates.InstallerApplier{InstallDir: value("SILICON_INSTALL_DIR", "/opt/silicon"), Logger: logger},
 		Logger:  logger,
 	}
-	logger.Info("Silicon update runner started")
+	publicAccessRunner := publicaccess.Runner{
+		Repository:      repository,
+		Box:             box,
+		ProviderFactory: publicaccess.DefaultProviderFactory(value("SILICON_CLOUDFLARE_API_URL", "https://api.cloudflare.com/client/v4")),
+		Host:            publicaccess.FileHostApplier{InstallDir: value("SILICON_INSTALL_DIR", "/opt/silicon"), ReadinessURL: value("SILICON_READINESS_URL", "http://frontend/healthz")},
+		Logger:          logger,
+	}
+	logger.Info("Silicon privileged operation runner started")
+	go publicAccessRunner.Run(ctx)
 	runner.Run(ctx)
 }
 

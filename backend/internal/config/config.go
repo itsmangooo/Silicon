@@ -33,6 +33,8 @@ type Config struct {
 	RuntimeLogFollowTimeout time.Duration
 	PublicURL               string
 	TrustForwardedProto     bool
+	HTTPPort                int
+	BindAddress             string
 }
 
 func Load() (Config, error) {
@@ -57,6 +59,8 @@ func Load() (Config, error) {
 		RuntimeLogFollowTimeout: 5 * time.Minute,
 		PublicURL:               strings.TrimRight(env("SILICON_PUBLIC_URL", "http://localhost:5173"), "/"),
 		TrustForwardedProto:     envBool("SILICON_TRUST_FORWARDED_PROTO", false),
+		HTTPPort:                80,
+		BindAddress:             env("SILICON_BIND_ADDRESS", "0.0.0.0"),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
@@ -95,6 +99,13 @@ func Load() (Config, error) {
 			return Config{}, errors.New("SILICON_GITHUB_APP_ID must be a positive integer")
 		}
 		cfg.GitHubAppID = appID
+	}
+	if value := os.Getenv("SILICON_HTTP_PORT"); value != "" {
+		port, err := strconv.Atoi(value)
+		if err != nil || port < 1 || port > 65535 {
+			return Config{}, errors.New("SILICON_HTTP_PORT must be between 1 and 65535")
+		}
+		cfg.HTTPPort = port
 	}
 	switch strings.ToLower(env("SILICON_LOG_LEVEL", "info")) {
 	case "debug":

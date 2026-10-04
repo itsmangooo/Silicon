@@ -244,6 +244,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 		t.Fatalf("unexpected bootstrap system administration: owner=%#v viewer=%#v", ownerSession, viewerSession)
 	}
 	viewer.post("/system/updates/check", map[string]any{}, http.StatusForbidden)
+	viewer.get("/system/public-access", http.StatusForbidden)
 	update := owner.post("/system/updates", map[string]any{"targetVersion": "v0.1.0"}, http.StatusAccepted)
 	if update["fromVersion"] != "dev" || update["targetVersion"] != "v0.1.0" || update["status"] != "queued" {
 		t.Fatalf("unexpected persisted update operation: %#v", update)
@@ -707,6 +708,15 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	owner.put("/organizations/"+orgA+"/domains/"+domainID, map[string]any{"targetPort": 3000, "protocol": "http", "routingMode": "cloudflare_tunnel"}, http.StatusOK)
 	tunnel := owner.post("/organizations/"+orgA+"/integrations/cloudflare/tunnels", map[string]any{"name": "private-network", "serverId": serverID}, http.StatusCreated)
 	tunnelID := stringField(t, tunnel, "id")
+	publicAccess := owner.post("/system/public-access", map[string]any{"organizationId": orgA, "integrationId": stringField(t, cloudflare, "id"), "zoneId": cloudflareZoneAID, "tunnelId": tunnelID, "hostname": "silicon.example.com"}, http.StatusAccepted)
+	if publicAccess["status"] != "pending" || publicAccess["hostname"] != "silicon.example.com" {
+		t.Fatalf("unexpected public access operation: %#v", publicAccess)
+	}
+	publicAccessStatus := owner.get("/system/public-access", http.StatusOK)
+	encodedPublicAccess, _ := json.Marshal(publicAccessStatus)
+	if bytes.Contains(encodedPublicAccess, []byte("scoped-secret-token")) || len(arrayField(t, publicAccessStatus, "connections")) != 1 {
+		t.Fatalf("public access options leaked credentials or omitted scoped connection: %s", encodedPublicAccess)
+	}
 	owner.post("/organizations/"+orgA+"/integrations/cloudflare/tunnels/"+tunnelID+"/routes", map[string]any{"domainId": domainID}, http.StatusCreated)
 	if connections.installations.Load() != 1 {
 		t.Fatalf("tunnel installations=%d", connections.installations.Load())

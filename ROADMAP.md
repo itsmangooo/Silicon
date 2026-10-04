@@ -1,6 +1,6 @@
 # Roadmap
 
-## Milestone 1 — control-plane foundation
+## Milestone 1 — platform foundation
 
 - Go modular monolith, PostgreSQL, migrations and structured logging
 - Local registration/login/logout and server-side sessions

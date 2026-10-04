@@ -31,3 +31,9 @@ A tunnel may carry multiple hostname routes. Silicon reads the current Cloudflar
 For a Silicon-created tunnel, the user selects a local or SSH-connected target server. Silicon installs official `cloudflare/cloudflared` as a labeled, restart-managed Docker container using host networking. The encrypted tunnel token is transferred through a mode-`0600` temporary env file and never appears in command arguments. Each route resolves to `protocol://127.0.0.1:port` on that same target. Imported/external tunnels are preserved and are not installed or deleted by Silicon.
 
 Private or self-hosted server records may make a tunnel useful because it avoids direct inbound HTTP/HTTPS exposure, but the choice remains explicit.
+
+## Installation public access
+
+An installation administrator can reuse an organization-owned connection, zone, and Tunnel to expose the Silicon panel itself. This is configured under **Settings → Public access**, not the organization Domains page. The Tunnel must run on the local Silicon host and targets the unchanged host HTTP port through loopback. Cloudflare terminates HTTPS; Silicon adds no reverse proxy or certificate automation.
+
+The installation stores the owning organization/provider references, refuses unrelated hostname records/routes, and prevents referenced resources from being deleted while active. See [Expose Silicon on a custom domain](../guide/public-access.md) for the staged configuration, restart, rollback, change, and disable flows.

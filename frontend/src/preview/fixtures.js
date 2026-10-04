@@ -12,7 +12,7 @@ export const previewFixtures = {
     { id: 'org-lab', name: 'Homelab', slug: 'homelab', role: 'admin', createdAt: '2026-02-01T10:00:00Z' },
   ],
   projects: [
-    { id: 'project-platform', organizationId: 'org-preview', name: 'Platform', slug: 'platform', description: 'Silicon control-plane workloads', createdAt: '2026-08-10T09:00:00Z', updatedAt: '2026-09-29T12:00:00Z' },
+    { id: 'project-platform', organizationId: 'org-preview', name: 'Platform', slug: 'platform', description: 'Silicon platform workloads', createdAt: '2026-08-10T09:00:00Z', updatedAt: '2026-09-29T12:00:00Z' },
     { id: 'project-observability', organizationId: 'org-preview', name: 'Observability', slug: 'observability', description: 'Operational visibility services', createdAt: '2026-08-18T09:00:00Z', updatedAt: '2026-09-26T12:00:00Z' },
   ],
   environments: [
@@ -112,6 +112,7 @@ export function previewResponse(path, options = {}) {
   if (path === '/auth/session') return { user: previewFixtures.user }
   if (path === '/organizations') return { organizations: previewFixtures.organizations }
   if (path === '/system/updates') return { releaseCheckStatus: 'available', version: { currentVersion: 'dev', commitSha: '0123456', buildTime: '2026-10-01T10:00:00Z', latestRelease: { tagName: 'v0.1.0', name: 'Silicon v0.1.0', notes: 'First stable development release with verified in-panel updates.', htmlUrl: 'https://github.com/itsmangooo/Silicon/releases/tag/v0.1.0' }, updateAvailable: true, checkedAt: '2026-10-01T10:00:00Z' } }
+  if (path === '/system/public-access') return { active: null, operation: null, installation: { publicUrl: 'http://192.0.2.10', httpPort: 80, bindAddress: '0.0.0.0', localOrigin: 'http://127.0.0.1:80' }, connections: [{ organizationId: 'org-preview', organizationName: 'Acme Infrastructure', integration: { id: 'cloudflare-preview', organizationId: 'org-preview', accountId: 'preview-cloudflare-account', status: 'connected' }, zones: previewFixtures.zones, tunnels: [{ ...previewFixtures.tunnels[0], id: 'tunnel-local', name: 'silicon-host', serverId: 'server-local' }] }] }
   if (/^\/organizations\/[^/]+\/search\?q=/.test(path)) {
     const query = new URL(path, 'http://preview.invalid').searchParams.get('q')?.toLowerCase() || ''
     return { query, results: previewFixtures.searchResults.filter((item) => `${item.title} ${item.subtitle} ${item.type}`.toLowerCase().includes(query)) }

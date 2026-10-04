@@ -112,6 +112,9 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("GET /api/v1/system/updates", a.auth(http.HandlerFunc(a.getSystemUpdates)))
 	mux.Handle("POST /api/v1/system/updates/check", a.systemAdmin(http.HandlerFunc(a.checkSystemUpdates)))
 	mux.Handle("POST /api/v1/system/updates", a.systemAdmin(http.HandlerFunc(a.createSystemUpdate)))
+	mux.Handle("GET /api/v1/system/public-access", a.systemAdmin(http.HandlerFunc(a.getSystemPublicAccess)))
+	mux.Handle("POST /api/v1/system/public-access", a.systemAdmin(http.HandlerFunc(a.configureSystemPublicAccess)))
+	mux.Handle("DELETE /api/v1/system/public-access", a.systemAdmin(http.HandlerFunc(a.disableSystemPublicAccess)))
 
 	mux.Handle("GET /api/v1/organizations/{organizationID}/access", a.org(authorization.OrganizationRead, http.HandlerFunc(a.access)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/search", a.org(authorization.OrganizationRead, http.HandlerFunc(a.search)))
@@ -920,6 +923,10 @@ func (a *API) auth(next http.Handler) http.Handler {
 			return
 		}
 		if unsafe(r.Method) {
+			if !a.requestOriginAllowed(r) {
+				writeError(w, http.StatusForbidden, "origin_failed", "The request origin could not be verified.")
+				return
+			}
 			provided := r.Header.Get("X-CSRF-Token")
 			if provided == "" || subtle.ConstantTimeCompare(auth.HashToken(provided), csrfHash) != 1 {
 				writeError(w, http.StatusForbidden, "csrf_failed", "The request could not be verified.")
@@ -930,6 +937,21 @@ func (a *API) auth(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, csrfHashKey, csrfHash)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (a *API) requestOriginAllowed(r *http.Request) bool {
+	origin := strings.TrimRight(strings.TrimSpace(r.Header.Get("Origin")), "/")
+	if origin == "" {
+		return true
+	}
+	if origin != strings.TrimRight(a.cfg.FrontendOrigin, "/") && origin != strings.TrimRight(a.cfg.PublicURL, "/") {
+		return false
+	}
+	if a.cfg.TrustForwardedProto && strings.HasPrefix(a.cfg.PublicURL, "https://") {
+		forwarded := strings.ToLower(strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]))
+		return forwarded == "https"
+	}
+	return true
 }
 
 func (a *API) org(permission authorization.Permission, next http.Handler) http.Handler {
