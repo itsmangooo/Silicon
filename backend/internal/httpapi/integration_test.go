@@ -325,7 +325,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	viewer.post("/auth/password-reset/complete", map[string]any{"token": "wrong-reset-token", "password": "replacement password value", "confirmPassword": "replacement password value"}, http.StatusUnprocessableEntity)
 	viewer.post("/auth/password-reset/complete", map[string]any{"token": resetToken, "password": "replacement password value", "confirmPassword": "replacement password value"}, http.StatusOK)
 	viewer.get("/auth/session", http.StatusUnauthorized)
-	viewer.post("/auth/login", map[string]any{"email": "viewer@example.com", "password": "replacement password value"}, http.StatusOK)
+	viewer.login("viewer@example.com", "replacement password value")
 	viewer.post("/auth/password-reset/complete", map[string]any{"token": resetToken, "password": "another replacement password", "confirmPassword": "another replacement password"}, http.StatusUnprocessableEntity)
 
 	viewer.post("/auth/password-reset/request", map[string]any{"email": "viewer@example.com"}, http.StatusAccepted)
@@ -341,7 +341,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	if mailWorker.RunOnce(ctx) {
 		t.Fatal("rate-limited reset request unexpectedly queued a delivery")
 	}
-	viewer.post("/auth/login", map[string]any{"email": "viewer@example.com", "password": "newest password value"}, http.StatusOK)
+	viewer.login("viewer@example.com", "newest password value")
 	sesResult := owner.put("/system/email", map[string]any{"provider": "ses", "fromName": "Silicon", "fromAddress": "silicon@example.com", "replyTo": "support@example.com", "settings": map[string]any{"sesRegion": "eu-central-1"}, "accessKeyId": "ses-access-key-value", "credential": "ses-secret-key-value", "sessionToken": "ses-session-token-value"}, http.StatusOK)
 	sesConfiguration := mapField(t, sesResult, "configuration")
 	if sesConfiguration["provider"] != "ses" || sesConfiguration["credentialConfigured"] != true {
@@ -1130,6 +1130,11 @@ func newTestClient(t *testing.T, base string) *testClient {
 
 func (c *testClient) register(email, name, password string) {
 	payload := c.post("/auth/register", map[string]any{"email": email, "displayName": name, "password": password}, http.StatusCreated)
+	c.csrf = stringField(c.t, payload, "csrfToken")
+}
+
+func (c *testClient) login(email, password string) {
+	payload := c.post("/auth/login", map[string]any{"email": email, "password": password}, http.StatusOK)
 	c.csrf = stringField(c.t, payload, "csrfToken")
 }
 
