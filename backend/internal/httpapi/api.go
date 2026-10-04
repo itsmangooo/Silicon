@@ -103,6 +103,8 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", a.health)
 	mux.HandleFunc("POST /api/v1/auth/register", a.register)
 	mux.HandleFunc("POST /api/v1/auth/login", a.login)
+	mux.HandleFunc("POST /api/v1/auth/password-reset/request", a.requestPasswordReset)
+	mux.HandleFunc("POST /api/v1/auth/password-reset/complete", a.completePasswordReset)
 	mux.HandleFunc("POST /api/v1/webhooks/github", a.githubWebhook)
 	mux.Handle("GET /api/v1/auth/session", a.auth(http.HandlerFunc(a.session)))
 	mux.Handle("POST /api/v1/auth/logout", a.auth(http.HandlerFunc(a.logout)))
@@ -115,6 +117,9 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("GET /api/v1/system/public-access", a.systemAdmin(http.HandlerFunc(a.getSystemPublicAccess)))
 	mux.Handle("POST /api/v1/system/public-access", a.systemAdmin(http.HandlerFunc(a.configureSystemPublicAccess)))
 	mux.Handle("DELETE /api/v1/system/public-access", a.systemAdmin(http.HandlerFunc(a.disableSystemPublicAccess)))
+	mux.Handle("GET /api/v1/system/email", a.systemAdmin(http.HandlerFunc(a.getSystemMail)))
+	mux.Handle("PUT /api/v1/system/email", a.systemAdmin(http.HandlerFunc(a.putSystemMail)))
+	mux.Handle("POST /api/v1/system/email/test", a.systemAdmin(http.HandlerFunc(a.testSystemMail)))
 
 	mux.Handle("GET /api/v1/organizations/{organizationID}/access", a.org(authorization.OrganizationRead, http.HandlerFunc(a.access)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/search", a.org(authorization.OrganizationRead, http.HandlerFunc(a.search)))

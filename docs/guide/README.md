@@ -29,6 +29,7 @@ The in-panel guide is installation-focused: it explains how to operate the Silic
 - [Security model](security.md)
 - [Administration](administration.md)
 - [Expose Silicon on a custom domain](public-access.md)
+- [System email and password recovery](system-email-password-recovery.md)
 - [Troubleshooting](troubleshooting.md)
 
 The panel route for each article is stable and includes generated heading anchors. Search documentation from the Docs sidebar, or use the global `Ctrl+K` / `Command+K` palette to search pages, resources, commands, and these articles together.
@@ -46,6 +47,10 @@ The panel route for each article is stable and includes generated heading anchor
 | Installation public access |
 | --- |
 | [![Silicon installation public access settings](../previews/settings-public-access.png)](../previews/settings-public-access.png) |
+
+| System email | Password recovery |
+| --- | --- |
+| [![Silicon system email settings](../previews/settings-email.png)](../previews/settings-email.png) | [![Silicon password recovery](../previews/forgot-password.png)](../previews/forgot-password.png) |
 
 | Application creation |
 | --- |

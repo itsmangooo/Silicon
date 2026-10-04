@@ -22,6 +22,9 @@ flowchart LR
     PrivateNetwork --> Connection
     Routing --> Origin[Origin target resolver]
     Auth --> Identity[IdentityProvider]
+    Auth --> Mail[MailProvider]
+    Mail --> MailQueue[(Mail delivery queue)]
+    MailQueue --> DB
     Platform --> Secret[SecretProvider]
     Platform --> Logs[LogProvider]
     Auth --> DB[(PostgreSQL)]
@@ -44,6 +47,7 @@ flowchart LR
 | Module | Responsibility and owned data | Public interface | Dependencies | Extension points | Security and tests |
 |---|---|---|---|---|---|
 | `auth` | Password hashing and opaque session tokens; users/sessions are persisted through the repository | `HashPassword`, `VerifyPassword`, token functions, auth endpoints | PostgreSQL repository, Argon2id | Identity-provider login can create a local session after explicit account linking | Constant-time verification; unit tests plus registration/login/logout integration flow |
+| `mailservice` / `providers/mail` | Installation-wide email configuration, encrypted queued messages, retry state, provider-neutral delivery, and password recovery templates | `MailProvider`, durable worker, system email and recovery endpoints | PostgreSQL, encryption envelope, Resend/Postmark/Mailgun/SES/SMTP adapters | New providers implement the same send/test/capability contract | Credentials and queued reset links are encrypted; reset tokens are hashed and single-use; provider and integration tests cover safe errors and retries |
 | `authorization` | Role-to-permission policy | `Allowed`, `Permissions` | Membership role loaded from PostgreSQL | New permissions and policy evaluators | Deny by default; role matrix unit tests and API denial tests |
 | `projects` / platform repository | Organizations, projects, environments, applications, servers and identity-provider records | Resource-oriented repository methods and REST handlers | PostgreSQL, authorization | Feature packages can replace repository grouping as behavior grows | Every query includes organization scope; cross-organization integration tests |
 | `deployments` / `jobs` | State vocabulary, historical rows/events, ordered asynchronous execution | `ValidateTransition`, `DeploymentExecutor` | PostgreSQL, audit | Typed runtime executors | Invalid transitions fail; per-application ordering prevents stale queued revisions replacing newer ones |

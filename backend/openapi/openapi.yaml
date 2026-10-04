@@ -68,6 +68,30 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/AuthResult'}
         '401': {$ref: '#/components/responses/AuthenticationError'}
+  /auth/password-reset/request:
+    post:
+      tags: [Authentication]
+      summary: Request a single-use password recovery link
+      description: Always returns the same accepted response for syntactically valid known and unknown accounts. Requests are rate limited and delivery is asynchronous.
+      security: []
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PasswordResetRequest'}}}
+      responses:
+        '202': {description: Generic request result, content: {application/json: {schema: {$ref: '#/components/schemas/MessageResult'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+  /auth/password-reset/complete:
+    post:
+      tags: [Authentication]
+      summary: Consume a password recovery token and revoke existing sessions
+      security: []
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PasswordResetComplete'}}}
+      responses:
+        '200': {description: Password updated, content: {application/json: {schema: {$ref: '#/components/schemas/MessageResult'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+        '422': {$ref: '#/components/responses/ValidationError'}
   /auth/session:
     get:
       tags: [Authentication]
@@ -138,7 +162,6 @@ paths:
         '202': {description: Durable operation, content: {application/json: {schema: {$ref: '#/components/schemas/SystemPublicAccessOperation'}}}}
         '403': {$ref: '#/components/responses/ForbiddenError'}
         '409': {$ref: '#/components/responses/ConflictError'}
-        '422': {$ref: '#/components/responses/ValidationError'}
     delete:
       tags: [System]
       summary: Disable installation public access and restore the previous local settings
@@ -147,6 +170,40 @@ paths:
         '202': {description: Durable operation, content: {application/json: {schema: {$ref: '#/components/schemas/SystemPublicAccessOperation'}}}}
         '403': {$ref: '#/components/responses/ForbiddenError'}
         '409': {$ref: '#/components/responses/ConflictError'}
+  /system/email:
+    get:
+      tags: [System]
+      summary: Read installation email configuration and delivery health
+      description: Installation administrator only. Stored credentials are never returned.
+      responses:
+        '200': {description: System email state, content: {application/json: {schema: {$ref: '#/components/schemas/SystemMailStatus'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+    put:
+      tags: [System]
+      summary: Create or update the installation email provider
+      description: Installation administrator only. Credentials are write-only and encrypted at rest.
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SystemMailInput'}}}
+      responses:
+        '200': {description: Saved configuration, content: {application/json: {schema: {type: object, properties: {configuration: {$ref: '#/components/schemas/SystemMailConfiguration'}}}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /system/email/test:
+    post:
+      tags: [System]
+      summary: Queue a real provider test message
+      description: Installation administrator only. Delivery is processed by the durable mail worker.
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, additionalProperties: false, required: [recipient], properties: {recipient: {type: string, format: email}}}}}
+      responses:
+        '202': {description: Test message queued}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+        '409': {$ref: '#/components/responses/ConflictError'}
+        '422': {$ref: '#/components/responses/ValidationError'}
   /auth/logout:
     post:
       tags: [Authentication]
@@ -1132,6 +1189,23 @@ components:
       additionalProperties: false
       required: [email, password]
       properties: {email: {type: string, format: email}, password: {type: string, format: password}}
+    PasswordResetRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties: {email: {type: string, format: email, maxLength: 320}}
+    PasswordResetComplete:
+      type: object
+      additionalProperties: false
+      required: [token, password, confirmPassword]
+      properties:
+        token: {type: string, writeOnly: true, format: password}
+        password: {type: string, writeOnly: true, format: password, minLength: 12, maxLength: 1024}
+        confirmPassword: {type: string, writeOnly: true, format: password, minLength: 12, maxLength: 1024}
+    MessageResult:
+      type: object
+      required: [message]
+      properties: {message: {type: string}}
     AuthResult:
       type: object
       required: [user, csrfToken]
@@ -1199,6 +1273,54 @@ components:
       required: [targetVersion]
       properties:
         targetVersion: {type: string, pattern: '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'}
+    SystemMailSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        mailgunDomain: {type: string}
+        mailgunRegion: {type: string, enum: [us, eu]}
+        sesRegion: {type: string}
+        smtpPreset: {type: string, enum: [billionmail, stalwart, mailcow, postal, generic]}
+        smtpHost: {type: string}
+        smtpPort: {type: integer, minimum: 1, maximum: 65535}
+        smtpUsername: {type: string}
+        smtpEncryption: {type: string, enum: [starttls, tls, none]}
+    SystemMailInput:
+      type: object
+      additionalProperties: false
+      required: [provider, fromName, fromAddress, settings]
+      properties:
+        provider: {type: string, enum: [resend, postmark, mailgun, ses, smtp]}
+        fromName: {type: string, minLength: 1, maxLength: 120}
+        fromAddress: {type: string, format: email}
+        replyTo: {type: string, format: email}
+        settings: {$ref: '#/components/schemas/SystemMailSettings'}
+        accessKeyId: {type: string, writeOnly: true, description: Amazon SES access key ID; encrypted with the other provider credentials}
+        credential: {type: string, writeOnly: true, format: password, description: Required for hosted providers and authenticated SMTP; omit while editing to retain the current provider credential}
+        sessionToken: {type: string, writeOnly: true, format: password}
+    SystemMailConfiguration:
+      type: object
+      required: [id, provider, fromName, fromAddress, settings, credentialConfigured, status, createdAt, updatedAt]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        provider: {type: string, enum: [resend, postmark, mailgun, ses, smtp]}
+        fromName: {type: string}
+        fromAddress: {type: string, format: email}
+        replyTo: {type: string, format: email}
+        settings: {$ref: '#/components/schemas/SystemMailSettings'}
+        credentialConfigured: {type: boolean}
+        status: {type: string, enum: [not_tested, healthy, failed]}
+        lastError: {type: string, description: Sanitized provider health error}
+        lastSuccessAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        lastFailureAt: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+        updatedAt: {$ref: '#/components/schemas/Timestamp'}
+    SystemMailStatus:
+      type: object
+      required: [configured]
+      properties:
+        configured: {type: boolean}
+        configuration: {$ref: '#/components/schemas/SystemMailConfiguration'}
     SystemPublicAccessInput:
       type: object
       additionalProperties: false

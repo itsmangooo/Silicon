@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './state/AuthContext.jsx'
 import { WorkspaceProvider } from './state/WorkspaceContext.jsx'
 import { AppLayout } from './components/AppLayout.jsx'
-import { LoginPage, RegisterPage } from './pages/AuthPages.jsx'
+import { ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage } from './pages/AuthPages.jsx'
 import { DashboardPage } from './pages/DashboardPage.jsx'
 import { ProjectsPage, ProjectDetailPage } from './pages/ProjectsPage.jsx'
 import { EnvironmentsPage, EnvironmentDetailPage } from './pages/EnvironmentsPage.jsx'
@@ -38,6 +38,8 @@ export function App() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <RegisterPage />} />
+      <Route path="/forgot-password" element={user ? <Navigate to="/" replace /> : <ForgotPasswordPage />} />
+      <Route path="/reset-password" element={user ? <Navigate to="/" replace /> : <ResetPasswordPage />} />
       <Route path="/" element={user ? <ProtectedApp /> : <Navigate to="/login" replace />}>
         <Route index element={<DashboardPage />} />
         <Route path="projects" element={<ProjectsPage />} />

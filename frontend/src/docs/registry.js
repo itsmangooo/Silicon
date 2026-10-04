@@ -13,6 +13,7 @@ import security from '../../../docs/guide/security.md?raw'
 import administration from '../../../docs/guide/administration.md?raw'
 import troubleshooting from '../../../docs/guide/troubleshooting.md?raw'
 import publicAccess from '../../../docs/guide/public-access.md?raw'
+import systemEmailPasswordRecovery from '../../../docs/guide/system-email-password-recovery.md?raw'
 import { docCatalog } from './catalog.js'
 
 export { docCategories, docRoute, docSearchEntries } from './catalog.js'
@@ -41,6 +42,7 @@ const contentBySlug = {
   administration,
   troubleshooting,
   'public-access': publicAccess,
+  'system-email-password-recovery': systemEmailPasswordRecovery,
 }
 
 export const docs = docCatalog.map((article) => ({

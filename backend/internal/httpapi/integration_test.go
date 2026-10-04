@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -23,12 +24,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/itsmangooo/Silicon/backend/db"
+	"github.com/itsmangooo/Silicon/backend/internal/auth"
 	"github.com/itsmangooo/Silicon/backend/internal/config"
+	"github.com/itsmangooo/Silicon/backend/internal/cryptoenvelope"
 	"github.com/itsmangooo/Silicon/backend/internal/deployments"
 	"github.com/itsmangooo/Silicon/backend/internal/execution"
 	"github.com/itsmangooo/Silicon/backend/internal/jobs"
+	"github.com/itsmangooo/Silicon/backend/internal/mailservice"
 	cloudaws "github.com/itsmangooo/Silicon/backend/internal/providers/cloud/aws"
 	"github.com/itsmangooo/Silicon/backend/internal/providers/connection"
+	mailprovider "github.com/itsmangooo/Silicon/backend/internal/providers/mail"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 	"github.com/itsmangooo/Silicon/backend/internal/store"
 	"github.com/itsmangooo/Silicon/backend/internal/updates"
@@ -60,6 +65,19 @@ type fakeReleaseSource struct{}
 type noReleaseSource struct{}
 
 type failedReleaseSource struct{}
+
+type captureMailProvider struct {
+	messages []mailprovider.Message
+}
+
+func (p *captureMailProvider) Send(_ context.Context, message mailprovider.Message) error {
+	p.messages = append(p.messages, message)
+	return nil
+}
+func (*captureMailProvider) Test(context.Context) error { return nil }
+func (*captureMailProvider) Capabilities() mailprovider.Capabilities {
+	return mailprovider.Capabilities{HTML: true, ReplyTo: true, SecureTLS: true, APIProvider: true}
+}
 
 func (fakeReleaseSource) LatestStable(context.Context) (updates.Release, error) {
 	return updates.Release{TagName: "v0.1.0", Name: "Silicon v0.1.0", Notes: "The first stable development release."}, nil
@@ -242,6 +260,106 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	viewerSession := mapField(t, viewer.get("/auth/session", http.StatusOK), "user")
 	if ownerSession["isSystemAdmin"] != true || viewerSession["isSystemAdmin"] != false {
 		t.Fatalf("unexpected bootstrap system administration: owner=%#v viewer=%#v", ownerSession, viewerSession)
+	}
+	noMailReset := owner.post("/auth/password-reset/request", map[string]any{"email": "owner@example.com"}, http.StatusAccepted)
+	if noMailReset["message"] != genericResetResponse {
+		t.Fatalf("unconfigured mail changed the generic reset response: %#v", noMailReset)
+	}
+	var ownerResetTokens int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM password_reset_tokens WHERE user_id=(SELECT id FROM users WHERE email='owner@example.com')`).Scan(&ownerResetTokens); err != nil || ownerResetTokens != 0 {
+		t.Fatalf("password reset token was created without system mail: count=%d err=%v", ownerResetTokens, err)
+	}
+	expiredToken := "expired-reset-token"
+	if _, err = pool.Exec(ctx, `INSERT INTO password_reset_tokens(user_id,token_hash,expires_at) SELECT id,$1,now()-interval '1 minute' FROM users WHERE email='viewer@example.com'`, auth.HashToken(expiredToken)); err != nil {
+		t.Fatal(err)
+	}
+	viewer.post("/auth/password-reset/complete", map[string]any{"token": expiredToken, "password": "expired password value", "confirmPassword": "expired password value"}, http.StatusUnprocessableEntity)
+	viewer.get("/system/email", http.StatusForbidden)
+	mailResult := owner.put("/system/email", map[string]any{"provider": "resend", "fromName": "Silicon", "fromAddress": "silicon@example.com", "replyTo": "support@example.com", "settings": map[string]any{}, "credential": "resend-secret-value"}, http.StatusOK)
+	mailConfiguration := mapField(t, mailResult, "configuration")
+	if mailConfiguration["credentialConfigured"] != true {
+		t.Fatalf("configured mail credential was not reported safely: %#v", mailConfiguration)
+	}
+	if _, exposed := mailConfiguration["encryptedCredentials"]; exposed {
+		t.Fatalf("encrypted mail credentials were exposed: %#v", mailConfiguration)
+	}
+	var encryptedCredential []byte
+	if err = pool.QueryRow(ctx, `SELECT encrypted_credentials FROM system_mail_configurations WHERE active=true`).Scan(&encryptedCredential); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encryptedCredential, []byte("resend-secret-value")) {
+		t.Fatal("mail credential was stored without encryption")
+	}
+	capturedMail := &captureMailProvider{}
+	box, err := cryptoenvelope.New(cfg.EncryptionKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mailWorker := mailservice.Worker{Repository: store.Repository{Pool: pool}, Box: &box, Logger: logger, WorkerID: "integration-mail", Factory: func(mailservice.Configuration) (mailprovider.Provider, error) { return capturedMail, nil }}
+	owner.post("/system/email/test", map[string]any{"recipient": "operator@example.com"}, http.StatusAccepted)
+	if !mailWorker.RunOnce(ctx) || len(capturedMail.messages) != 1 || capturedMail.messages[0].To != "operator@example.com" {
+		t.Fatalf("test message was not delivered through the durable queue: %#v", capturedMail.messages)
+	}
+	unknownReset := owner.post("/auth/password-reset/request", map[string]any{"email": "unknown@example.com"}, http.StatusAccepted)
+	knownReset := owner.post("/auth/password-reset/request", map[string]any{"email": "viewer@example.com"}, http.StatusAccepted)
+	if unknownReset["message"] != knownReset["message"] {
+		t.Fatalf("password reset response disclosed account existence: unknown=%#v known=%#v", unknownReset, knownReset)
+	}
+	if !mailWorker.RunOnce(ctx) || len(capturedMail.messages) != 2 {
+		t.Fatalf("password reset mail was not delivered through the queue: %#v", capturedMail.messages)
+	}
+	resetToken := resetTokenFromMessage(t, capturedMail.messages[1])
+	var storedTokenHash, encryptedMessage []byte
+	if err = pool.QueryRow(ctx, `SELECT token_hash FROM password_reset_tokens WHERE user_id=(SELECT id FROM users WHERE email='viewer@example.com') ORDER BY created_at DESC LIMIT 1`).Scan(&storedTokenHash); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(storedTokenHash, auth.HashToken(resetToken)) || bytes.Contains(storedTokenHash, []byte(resetToken)) {
+		t.Fatal("password reset token was not stored exclusively as its SHA-256 hash")
+	}
+	if err = pool.QueryRow(ctx, `SELECT encrypted_message FROM mail_deliveries WHERE purpose='password_reset' ORDER BY created_at DESC LIMIT 1`).Scan(&encryptedMessage); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encryptedMessage, []byte(resetToken)) {
+		t.Fatal("raw reset token appeared in the persisted encrypted delivery value")
+	}
+	viewer.post("/auth/password-reset/complete", map[string]any{"token": "wrong-reset-token", "password": "replacement password value", "confirmPassword": "replacement password value"}, http.StatusUnprocessableEntity)
+	viewer.post("/auth/password-reset/complete", map[string]any{"token": resetToken, "password": "replacement password value", "confirmPassword": "replacement password value"}, http.StatusOK)
+	viewer.get("/auth/session", http.StatusUnauthorized)
+	viewer.post("/auth/login", map[string]any{"email": "viewer@example.com", "password": "replacement password value"}, http.StatusOK)
+	viewer.post("/auth/password-reset/complete", map[string]any{"token": resetToken, "password": "another replacement password", "confirmPassword": "another replacement password"}, http.StatusUnprocessableEntity)
+
+	viewer.post("/auth/password-reset/request", map[string]any{"email": "viewer@example.com"}, http.StatusAccepted)
+	viewer.post("/auth/password-reset/request", map[string]any{"email": "viewer@example.com"}, http.StatusAccepted)
+	if !mailWorker.RunOnce(ctx) || !mailWorker.RunOnce(ctx) || len(capturedMail.messages) != 4 {
+		t.Fatalf("newer password reset requests were not queued: %#v", capturedMail.messages)
+	}
+	olderToken := resetTokenFromMessage(t, capturedMail.messages[2])
+	newerToken := resetTokenFromMessage(t, capturedMail.messages[3])
+	viewer.post("/auth/password-reset/complete", map[string]any{"token": olderToken, "password": "superseded password value", "confirmPassword": "superseded password value"}, http.StatusUnprocessableEntity)
+	viewer.post("/auth/password-reset/complete", map[string]any{"token": newerToken, "password": "newest password value", "confirmPassword": "newest password value"}, http.StatusOK)
+	viewer.post("/auth/password-reset/request", map[string]any{"email": "viewer@example.com"}, http.StatusAccepted)
+	if mailWorker.RunOnce(ctx) {
+		t.Fatal("rate-limited reset request unexpectedly queued a delivery")
+	}
+	sesResult := owner.put("/system/email", map[string]any{"provider": "ses", "fromName": "Silicon", "fromAddress": "silicon@example.com", "replyTo": "support@example.com", "settings": map[string]any{"sesRegion": "eu-central-1"}, "accessKeyId": "ses-access-key-value", "credential": "ses-secret-key-value", "sessionToken": "ses-session-token-value"}, http.StatusOK)
+	sesConfiguration := mapField(t, sesResult, "configuration")
+	if sesConfiguration["provider"] != "ses" || sesConfiguration["credentialConfigured"] != true {
+		t.Fatalf("provider switch did not produce an active write-only configuration: %#v", sesConfiguration)
+	}
+	if _, exposed := mapField(t, sesConfiguration, "settings")["sesAccessKeyId"]; exposed {
+		t.Fatalf("SES access key ID was exposed in readable settings: %#v", sesConfiguration)
+	}
+	var activeMailConfigurations, totalMailConfigurations int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE active),count(*) FROM system_mail_configurations`).Scan(&activeMailConfigurations, &totalMailConfigurations); err != nil || activeMailConfigurations != 1 || totalMailConfigurations != 2 {
+		t.Fatalf("provider switch did not preserve one active configuration: active=%d total=%d err=%v", activeMailConfigurations, totalMailConfigurations, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT encrypted_credentials FROM system_mail_configurations WHERE active`).Scan(&encryptedCredential); err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"ses-access-key-value", "ses-secret-key-value", "ses-session-token-value"} {
+		if bytes.Contains(encryptedCredential, []byte(secret)) {
+			t.Fatalf("SES credential %q was stored without encryption", secret)
+		}
 	}
 	viewer.post("/system/updates/check", map[string]any{}, http.StatusForbidden)
 	viewer.get("/system/public-access", http.StatusForbidden)
@@ -1087,4 +1205,20 @@ func mapField(t *testing.T, value map[string]any, key string) map[string]any {
 		t.Fatalf("field %q is not an object in %#v", key, value)
 	}
 	return result
+}
+
+func resetTokenFromMessage(t *testing.T, message mailprovider.Message) string {
+	t.Helper()
+	var resetURL string
+	for _, line := range strings.Split(message.Text, "\n") {
+		if strings.HasPrefix(line, "http://") || strings.HasPrefix(line, "https://") {
+			resetURL = line
+			break
+		}
+	}
+	parsed, err := url.Parse(resetURL)
+	if err != nil || parsed.Query().Get("token") == "" {
+		t.Fatalf("reset message did not contain a valid canonical URL: %q", resetURL)
+	}
+	return parsed.Query().Get("token")
 }

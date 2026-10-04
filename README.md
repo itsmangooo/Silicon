@@ -4,6 +4,8 @@ Silicon is a hybrid hosting platform for your own servers and the cloud.
 
 Its foundation includes local identities, secure browser sessions, organizations, permission-based access control, project/environment/application/deployment records, audit events, PostgreSQL, a versioned REST API, and a responsive web interface. GitHub App source automation, Cloudflare DNS/optional Tunnel providers, local Docker, SSH-connected Linux Docker hosts, AWS hybrid infrastructure, and opt-in WireGuard private networks are part of the platform.
 
+Installation administrators can configure Resend, Postmark, Mailgun, Amazon SES, or standard SMTP under **Settings → Email**. Password recovery uses a durable encrypted delivery queue, generic anti-enumeration responses, hashed single-use tokens, and full session revocation. An interactive host command remains available when email is unavailable.
+
 Installation administrators can also publish the Silicon panel itself from **Settings → Public access** through an existing organization-owned Cloudflare Tunnel. The safe helper creates only the owned hostname route, switches the existing frontend exposure to loopback, preserves the configured HTTP port and all secrets/data, and recreates only the backend/frontend services. Cloudflare—not Silicon—terminates public HTTPS.
 
 Silicon occupies the same broad problem space as infrastructure deployment products, but its architecture and product model are its own. It remains a modular monolith. AWS support is deliberately focused on EC2-hosted Silicon workloads; Silicon does **not** include a custom reverse proxy, automatic TLS, Azure, Kubernetes, or an AWS Console clone.
@@ -33,6 +35,10 @@ These previews were captured from the running application at a consistent deskto
 | Installation public access |
 | --- |
 | [![Silicon installation public access settings](docs/previews/settings-public-access.png)](docs/previews/settings-public-access.png) |
+
+| System email | Password recovery |
+| --- | --- |
+| [![Silicon system email settings](docs/previews/settings-email.png)](docs/previews/settings-email.png) | [![Silicon password recovery page](docs/previews/forgot-password.png)](docs/previews/forgot-password.png) |
 
 | Project detail | Environments |
 | --- | --- |
@@ -163,7 +169,7 @@ npm run dev
 
 Open `http://localhost:5173`, register a local account, create an organization, then create real platform records. Migrations run transactionally at backend startup when `SILICON_AUTO_MIGRATE=true`.
 
-The authenticated interface includes an in-panel [user guide](docs/guide/README.md), including complete [self-hosted](docs/guide/self-hosted-project.md), [AWS](docs/guide/aws.md), [GitHub App](docs/guide/github.md), and [frontend + backend example](docs/guide/frontend-backend-example.md) walkthroughs. Press `Ctrl+K` on Windows/Linux or `Command+K` on macOS to search registered pages, commands, documentation, and permitted resources in the active organization.
+The authenticated interface includes an in-panel [user guide](docs/guide/README.md), including complete [self-hosted](docs/guide/self-hosted-project.md), [AWS](docs/guide/aws.md), [GitHub App](docs/guide/github.md), [system email and password recovery](docs/guide/system-email-password-recovery.md), and [frontend + backend example](docs/guide/frontend-backend-example.md) walkthroughs. Press `Ctrl+K` on Windows/Linux or `Command+K` on macOS to search registered pages, commands, documentation, and permitted resources in the active organization.
 
 Documentation previews are generated from isolated `example.test` fixtures and
 the real frontend, never from production or user data. After a UI change, refresh

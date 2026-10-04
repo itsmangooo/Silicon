@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowClockwiseIcon, DownloadSimpleIcon, GlobeHemisphereWestIcon, ShieldCheckIcon } from '@phosphor-icons/react'
+import { ArrowClockwiseIcon, DownloadSimpleIcon, EnvelopeSimpleIcon, GlobeHemisphereWestIcon, PaperPlaneTiltIcon, ShieldCheckIcon } from '@phosphor-icons/react'
 import { api } from '../lib/api.js'
 import { waitForUpdatedSilicon } from '../lib/update-reconnect.js'
 import { useAuth } from '../state/AuthContext.jsx'
@@ -8,6 +8,7 @@ import { ErrorNotice, Mono, Notice, Page, Section, Status, formatDate } from '..
 const activeStates = new Set(['queued', 'checking', 'preparing', 'updating', 'migrating', 'restarting', 'waiting_for_health', 'reconnecting'])
 const stableVersion = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
 const publicAccessActiveStates = new Set(['pending', 'validating', 'configuring_cloudflare', 'updating_configuration', 'restarting', 'waiting_for_health'])
+const emptyMailForm = { provider: 'resend', fromName: 'Silicon', fromAddress: '', replyTo: '', accessKeyId: '', credential: '', sessionToken: '', settings: { mailgunDomain: '', mailgunRegion: 'us', sesRegion: '', smtpPreset: 'generic', smtpHost: '', smtpPort: 587, smtpUsername: '', smtpEncryption: 'starttls' } }
 
 export async function waitForPublicURL(url, signal) {
   for (let attempt = 0; attempt < 90; attempt += 1) {
@@ -137,6 +138,75 @@ function PublicAccessPanel() {
   </Section>
 }
 
+function EmailPanel() {
+  const { user } = useAuth()
+  const [data, setData] = useState(null)
+  const [form, setForm] = useState(emptyMailForm)
+  const [recipient, setRecipient] = useState(user.email || '')
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = async () => {
+    const result = await api('/system/email')
+    setData(result)
+    if (result.configured) {
+      const configuration = result.configuration
+      setForm((current) => ({ ...current, provider: configuration.provider, fromName: configuration.fromName, fromAddress: configuration.fromAddress, replyTo: configuration.replyTo || '', accessKeyId: '', credential: '', sessionToken: '', settings: { ...current.settings, ...(configuration.settings || {}) } }))
+    }
+    return result
+  }
+
+  useEffect(() => {
+    if (!user.isSystemAdmin) return
+    load().catch((requestError) => setError(requestError.message))
+  }, [user.isSystemAdmin])
+
+  if (!user.isSystemAdmin) return <Section title="Email" description="System email delivers password recovery and installation notices."><Notice>Only an installation administrator can configure system email.</Notice></Section>
+
+  const configuration = data?.configuration
+  const sameProviderConfigured = configuration?.provider === form.provider
+  const providerCredentialRequired = !sameProviderConfigured && !(form.provider === 'smtp' && !form.settings.smtpUsername)
+  const setValue = (key, value) => setForm((current) => ({ ...current, [key]: value }))
+  const setSetting = (key, value) => setForm((current) => ({ ...current, settings: { ...current.settings, [key]: value } }))
+  const changeProvider = (provider) => setForm((current) => ({ ...current, provider, accessKeyId: '', credential: '', sessionToken: '' }))
+  const changePreset = (preset) => {
+    const defaults = { billionmail: { smtpPort: 465, smtpEncryption: 'tls' }, stalwart: { smtpPort: 587, smtpEncryption: 'starttls' }, mailcow: { smtpPort: 587, smtpEncryption: 'starttls' }, postal: { smtpPort: 587, smtpEncryption: 'starttls' }, generic: { smtpPort: 587, smtpEncryption: 'starttls' } }[preset]
+    setForm((current) => ({ ...current, settings: { ...current.settings, smtpPreset: preset, ...defaults } }))
+  }
+  const save = async (event) => {
+    event.preventDefault(); setBusy(true); setError(''); setMessage('')
+    try { const result = await api('/system/email', { method: 'PUT', body: form }); setData({ configured: true, configuration: result.configuration }); setForm((current) => ({ ...current, accessKeyId: '', credential: '', sessionToken: '' })); setMessage('System email configuration saved. Send a test message before relying on password recovery.') }
+    catch (requestError) { setError(requestError.message) } finally { setBusy(false) }
+  }
+  const sendTest = async () => {
+    setBusy(true); setError(''); setMessage('')
+    try { await api('/system/email/test', { method: 'POST', body: { recipient } }); setMessage('Test message queued. Delivery health will update after the worker processes it.'); window.setTimeout(() => load().catch(() => {}), 2500) }
+    catch (requestError) { setError(requestError.message) } finally { setBusy(false) }
+  }
+
+  return <Section title="Email" description="Configure one installation-wide provider for password recovery and system messages. Credentials are encrypted and never returned by the API.">
+    <ErrorNotice error={error} />{message&&<Notice tone="success">{message}</Notice>}
+    {configuration&&<dl className="definition-grid"><div><dt>Provider</dt><dd>{configuration.provider}</dd></div><div><dt>Health</dt><dd><Status value={configuration.status} /></dd></div><div><dt>Credential</dt><dd>{configuration.credentialConfigured ? 'Stored securely' : 'Not configured'}</dd></div><div><dt>Last success</dt><dd>{formatDate(configuration.lastSuccessAt)}</dd></div>{configuration.lastError&&<div><dt>Last error</dt><dd>{configuration.lastError}</dd></div>}</dl>}
+    <form className="form-stack" onSubmit={save}>
+      <div className="form-grid">
+        <label className="field"><span>Provider</span><select value={form.provider} onChange={(event) => changeProvider(event.target.value)}><option value="resend">Resend</option><option value="postmark">Postmark</option><option value="mailgun">Mailgun</option><option value="ses">Amazon SES</option><option value="smtp">SMTP / self-hosted mail</option></select></label>
+        <label className="field"><span>From name</span><input value={form.fromName} onChange={(event) => setValue('fromName', event.target.value)} maxLength="120" required /></label>
+        <label className="field"><span>From address</span><input type="email" value={form.fromAddress} onChange={(event) => setValue('fromAddress', event.target.value)} placeholder="silicon@example.com" required /></label>
+        <label className="field"><span>Reply-to address</span><input type="email" value={form.replyTo} onChange={(event) => setValue('replyTo', event.target.value)} placeholder="Optional" /></label>
+        {form.provider==='mailgun'&&<><label className="field"><span>Mailgun sending domain</span><input value={form.settings.mailgunDomain} onChange={(event) => setSetting('mailgunDomain', event.target.value)} placeholder="mg.example.com" required /></label><label className="field"><span>Mailgun region</span><select value={form.settings.mailgunRegion} onChange={(event) => setSetting('mailgunRegion', event.target.value)}><option value="us">United States</option><option value="eu">European Union</option></select></label></>}
+        {form.provider==='ses'&&<><label className="field"><span>AWS region</span><input value={form.settings.sesRegion} onChange={(event) => setSetting('sesRegion', event.target.value)} placeholder="eu-central-1" required /></label><label className="field"><span>Access key ID</span><input type="password" value={form.accessKeyId} onChange={(event) => setValue('accessKeyId', event.target.value)} autoComplete="new-password" required={!configuration||configuration.provider!==form.provider} placeholder={configuration?.provider===form.provider?'Leave blank to keep stored access key ID':''} /><small>{configuration?.provider===form.provider?'Stored value is write-only. Enter a value only to replace it.':'Encrypted with the SES secret access key.'}</small></label></>}
+        {form.provider==='smtp'&&<><label className="field"><span>SMTP preset</span><select value={form.settings.smtpPreset} onChange={(event) => changePreset(event.target.value)}><option value="generic">Generic SMTP</option><option value="billionmail">BillionMail</option><option value="stalwart">Stalwart</option><option value="mailcow">mailcow</option><option value="postal">Postal</option></select><small>Presets set sensible transport defaults; they remain standard SMTP.</small></label><label className="field"><span>SMTP host</span><input value={form.settings.smtpHost} onChange={(event) => setSetting('smtpHost', event.target.value)} placeholder="mail.example.com" required /></label><label className="field"><span>SMTP port</span><input type="number" min="1" max="65535" value={form.settings.smtpPort} onChange={(event) => setSetting('smtpPort', Number(event.target.value))} required /></label><label className="field"><span>Encryption</span><select value={form.settings.smtpEncryption} onChange={(event) => setSetting('smtpEncryption', event.target.value)}><option value="starttls">STARTTLS</option><option value="tls">Implicit TLS</option><option value="none">None (not recommended)</option></select></label><label className="field"><span>SMTP username</span><input value={form.settings.smtpUsername} onChange={(event) => setSetting('smtpUsername', event.target.value)} autoComplete="username" /></label></>}
+        <label className="field"><span>{form.provider==='smtp'?'SMTP password':form.provider==='ses'?'Secret access key':form.provider==='postmark'?'Server token':'API key'}</span><input type="password" value={form.credential} onChange={(event) => setValue('credential', event.target.value)} autoComplete="new-password" required={providerCredentialRequired} placeholder={sameProviderConfigured?'Leave blank to keep stored credential':form.provider==='smtp'&&!form.settings.smtpUsername?'Optional without SMTP authentication':''} /><small>{sameProviderConfigured?'Stored value is write-only. Enter a value only to replace it.':form.provider==='smtp'&&!form.settings.smtpUsername?'Required only when an SMTP username is configured.':'Required for this provider.'}</small></label>
+        {form.provider==='ses'&&<label className="field"><span>Session token</span><input type="password" value={form.sessionToken} onChange={(event) => setValue('sessionToken', event.target.value)} autoComplete="off" placeholder="Optional for temporary credentials" /></label>}
+      </div>
+      {form.provider==='smtp'&&form.settings.smtpEncryption==='none'&&<Notice tone="danger">Unencrypted SMTP exposes message contents in transit and cannot be used with SMTP authentication. Use only on a trusted local network.</Notice>}
+      <div className="form-actions"><button className="button primary" disabled={busy}><EnvelopeSimpleIcon size={16} aria-hidden="true" /><span>{busy?'Saving…':'Save email configuration'}</span></button></div>
+    </form>
+    <div className="subsection"><h3>Delivery test</h3><div className="inline-form"><label className="field"><span>Recipient</span><input type="email" value={recipient} onChange={(event) => setRecipient(event.target.value)} required /></label><button className="button secondary" type="button" disabled={busy||!data?.configured||!recipient} onClick={sendTest}><PaperPlaneTiltIcon size={16} aria-hidden="true" /><span>Send test email</span></button></div></div>
+  </Section>
+}
+
 export function updatePanelState(version, releaseCheckStatus = 'available') {
   const currentVersion = version?.currentVersion || ''
   const latest = version?.latestRelease
@@ -256,6 +326,7 @@ function UpdatePanel() {
 export function SettingsPage() {
   return <Page title="Settings" description="Platform capabilities and installation-level operations.">
     <PublicAccessPanel />
+    <EmailPanel />
     <UpdatePanel />
     <Section title="Platform"><dl className="definition-grid"><div><dt>Architecture</dt><dd>Modular monolith</dd></div><div><dt>API</dt><dd><Mono>/api/v1</Mono></dd></div><div><dt>Runtime provider</dt><dd>Docker (local / SSH / AWS)</dd></div><div><dt>Cloud provider</dt><dd>AWS EC2, VPC, EBS, SSM, Cost Explorer</dd></div><div><dt>Routing provider</dt><dd>External / Cloudflare</dd></div><div><dt>TLS management</dt><dd>External</dd></div><div><dt>Authentication</dt><dd>Local server-side session</dd></div></dl></Section>
     <Section title="Deliberately unavailable" description="These capabilities are future milestones, not simulated integrations."><ul className="plain-list"><li>Azure and Kubernetes server connection providers</li><li>AWS RDS, ECS, EKS, Lambda, Route53, S3 management, and Auto Scaling Groups</li><li>Docker Compose workload execution</li><li>X3 Gateway and custom reverse proxy</li><li>Automatic TLS</li><li>Traefik and Nginx routing adapters</li><li>SAML, Kafka, service mesh, and microservices</li></ul></Section>

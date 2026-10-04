@@ -85,6 +85,8 @@ try {
   })
   await capture(guestPage, guestUrl, '/login', 'login.png', '.auth-panel', false)
   await capture(guestPage, guestUrl, '/register', 'register.png', '.auth-panel', false)
+  await capture(guestPage, guestUrl, '/forgot-password', 'forgot-password.png', '.auth-panel', false)
+  await capture(guestPage, guestUrl, '/reset-password?token=sanitized-preview-token', 'reset-password.png', '.auth-panel', false)
   await guestPage.close()
 
   const page = await browser.newPage()
@@ -123,6 +125,9 @@ try {
 
   await capture(page, previewUrl, '/settings#updates', 'settings-updates.png', '.update-version-grid', false)
   await capture(page, previewUrl, '/settings', 'settings-public-access.png', '.section:first-of-type', false)
+  await page.goto(`${previewUrl}/settings`, { waitUntil: 'networkidle0' })
+  await page.addStyleTag({ content: '.topbar { display: none !important; }' })
+  await captureElement(page, 'settings-email.png', '.section:nth-of-type(2)')
 
   await page.goto(`${previewUrl}/servers`, { waitUntil: 'networkidle0' })
   await settle(page, '.section')

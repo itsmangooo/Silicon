@@ -9,6 +9,8 @@ Security is part of Silicon's architecture, not a later hardening pass.
 - Login replaces any existing Silicon session cookie, preventing fixation across authentication.
 - Unsafe requests require a separate random CSRF token in `X-CSRF-Token`. Its server-side representation is hashed.
 - Disabled users cannot use an existing session. Sessions expire server-side.
+- Password reset requests return the same accepted response for known and unknown accounts and are database-rate-limited by HMAC-derived email/IP identifiers. Recovery tokens contain 256 bits of randomness; only SHA-256 hashes are stored. They expire after 30 minutes, are single-use, and a newer request supersedes prior links.
+- Completing a reset updates the Argon2id password hash transactionally, revokes every session and remaining reset link for the account, and writes an audit event without the raw token. The emergency host command follows the same revocation rules and requires an interactive confirmation; no recovery backdoor exists over HTTP.
 
 Production deployments must set `SILICON_COOKIE_SECURE=true`, terminate HTTPS, protect PostgreSQL with TLS or a private network, and apply rate limits at the trusted ingress.
 
@@ -37,6 +39,14 @@ Never add passwords, session/CSRF tokens, OIDC tokens, client secrets, encryptio
 GitHub webhooks are size-limited and HMAC-SHA-256 verified before JSON decoding. Delivery IDs are unique persistence keys. Installation, repository, and branch identity must all match an enabled application binding. GitHub App private keys, webhook secrets, and short-lived installation tokens never enter audit metadata or application logs.
 
 Cloudflare API and tunnel tokens are encrypted with AES-256-GCM and organization-bound authenticated context. `SILICON_ENCRYPTION_KEY` must be supplied by the deployment secret manager, backed up securely, and never committed. DNS updates and deletes require Silicon ownership metadata; an existing unrelated record becomes a conflict. Externally managed tunnels cannot be modified through Silicon.
+
+## System email
+
+System email is installation-global and restricted to `users.is_system_admin`; organization roles do not grant access. Resend API keys, Postmark server tokens, Mailgun API keys, all Amazon SES static credential fields, and SMTP passwords are encrypted with AES-256-GCM and installation-specific authenticated context. Normal API responses expose only whether a credential is configured. Replacing the provider requires new write-only credentials.
+
+Mail messages are persisted before delivery so backend restarts do not lose password recovery mail. The encrypted queue body may contain a recovery link because the provider must receive it, but the raw link and token are excluded from indexed metadata, audit events, error responses, and logs. The worker clears decrypted byte buffers after use, applies bounded retry backoff, and stores only sanitized provider failure summaries.
+
+SMTP enables certificate and hostname verification with TLS 1.2 or newer. Silicon supports STARTTLS and implicit TLS and refuses SMTP authentication over an unencrypted connection. Self-hosted mail product presets are configuration helpers around the same provider boundary; they do not weaken transport validation.
 
 The optional local Docker provider grants Silicon high privilege over the host Docker daemon. Leave it disabled unless the Silicon host is an intended workload target, restrict host access, and run only reviewed images/repositories. Source archives are bounded, reject links and path traversal, and containers receive no published host port automatically. Lifecycle APIs resolve a tenant-scoped database instance and the provider verifies Silicon ownership labels before every action, including logs and removal.
 
