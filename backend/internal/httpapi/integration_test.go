@@ -341,6 +341,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	if mailWorker.RunOnce(ctx) {
 		t.Fatal("rate-limited reset request unexpectedly queued a delivery")
 	}
+	viewer.post("/auth/login", map[string]any{"email": "viewer@example.com", "password": "newest password value"}, http.StatusOK)
 	sesResult := owner.put("/system/email", map[string]any{"provider": "ses", "fromName": "Silicon", "fromAddress": "silicon@example.com", "replyTo": "support@example.com", "settings": map[string]any{"sesRegion": "eu-central-1"}, "accessKeyId": "ses-access-key-value", "credential": "ses-secret-key-value", "sessionToken": "ses-session-token-value"}, http.StatusOK)
 	sesConfiguration := mapField(t, sesResult, "configuration")
 	if sesConfiguration["provider"] != "ses" || sesConfiguration["credentialConfigured"] != true {
