@@ -134,8 +134,10 @@ jobs:
           git -C "$source_dir" tag v0.0.0 HEAD
           git clone --bare --no-hardlinks "$source_dir" "$SILICON_INSTALL_DIR/ci-origin.git"
           git -C "$source_dir" remote set-url origin /opt/silicon/ci-origin.git
+          owner="$(id -u):$(id -g)"
+          trap 'sudo chown -R "$owner" "$source_dir" "$SILICON_INSTALL_DIR/ci-origin.git"' EXIT
           sudo chown -R root:root "$source_dir" "$SILICON_INSTALL_DIR/ci-origin.git"
-          compose() { docker compose --env-file "$SILICON_INSTALL_DIR/config/silicon.env" -f "$source_dir/docker-compose.production.yml" "$@"; }
+          compose() { sudo docker compose --env-file "$SILICON_INSTALL_DIR/config/silicon.env" -f "$source_dir/docker-compose.production.yml" "$@"; }
           before=$(sha256sum "$SILICON_INSTALL_DIR/config/silicon.env")
           postgres=$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' "$(compose ps -q postgres)")
           compose exec -T -e SILICON_REQUIRE_TAGGED_RELEASE=true -e SILICON_UPDATE_RUNNER=true updater \
