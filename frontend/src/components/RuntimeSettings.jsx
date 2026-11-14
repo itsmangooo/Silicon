@@ -50,7 +50,7 @@ function Editor({ endpoint, settings, canEdit, applicationId }) {
     <Field label="Container arguments" hint="JSON array of strings. Store credentials in Secrets.">
       <textarea name="arguments" className="mono" rows={4} defaultValue={JSON.stringify(settings.arguments ?? [], null, 2)} readOnly={!canEdit} />
     </Field>
-    <label><input type="checkbox" checked={network} onChange={(event) => setNetwork(event.target.checked)} disabled={!canEdit || busy} /> Join the Docker network for this environment</label>
+    <label className="check-row"><input type="checkbox" checked={network} onChange={(event) => setNetwork(event.target.checked)} disabled={!canEdit || busy} /> Join the Docker network for this environment</label>
     {network && <p className="muted">Internal hostname <code>app-{applicationId}</code> on the same Docker host.</p>}
     <ErrorNotice error={error} />
     {saved && <p role="status">Saved. Queue a deployment to apply these settings.</p>}

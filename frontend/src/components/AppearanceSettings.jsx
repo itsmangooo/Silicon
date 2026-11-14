@@ -3,9 +3,9 @@ import { useAppearance } from '../state/AppearanceContext.jsx'
 import { Field, Section } from './ui.jsx'
 
 const styles = [
-  { id: 'soft', name: 'Soft UI', description: 'Rounded surfaces with a quiet mint accent.', icon: SquareHalfIcon },
-  { id: 'glass', name: 'Glassmorphism', description: 'Frosted surfaces with a cool blue accent.', icon: CloudIcon },
-  { id: 'playful', name: 'Playful', description: 'Bolder shapes with a warm violet accent.', icon: SparkleIcon },
+  { id: 'soft', name: 'Soft UI', description: 'Flat surfaces and restrained corners.', icon: SquareHalfIcon },
+  { id: 'glass', name: 'Glassmorphism', description: 'Floating navigation and translucent panels.', icon: CloudIcon },
+  { id: 'playful', name: 'Playful', description: 'Softer shapes and tactile controls.', icon: SparkleIcon },
 ]
 
 export function AppearanceSettings() {
@@ -21,6 +21,10 @@ export function AppearanceSettings() {
             <span className="appearance-preset-top"><Icon size={23} aria-hidden="true" /><CheckCircleIcon className="preset-check" size={19} weight="fill" aria-hidden="true" /></span>
             <strong>{name}</strong>
             <small>{description}</small>
+            <span className="appearance-sample" data-preview={id} aria-hidden="true">
+              <span className="sample-nav"><i /><i /><i /></span>
+              <span className="sample-panel"><i /><i /><b /></span>
+            </span>
           </label>
         })}
       </div>

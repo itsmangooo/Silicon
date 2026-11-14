@@ -145,6 +145,9 @@ try {
     await settle(dashboardPage, '.appearance-preset')
     await dashboardPage.click(`input[name="ui-style"][value="${style}"]`)
     await capture(dashboardPage, previewUrl, '/', `dashboard-${style}.png`, '.deployment-chart')
+    await capture(dashboardPage, previewUrl, '/projects/project-platform/applications/app-api', `application-detail-${style}.png`, 'textarea[name="arguments"]')
+    await dashboardPage.goto(`${previewUrl}/settings#appearance`, { waitUntil: 'networkidle0' })
+    await captureElement(dashboardPage, `settings-appearance-${style}.png`, '#appearance .section')
   }
   await dashboardContext.close()
 

@@ -168,6 +168,7 @@ export function previewResponse(path, options = {}) {
   if (/\/secrets$/.test(path)) return { secrets: [{ id: 'secret-database', name: 'DATABASE_URL', provider: 'local', scope: path.includes('/applications/') ? 'application' : path.includes('/environments/') ? 'environment' : 'project', updatedAt: '2026-09-29T10:00:00Z' }] }
   if (path === `${root}/applications/app-api/configuration`) return { variables: [{ name: 'LOG_LEVEL', value: 'info', scope: 'application', inherited: false }, { name: 'REGION', value: 'eu-central-1', scope: 'project', inherited: true }], secrets: [{ id: 'secret-database', name: 'DATABASE_URL', provider: 'local', scope: 'application', updatedAt: '2026-09-29T10:00:00Z' }] }
   if (path === `${root}/applications/app-api/runtime`) return { providerAvailable: true, instance: { instanceId: '93c2a7e60de1', state: 'running', health: 'healthy', image: 'registry.example.test/api:8f319ad', hostAddress: '127.0.0.1', hostPort: 32781, lastInspectedAt: '2026-09-29T13:24:00Z' } }
+  if (path === `${root}/applications/app-api/runtime-settings`) return { volumes: [], arguments: [], memoryMiB: 0, environmentNetwork: false }
   if (path === `${root}/applications/app-api/runtime/logs?tail=300`) return { logs: [{ timestamp: '2026-09-29T13:23:19Z', stream: 'stdout', message: 'HTTP server listening on port 3000' }, { timestamp: '2026-09-29T13:23:20Z', stream: 'stdout', message: 'Database connection ready' }, { timestamp: '2026-09-29T13:24:02Z', stream: 'stdout', message: 'GET /health 200' }] }
   return undefined
 }
