@@ -46,7 +46,7 @@ function NavigationItem({ to, icon, children, end = false, onClick }) {
 }
 
 export function AppLayout() {
-  const { appearance, resolvedMode, motion, asset } = useAppearance()
+  const { appearance, motion, asset } = useAppearance()
   const { user, logout } = useAuth()
   const { organizations, organizationId, selectOrganization, loading } = useWorkspace()
   const location = useLocation()
@@ -112,7 +112,7 @@ export function AppLayout() {
 
   return (
     <div className="shell">
-      <BackgroundLayer style={appearance.style} theme={appearance.studio?.theme} mode={resolvedMode} motion={motion} asset={asset} dashboard={location.pathname === '/'} />
+      <BackgroundLayer style={appearance.style} theme={appearance.studio?.theme} motion={motion} asset={asset} dashboard={location.pathname === '/'} />
       <a className="skip-link" href="#main">Skip to content</a>
       <aside className={`sidebar ${open ? 'sidebar-open' : ''}`} aria-label="Primary navigation" onKeyDown={(event) => {
         if (open && event.key === 'Escape') closeNavigation()

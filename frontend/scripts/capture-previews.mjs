@@ -155,7 +155,7 @@ try {
     }
   })
   await capture(dashboardPage, previewUrl, '/', 'dashboard.png', '.deployment-chart')
-  for (const style of ['glass', 'playful', 'obsidian', 'metal', 'industrial', 'bento', 'terminal']) {
+  for (const style of ['glass', 'playful', 'obsidian', 'industrial', 'bento', 'terminal']) {
     await dashboardPage.goto(`${previewUrl}/settings`, { waitUntil: 'networkidle0' })
     await settle(dashboardPage, '.studio-style')
     await dashboardPage.click(`input[name="ui-style"][value="${style}"]`)

@@ -36,11 +36,26 @@ it('rejects unreadable colors and stages a named preset', async () => {
   expect(screen.getByRole('alert')).toHaveTextContent('contrast')
   expect(screen.getByRole('button', { name: 'Apply appearance' })).toBeDisabled()
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: '#ffffff' } })
-  choose('Liquid Metal')
+  choose('Obsidian')
   fireEvent.change(screen.getByLabelText('Preset name'), { target: { value: 'Midnight' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save custom preset' }))
   apply()
-  await waitFor(() => expect(JSON.parse(localStorage.getItem('silicon.appearance')).studio.presets[0]).toMatchObject({ name: 'Midnight', style: 'metal' }))
+  await waitFor(() => expect(JSON.parse(localStorage.getItem('silicon.appearance')).studio.presets[0]).toMatchObject({ name: 'Midnight', style: 'obsidian' }))
+})
+
+it('reopens legacy Liquid Metal preferences as Soft UI and keeps custom settings', () => {
+  const theme = { placement: 'dashboard', quality: 'high', effects: { overlay: 28, reflection: 60 } }
+  localStorage.setItem('silicon.appearance', JSON.stringify({
+    style: 'metal', mode: 'light', density: 'compact',
+    studio: { version: 2, theme, presets: [{ name: 'Custom', style: 'metal', mode: 'light', density: 'compact', theme }] },
+  }))
+  renderSettings()
+  expect(screen.getByRole('radio', { name: 'Soft UI' })).toBeChecked()
+  expect(screen.queryByRole('radio', { name: 'Liquid Metal' })).toBeNull()
+  const saved = JSON.parse(localStorage.getItem('silicon.appearance'))
+  const migrated = { placement: 'dashboard', effects: { overlay: 28 } }
+  expect(saved.studio.theme).toEqual(migrated)
+  expect(saved.studio.presets[0]).toEqual({ name: 'Custom', style: 'soft', mode: 'light', density: 'compact', theme: migrated })
 })
 
 it('loads account settings and saves versioned preferences to the account only', async () => {

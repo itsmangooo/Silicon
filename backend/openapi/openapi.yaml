@@ -1351,7 +1351,7 @@ components:
       type: object
       required: [style, mode, density]
       properties:
-        style: {type: string, enum: [soft, glass, playful, obsidian, metal, industrial, bento, terminal]}
+        style: {type: string, enum: [soft, glass, playful, obsidian, industrial, bento, terminal]}
         mode: {type: string, enum: [dark, light, system]}
         density: {type: string, enum: [comfortable, compact]}
         studio:
@@ -1368,7 +1368,7 @@ components:
                 required: [name, style, mode, density, theme]
                 properties:
                   name: {type: string, minLength: 1, maxLength: 64}
-                  style: {type: string, enum: [soft, glass, playful, obsidian, metal, industrial, bento, terminal]}
+                  style: {type: string, enum: [soft, glass, playful, obsidian, industrial, bento, terminal]}
                   mode: {type: string, enum: [dark, light, system]}
                   density: {type: string, enum: [comfortable, compact]}
                   theme: {$ref: '#/components/schemas/CustomTheme'}
@@ -1381,7 +1381,6 @@ components:
         fit: {type: string, enum: [cover, contain]}
         position: {type: string, enum: [center, top, bottom, left, right]}
         motion: {type: string, enum: [full, reduced, none, system]}
-        quality: {type: string, enum: [low, balanced, high]}
         effects: {type: object, additionalProperties: {type: integer, minimum: 0, maximum: 100}}
     User:
       type: object

@@ -96,16 +96,6 @@ th { background: var(--table-heading); }
 [data-style='soft'] :is(input, textarea, select):not([type='checkbox'], [type='radio']) { box-shadow: inset 0 1px 3px rgb(0 0 0 / 15%); }
 [data-style='obsidian'] .nav-item.active { font-weight: 600; }
 [data-style='obsidian'] .deployment-chart-track { background: var(--row-tint); }
-[data-style='metal'] :is(.sidebar, .dialog, .command-palette, .button:not(.primary, .ghost)) { background: var(--section-bg); }
-[data-style='metal'] .button.primary {
-  color: #171a20;
-  border-color: #b1bac7;
-  background: linear-gradient(165deg, #eef1f6, #b7c0cd 48%, #d6dde7 70%, #a8b2c0);
-  box-shadow: inset 0 1px rgb(255 255 255 / 55%), 0 2px 4px rgb(0 0 0 / 18%);
-}
-[data-style='metal'] .button:not(.primary):hover { box-shadow: var(--shadow); }
-
-
 [data-style='industrial'] .nav-item { padding-block: max(2px, calc(var(--nav-padding) - 2px)); }
 [data-style='industrial'] :is(td, th) { padding-block: max(4px, calc(var(--row-padding) - 2px)); }
 [data-style='bento'] .overview-metrics { grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)); }

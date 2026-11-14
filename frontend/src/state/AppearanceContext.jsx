@@ -1,19 +1,37 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from '../lib/api.js'
-import { defaults, themeProperties } from '../lib/theme.js'
+import { defaults, effectDefaults, styles, themeProperties } from '../lib/theme.js'
 
 const storageKey = 'silicon.appearance'
 const AppearanceContext = createContext(null)
 
+function supportedStyle(style) {
+  return styles.some(([id]) => id === style) ? style : defaults.style
+}
+
+function readStoredTheme(value) {
+  const theme = { ...value }
+  delete theme.quality
+  if (theme.effects) {
+    theme.effects = Object.fromEntries(Object.entries(theme.effects).filter(([key]) => Object.hasOwn(effectDefaults, key)))
+  }
+  return theme
+}
+
 function readAppearance() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(storageKey))
-    return {
-      style: ['glass', 'playful', 'obsidian', 'metal', 'industrial', 'bento', 'terminal'].includes(saved?.style) ? saved.style : defaults.style,
+    const appearance = {
+      style: supportedStyle(saved?.style),
       mode: ['light', 'system'].includes(saved?.mode) ? saved.mode : defaults.mode,
       density: saved?.density === 'compact' ? saved.density : defaults.density,
-      ...(saved?.studio?.version === 2 ? { studio: saved.studio } : {}),
     }
+    if (saved?.studio?.version === 2) {
+      appearance.studio = { version: 2, theme: readStoredTheme(saved.studio.theme), presets: (saved.studio.presets || []).map((preset) => ({
+        ...preset, style: supportedStyle(preset.style), theme: readStoredTheme(preset.theme),
+      })) }
+    }
+    return appearance
   } catch {
     return defaults
   }
@@ -119,7 +137,7 @@ export function AppearanceProvider({ children, accountId, loadAccount = false })
     setAsset((prior) => ({ available: Boolean(file), revision: prior.revision + 1 }))
   }
 
-  return <AppearanceContext.Provider value={{ appearance, resolvedMode, systemLight, systemReduced, motion, saveAppearance, error, asset, updateAsset }}>{ready ? children : <div className="boot-screen" role="status">Loading Silicon…</div>}</AppearanceContext.Provider>
+  return <AppearanceContext.Provider value={{ appearance, systemLight, systemReduced, motion, saveAppearance, error, asset, updateAsset }}>{ready ? children : <div className="boot-screen" role="status">Loading Silicon…</div>}</AppearanceContext.Provider>
 }
 
 export function useAppearance() {

@@ -30,6 +30,5 @@ type Theme struct {
 	Fit        string            `json:"fit,omitempty"`
 	Position   string            `json:"position,omitempty"`
 	Motion     string            `json:"motion,omitempty"`
-	Quality    string            `json:"quality,omitempty"`
 	Effects    map[string]int    `json:"effects,omitempty"`
 }

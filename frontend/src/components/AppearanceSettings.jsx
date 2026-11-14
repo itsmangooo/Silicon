@@ -24,8 +24,7 @@ function Color({ label, value, fallback, change }) {
 
 function ThemePreview({ style, mode, density, theme, motion, asset, mini = false }) {
   return <div className={`theme-preview${mini ? ' theme-preview-mini' : ''}`} aria-hidden={mini || undefined} data-style={style} data-mode={mode} data-density={density} style={theme ? themeProperties(theme, mode) : undefined}>
-    {!mini && <BackgroundLayer style={style} mode={mode} theme={theme} motion={motion} asset={asset} preview dashboard />}
-    {mini && ['glass', 'metal'].includes(style) && <div className={`material-${style}`} aria-hidden="true" />}
+    {!mini && <BackgroundLayer style={style} theme={theme} motion={motion} asset={asset} preview dashboard />}
     <div className="preview-nav"><SquaresFourIcon size={16} /><span><CheckIcon size={12} /> {mini ? 'Home' : 'Overview'}</span><span><CubeIcon size={12} /> Apps</span><span><GearIcon size={12} /> {mini ? 'Tools' : 'Settings'}</span></div>
     <div className="preview-workspace"><div className="preview-heading"><strong>Dashboard</strong><span>Production</span></div>
       <div className="preview-grid">
@@ -164,11 +163,6 @@ export function AppearanceSettings() {
           {slider('glassOpacity', 'Glass opacity')}{slider('glassBlur', 'Blur strength')}
           {toggle('glassReflection', 'Glass reflections')}{toggle('glassAnimation', 'Animate glass blobs')}
           {color('blob', 'Glass blob color', '#6584a9')}{slider('glassSpeed', 'Glass motion speed')}{slider('glassBlobOpacity', 'Glass blob opacity')}
-        </fieldset>}
-        {view.style === 'metal' && <fieldset><legend>Liquid Metal material</legend>
-          {toggle('metalMotion', 'Liquid motion')}{slider('reflection', 'Reflection intensity')}{slider('distortion', 'Distortion strength')}
-          {slider('highlight', 'Highlight intensity')}{slider('metalSpeed', 'Liquid speed')}
-          <Options label="Render quality" value={theme.quality || 'balanced'} choices={{ low: 'Low', balanced: 'Balanced', high: 'High' }} change={(value) => updateTheme('quality', value)} />
         </fieldset>}
       </div>
 

@@ -9,7 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestAgentSchemaMigrationPreservesServer(t *testing.T) {
+func migrationTestPool(t *testing.T) (context.Context, *pgxpool.Pool) {
+	t.Helper()
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
@@ -26,10 +27,16 @@ func TestAgentSchemaMigrationPreservesServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 	if _, err = pool.Exec(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public; CREATE TABLE schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
 		t.Fatal(err)
 	}
+	return ctx, pool
+}
+
+func TestAgentSchemaMigrationPreservesServer(t *testing.T) {
+	ctx, pool := migrationTestPool(t)
+	var err error
 	for _, name := range []string{"000001_initial", "000002_integrations", "000003_docker_runtime", "000004_agent"} {
 		body, readErr := migrations.ReadFile("migrations/" + name + ".up.sql")
 		if readErr != nil {
@@ -144,5 +151,53 @@ func TestAgentSchemaMigrationPreservesServer(t *testing.T) {
 	}
 	if administratorEmail != "first@example.test" || administratorCount != 1 {
 		t.Fatalf("migration system administrator email=%q count=%d", administratorEmail, administratorCount)
+	}
+}
+
+func TestRemoveLiquidMetalPreservesAppearance(t *testing.T) {
+	ctx, pool := migrationTestPool(t)
+	files, err := migrations.ReadDir("migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		if file.Name() == "000017_remove_liquid_metal.up.sql" {
+			break
+		}
+		if !strings.HasSuffix(file.Name(), ".up.sql") {
+			continue
+		}
+		body, err := migrations.ReadFile("migrations/" + file.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, string(body)); err != nil {
+			t.Fatalf("apply %s: %v", file.Name(), err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO schema_migrations(version) VALUES($1)`, strings.TrimSuffix(file.Name(), ".up.sql")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = pool.Exec(ctx, `INSERT INTO users(email, display_name, password_hash, appearance_style, appearance_mode, appearance_density, appearance_studio, appearance_background)
+		VALUES ('appearance@example.test', 'Example', 'hash', 'metal', 'light', 'compact',
+			'{"version":2,"theme":{"background":"image","quality":"high","effects":{"overlay":25,"reflection":80}},
+			  "presets":[{"name":"Chrome","style":"metal","mode":"dark","density":"compact","theme":{"effects":{"highlight":50}}},
+			             {"name":"Frost","style":"glass","mode":"dark","density":"comfortable","theme":{"effects":{"glassBlur":15,"distortion":5}}}]}',
+			decode('0102','hex'))`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	var preserved bool
+	err = pool.QueryRow(ctx, `SELECT appearance_style = 'soft' AND appearance_mode = 'light' AND appearance_density = 'compact'
+		AND appearance_background = decode('0102','hex')
+		AND appearance_studio = '{"version":2,"theme":{"background":"image","effects":{"overlay":25}},
+			"presets":[{"name":"Chrome","style":"soft","mode":"dark","density":"compact","theme":{"effects":{}}},
+			           {"name":"Frost","style":"glass","mode":"dark","density":"comfortable","theme":{"effects":{"glassBlur":15}}}]}'::jsonb
+		FROM users WHERE email = 'appearance@example.test'`).Scan(&preserved)
+	if err != nil || !preserved {
+		t.Fatalf("appearance migration preserved settings: %v, error: %v", preserved, err)
 	}
 }

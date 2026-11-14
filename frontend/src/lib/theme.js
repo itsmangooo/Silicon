@@ -3,7 +3,6 @@ export const styles = [
   ['glass', 'Glassmorphism', 'Floating frosted glass'],
   ['playful', 'Playful', 'Raised controls and rounded cards'],
   ['obsidian', 'Obsidian', 'Flat monochrome and editorial type'],
-  ['metal', 'Liquid Metal', 'Flowing, reflective steel'],
   ['industrial', 'Industrial', 'Dense operational grid'],
   ['bento', 'Bento', 'Asymmetric dashboard tiles'],
   ['terminal', 'Terminal', 'Console prompts and log panels'],
@@ -30,8 +29,7 @@ export const colorDefaults = {
 export const effectDefaults = {
   speed: 45, intensity: 50, blur: 28, colorIntensity: 55, blobSize: 52, blobOpacity: 50,
   imageOpacity: 28, overlay: 20, glassOpacity: 62, glassBlur: 52, glassReflection: 1,
-  glassAnimation: 1, glassSpeed: 40, glassBlobOpacity: 60, metalMotion: 1,
-  reflection: 65, distortion: 55, highlight: 58, metalSpeed: 48,
+  glassAnimation: 1, glassSpeed: 40, glassBlobOpacity: 60,
 }
 
 export const isColor = (value) => /^#[0-9a-f]{6}$/i.test(value || '')
@@ -92,6 +90,5 @@ export function themeProperties(theme = {}, mode) {
     '--glass-opacity': `${32 + effects.glassOpacity * .68}%`,
     '--glass-blur': `${effects.glassBlur * .35}px`,
     '--glass-reflection': effects.glassReflection ? '.44' : '0',
-    '--metal-strength': effects.reflection / 100,
   }
 }

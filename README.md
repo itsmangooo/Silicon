@@ -16,7 +16,7 @@ Docker applications can configure persistent named volumes, a memory limit, cont
 
 ## Interface previews
 
-Use **Account → Theme Studio** to preview and apply eight styles, pick colors and backgrounds, tune motion, and save custom presets. Your settings follow your account. The organization dashboard summarizes deployments, recorded runtime status, server connection checks, domains, and audit activity.
+Use **Account → Theme Studio** to preview and apply seven styles, pick colors and backgrounds, tune motion, and save custom presets. Your settings follow your account. The organization dashboard summarizes deployments, recorded runtime status, server connection checks, domains, and audit activity.
 
 New to Silicon? [Install it and deploy a test site](docs/guide/install-walkthrough.md), [find a feature](docs/guide/feature-reference.md), or [connect an existing Caddy, Nginx, or Traefik proxy](docs/guide/external-proxy.md).
 
@@ -36,7 +36,7 @@ These previews were captured from the running application at a consistent deskto
 | --- | --- | --- |
 | [![Glassmorphism dashboard](docs/previews/dashboard-glass.png)](docs/previews/dashboard-glass.png) | [![Playful dashboard](docs/previews/dashboard-playful.png)](docs/previews/dashboard-playful.png) | [![Appearance settings](docs/previews/settings-appearance.png)](docs/previews/settings-appearance.png) |
 
-More dashboard previews: [Obsidian](docs/previews/dashboard-obsidian.png), [Liquid Metal](docs/previews/dashboard-metal.png), [Industrial](docs/previews/dashboard-industrial.png), [Bento](docs/previews/dashboard-bento.png), and [Terminal](docs/previews/dashboard-terminal.png).
+More dashboard previews: [Obsidian](docs/previews/dashboard-obsidian.png), [Industrial](docs/previews/dashboard-industrial.png), [Bento](docs/previews/dashboard-bento.png), and [Terminal](docs/previews/dashboard-terminal.png).
 
 Account previews: [Profile](docs/previews/account-profile.png), [Account security](docs/previews/account-settings.png), [Messages](docs/previews/account-messages.png), and [Support](docs/previews/account-support.png).
 

@@ -51,7 +51,7 @@ func validateAppearance(input store.Appearance) error {
 }
 
 func validAppearanceBase(input store.AppearanceBase) bool {
-	return oneOf(input.Style, "soft", "glass", "playful", "obsidian", "metal", "industrial", "bento", "terminal") &&
+	return oneOf(input.Style, "soft", "glass", "playful", "obsidian", "industrial", "bento", "terminal") &&
 		oneOf(input.Mode, "dark", "light", "system") && oneOf(input.Density, "comfortable", "compact")
 }
 
@@ -59,7 +59,7 @@ func validateTheme(theme store.Theme, mode string) error {
 	if !oneOf(theme.Background, "", "default", "solid", "gradient", "animated-gradient", "blobs", "image") ||
 		!oneOf(theme.Placement, "", "application", "main", "sidebar", "dashboard") ||
 		!oneOf(theme.Fit, "", "cover", "contain") || !oneOf(theme.Position, "", "center", "top", "bottom", "left", "right") ||
-		!oneOf(theme.Motion, "", "system", "full", "reduced", "none") || !oneOf(theme.Quality, "", "low", "balanced", "high") {
+		!oneOf(theme.Motion, "", "system", "full", "reduced", "none") {
 		return errors.New("Select supported background and motion options.")
 	}
 	for key, value := range theme.Colors {
@@ -68,7 +68,7 @@ func validateTheme(theme store.Theme, mode string) error {
 		}
 	}
 	for key, value := range theme.Effects {
-		if !oneOf(key, "speed", "intensity", "blur", "colorIntensity", "blobSize", "blobOpacity", "imageOpacity", "overlay", "glassOpacity", "glassBlur", "glassReflection", "glassAnimation", "glassSpeed", "glassBlobOpacity", "metalMotion", "reflection", "distortion", "highlight", "metalSpeed") || value < 0 || value > 100 {
+		if !oneOf(key, "speed", "intensity", "blur", "colorIntensity", "blobSize", "blobOpacity", "imageOpacity", "overlay", "glassOpacity", "glassBlur", "glassReflection", "glassAnimation", "glassSpeed", "glassBlobOpacity") || value < 0 || value > 100 {
 			return errors.New("Material controls must be between 0 and 100.")
 		}
 	}
