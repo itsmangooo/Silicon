@@ -37,7 +37,7 @@ export function AccountPage({ section }) {
     }
   }
 
-  if (section === 'appearance') return <Page title="Appearance"><AppearanceSettings /></Page>
+  if (section === 'appearance') return <Page title="Theme Studio"><AppearanceSettings /></Page>
   return <Page title={section === 'settings' ? 'Account settings' : 'My profile'}>
     <ErrorNotice error={error || profile.error} />
     {notice && <Notice tone="success">{notice}</Notice>}

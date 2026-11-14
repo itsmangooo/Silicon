@@ -8,22 +8,27 @@ import (
 	"github.com/google/uuid"
 )
 
-type Appearance struct {
-	Style   string `json:"style"`
-	Mode    string `json:"mode"`
-	Density string `json:"density"`
-}
-
-func (r Repository) AccountAppearance(ctx context.Context, userID uuid.UUID) (Appearance, bool, error) {
+func (r Repository) AccountAppearance(ctx context.Context, userID uuid.UUID) (Appearance, bool, bool, error) {
 	var value Appearance
-	var avatar bool
-	err := r.Pool.QueryRow(ctx, `SELECT appearance_style,appearance_mode,appearance_density,avatar IS NOT NULL FROM users WHERE id=$1`, userID).
-		Scan(&value.Style, &value.Mode, &value.Density, &avatar)
-	return value, avatar, notFound(err)
+	var avatar, background bool
+	err := r.Pool.QueryRow(ctx, `SELECT appearance_style,appearance_mode,appearance_density,appearance_studio,avatar IS NOT NULL,appearance_background IS NOT NULL FROM users WHERE id=$1`, userID).
+		Scan(&value.Style, &value.Mode, &value.Density, &value.Studio, &avatar, &background)
+	return value, avatar, background, notFound(err)
 }
 
 func (r Repository) SetAccountAppearance(ctx context.Context, userID uuid.UUID, value Appearance) error {
-	_, err := r.Pool.Exec(ctx, `UPDATE users SET appearance_style=$2,appearance_mode=$3,appearance_density=$4 WHERE id=$1`, userID, value.Style, value.Mode, value.Density)
+	_, err := r.Pool.Exec(ctx, `UPDATE users SET appearance_style=$2,appearance_mode=$3,appearance_density=$4,appearance_studio=COALESCE($5,appearance_studio) WHERE id=$1`, userID, value.Style, value.Mode, value.Density, value.Studio)
+	return err
+}
+
+func (r Repository) AccountBackground(ctx context.Context, userID uuid.UUID) ([]byte, error) {
+	var image []byte
+	err := r.Pool.QueryRow(ctx, `SELECT appearance_background FROM users WHERE id=$1 AND appearance_background IS NOT NULL`, userID).Scan(&image)
+	return image, notFound(err)
+}
+
+func (r Repository) SetAccountBackground(ctx context.Context, userID uuid.UUID, image []byte) error {
+	_, err := r.Pool.Exec(ctx, `UPDATE users SET appearance_background=$2 WHERE id=$1`, userID, image)
 	return err
 }
 

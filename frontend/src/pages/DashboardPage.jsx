@@ -75,6 +75,7 @@ export function DashboardPage() {
     {resources.loading && !resources.data && <Section title="Overview"><p className="muted loading-message" role="status">Loading organization records…</p></Section>}
     {resources.data && <>
       {unavailable && <Notice>Some records are unavailable. Check your organization permissions or refresh to try again.</Notice>}
+      <div className="dashboard-layout">
       <div className="overview-metrics">
         <OverviewMetric icon={CubeIcon} to="/applications" label="Applications" value={applications?.length} detail="Registered workloads" />
         <OverviewMetric icon={CubeIcon} to="/applications" label="Running applications" value={running} detail="Last recorded runtime state" />
@@ -82,14 +83,14 @@ export function DashboardPage() {
         <OverviewMetric icon={ShieldCheckIcon} to="/deployments" label="Healthy deployments" value={deployments ? summary.outcomes.healthy : null} detail={deployments ? `${summary.outcomes.failed} failed in the same set` : 'Deployment records unavailable'} />
         <OverviewMetric icon={HardDrivesIcon} to="/servers" label="Connected servers" value={connected} detail={servers ? `${servers.length} registered · last connection checks` : 'Server records unavailable'} />
       </div>
-      {deployments && <div className="overview-columns">
+      {deployments && <div className="overview-columns dashboard-charts">
         <Section title="Deployment activity" description="Last 14 days · based on recent deployment records"><DeploymentTrend days={summary.days} /></Section>
         <Section title="Deployment outcomes" description="Status of the latest records"><DeploymentOutcomes outcomes={summary.outcomes} count={deployments.length} /></Section>
       </div>}
-      {runtimeSummary?.length > 0 && <Section title="Runtime health" description="Last recorded inspection for each managed application runtime">
+      {runtimeSummary?.length > 0 && <div className="dashboard-health"><Section title="Runtime health" description="Last recorded inspection for each managed application runtime">
         <dl className="deployment-outcomes">{runtimeSummary.map((item) => <div key={`${item.state}/${item.health}`}><dt>{item.state} · {item.health}</dt><dd>{item.count}</dd></div>)}</dl>
-      </Section>}
-      <div className="overview-columns">
+      </Section></div>}
+      <div className="overview-columns dashboard-operations">
         {deployments && <Section title="Recent deployments" actions={<OverviewLink to="/deployments">All deployments</OverviewLink>}>
           {summary.recent.length ? <ol className="overview-list overview-activity">
             {summary.recent.map((item) => <li key={item.id}>
@@ -109,9 +110,9 @@ export function DashboardPage() {
           </ul> : <EmptyState title="No servers registered">Add a server to deploy workloads to it.</EmptyState>}
         </Section>}
       </div>
-      {auditEvents?.length > 0 && <Section title="Recent infrastructure activity" actions={<OverviewLink to="/audit">Audit history</OverviewLink>}>
+      {auditEvents?.length > 0 && <div className="dashboard-audit"><Section title="Recent infrastructure activity" actions={<OverviewLink to="/audit">Audit history</OverviewLink>}>
         <ul className="overview-list">{auditEvents.slice(0, 5).map((item) => <li key={item.id}><div><strong>{item.action}</strong><small>{item.actorName || 'System'} · {formatDate(item.createdAt)}</small></div></li>)}</ul>
-      </Section>}
+      </Section></div>}
       {applications && <Section title="Applications" description="Latest recorded deployment for each workload" actions={<OverviewLink to="/applications">All applications</OverviewLink>}>
         {applications.length ? <table><thead><tr><th>Application</th><th>Source</th><th>Target</th><th>Latest deployment</th></tr></thead><tbody>
           {applications.slice(0, 8).map((item) => {
@@ -121,6 +122,7 @@ export function DashboardPage() {
           })}
         </tbody></table> : <EmptyState title="No applications registered">Create a workload under a project and environment.</EmptyState>}
       </Section>}
+      </div>
     </>}
   </Page>
 }

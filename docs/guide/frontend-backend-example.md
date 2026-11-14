@@ -27,7 +27,7 @@ backend
   secret:        DATABASE_URL           <- replace/value never shown
 ```
 
-The example assumes an existing reverse proxy on the target host. If the server is private, choose Cloudflare Tunnel instead. Silicon does not create the reverse proxy or a shared application network.
+The example assumes an [existing reverse proxy](external-proxy.md) on the target host. If the server is private, choose Cloudflare Tunnel instead. Server-side services in the same environment on one host can opt into the [Docker environment network](docker-runtime-settings.md).
 
 ## 1. Create the project structure
 

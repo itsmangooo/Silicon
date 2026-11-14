@@ -11,7 +11,7 @@ Browser
   -> optional external or separately managed database
 ```
 
-Silicon currently manages application containers, explicit port bindings, GitHub sources, deployments, logs, Cloudflare DNS, and optional Cloudflare Tunnel routes. It does **not** create a shared Docker network, deploy Docker Compose, provide a reverse proxy, or configure automatic TLS. The instructions below account for those boundaries.
+Silicon manages Docker applications, explicit port bindings, GitHub sources, deployments, logs, and Cloudflare routing. Applications can opt into an environment Docker network on the same host. For public HTTPS, use Cloudflare Tunnel or configure [your own reverse proxy](external-proxy.md).
 
 ## Example values and replacements
 
@@ -201,7 +201,7 @@ Then open the application, select **Inspect runtime**, and select **Tail**. Runt
 
 ## 15. Configure frontend to backend connectivity
 
-Silicon does not currently create inter-application Docker networking or Compose service discovery. Do not configure the frontend with `http://backend:3000` and assume that name will resolve.
+For server-side calls on the same host, enable **Join the Docker network for this environment** in both applications' Docker runtime settings and redeploy. Call the backend at `http://app-<backend-application-uuid>:3000`, substituting the actual application ID and internal port. For a configured cross-host private network, use its assigned `.internal` hostname. These addresses are for containers or network members, not a user's browser.
 
 For a browser frontend, use two externally routable hostnames:
 

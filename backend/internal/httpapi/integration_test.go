@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -920,6 +921,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 		mapField(t, viewer.get("/account", http.StatusOK), "appearance")["style"] != "soft" {
 		t.Fatal("appearance was not isolated per account")
 	}
+	accountStudioRoundTrip(t, owner, viewer)
 	viewerID := stringField(t, mapField(t, viewer.get("/auth/session", http.StatusOK), "user"), "id")
 	msg := owner.post("/organizations/"+orgA+"/messages", map[string]any{"recipientId": viewerID, "subject": "Deploy check", "body": "Please review."}, http.StatusCreated)
 	msgID := stringField(t, msg, "id")
@@ -1109,6 +1111,68 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 
 	// Validation rejects malformed identifiers and unknown JSON fields.
 	viewer.post("/organizations/"+orgB+"/projects", map[string]any{"name": "x", "slug": "bad slug", "unexpected": true}, http.StatusBadRequest)
+}
+
+func accountStudioRoundTrip(t *testing.T, owner, viewer *testClient) {
+	t.Helper()
+	const preferences = "/account/appearance"
+	const background = preferences + "/background"
+	base := map[string]any{"style": "glass", "mode": "dark", "density": "compact"}
+	theme := map[string]any{
+		"colors":     map[string]any{"text": "#f8f8f8", "background": "#111116"},
+		"background": "image", "placement": "dashboard", "fit": "contain", "motion": "reduced",
+		"effects": map[string]any{"glassBlur": 22, "imageOpacity": 33},
+	}
+	studio := map[string]any{"version": 2, "theme": theme, "presets": []map[string]any{{
+		"name": "Midnight", "style": "glass", "mode": "dark", "density": "compact", "theme": theme,
+	}}}
+	base["studio"] = studio
+	owner.put(preferences, base, http.StatusOK)
+	delete(base, "studio")
+	owner.put(preferences, base, http.StatusOK)
+	saved := mapField(t, mapField(t, owner.get("/account", http.StatusOK), "appearance"), "studio")
+	if saved["version"] != float64(2) || len(arrayField(t, saved, "presets")) != 1 || mapField(t, viewer.get("/account", http.StatusOK), "appearance")["studio"] != nil {
+		t.Fatal("studio preferences were lost or exposed to another account")
+	}
+	base["studio"] = map[string]any{"version": 2, "theme": map[string]any{"colors": map[string]string{"text": "#111111"}}}
+	owner.put(preferences, base, http.StatusUnprocessableEntity)
+	webp, err := base64.StdEncoding.DecodeString("UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoCAAIAAUAmJaQAA3AA/vz0AAA=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		data []byte
+		code int
+	}{{[]byte("<svg/>"), http.StatusUnprocessableEntity}, {bytes.Repeat([]byte("x"), (1<<20)+1), http.StatusRequestEntityTooLarge}, {webp, http.StatusNoContent}} {
+		req, err := http.NewRequest(http.MethodPut, owner.base+"/api/v1"+background, bytes.NewReader(test.data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("X-CSRF-Token", owner.csrf)
+		response, err := owner.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != test.code {
+			t.Fatalf("background status=%d want=%d", response.StatusCode, test.code)
+		}
+	}
+	viewer.get(background, http.StatusNotFound)
+	if owner.get("/account", http.StatusOK)["hasBackground"] != true {
+		t.Fatal("account omitted the saved background")
+	}
+	response, err := owner.client.Get(owner.base + "/api/v1" + background)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, decodeErr := png.Decode(response.Body)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "image/png" || decodeErr != nil {
+		t.Fatal("normalized background was not returned")
+	}
+	owner.delete(background, http.StatusNoContent)
+	owner.get(background, http.StatusNotFound)
 }
 
 func accountAvatarRoundTrip(t *testing.T, client *testClient) {

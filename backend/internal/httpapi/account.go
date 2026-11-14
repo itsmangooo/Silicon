@@ -20,13 +20,13 @@ import (
 
 func (a *API) accountProfile(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r.Context())
-	appearance, avatar, err := a.repo.AccountAppearance(r.Context(), user.ID)
+	appearance, avatar, background, err := a.repo.AccountAppearance(r.Context(), user.ID)
 	if err != nil {
 		a.persistenceError(w, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]any{"user": user, "appearance": appearance, "hasAvatar": avatar})
+	writeJSON(w, http.StatusOK, map[string]any{"user": user, "appearance": appearance, "hasAvatar": avatar, "hasBackground": background})
 }
 
 func (a *API) updateAccountProfile(w http.ResponseWriter, r *http.Request) {
@@ -53,9 +53,8 @@ func (a *API) updateAccountAppearance(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	if !oneOf(input.Style, "soft", "glass", "playful", "obsidian", "metal", "industrial", "bento", "terminal") ||
-		!oneOf(input.Mode, "dark", "light", "system") || !oneOf(input.Density, "comfortable", "compact") {
-		validation(w, "Select a supported style, color mode, and density.")
+	if err := validateAppearance(input); err != nil {
+		validation(w, err.Error())
 		return
 	}
 	if err := a.repo.SetAccountAppearance(r.Context(), currentUser(r.Context()).ID, input); err != nil {

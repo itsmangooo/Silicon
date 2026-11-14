@@ -120,7 +120,21 @@ paths:
       summary: Save the signed-in account appearance preferences
       parameters: [{$ref: '#/components/parameters/CSRFToken'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Appearance'}}}}
-      responses: {'200': {description: Saved preferences}}
+      responses: {'200': {description: Saved preferences}, '422': {description: Unsupported preferences or insufficient contrast}}
+  /account/appearance/background:
+    get: {tags: [Authentication], summary: Read the signed-in account background, responses: {'200': {description: Normalized PNG}, '404': {description: No background}}}
+    put:
+      tags: [Authentication]
+      summary: Upload a private background image up to 1 MiB
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content:
+          image/png: {schema: {type: string, format: binary}}
+          image/jpeg: {schema: {type: string, format: binary}}
+          image/webp: {schema: {type: string, format: binary}}
+      responses: {'204': {description: Background saved}, '413': {description: Image exceeds 1 MiB}, '422': {description: Invalid image or dimensions}}
+    delete: {tags: [Authentication], summary: Remove the signed-in account background, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: Background removed}}}
   /account/avatar:
     get: {tags: [Authentication], summary: Read the signed-in account avatar, responses: {'200': {description: Normalized PNG}, '404': {description: No avatar}}}
     put:
@@ -1340,6 +1354,35 @@ components:
         style: {type: string, enum: [soft, glass, playful, obsidian, metal, industrial, bento, terminal]}
         mode: {type: string, enum: [dark, light, system]}
         density: {type: string, enum: [comfortable, compact]}
+        studio:
+          type: object
+          required: [version, theme]
+          properties:
+            version: {type: integer, enum: [2]}
+            theme: {$ref: '#/components/schemas/CustomTheme'}
+            presets:
+              type: array
+              maxItems: 12
+              items:
+                type: object
+                required: [name, style, mode, density, theme]
+                properties:
+                  name: {type: string, minLength: 1, maxLength: 64}
+                  style: {type: string, enum: [soft, glass, playful, obsidian, metal, industrial, bento, terminal]}
+                  mode: {type: string, enum: [dark, light, system]}
+                  density: {type: string, enum: [comfortable, compact]}
+                  theme: {$ref: '#/components/schemas/CustomTheme'}
+    CustomTheme:
+      type: object
+      properties:
+        colors: {type: object, additionalProperties: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}}
+        background: {type: string, enum: [default, solid, gradient, animated-gradient, blobs, image]}
+        placement: {type: string, enum: [application, main, sidebar, dashboard]}
+        fit: {type: string, enum: [cover, contain]}
+        position: {type: string, enum: [center, top, bottom, left, right]}
+        motion: {type: string, enum: [full, reduced, none, system]}
+        quality: {type: string, enum: [low, balanced, high]}
+        effects: {type: object, additionalProperties: {type: integer, minimum: 0, maximum: 100}}
     User:
       type: object
       required: [id, email, displayName, status, isSystemAdmin, createdAt]

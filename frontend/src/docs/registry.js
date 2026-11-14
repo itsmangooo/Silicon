@@ -14,6 +14,11 @@ import administration from '../../../docs/guide/administration.md?raw'
 import troubleshooting from '../../../docs/guide/troubleshooting.md?raw'
 import publicAccess from '../../../docs/guide/public-access.md?raw'
 import systemEmailPasswordRecovery from '../../../docs/guide/system-email-password-recovery.md?raw'
+import installWalkthrough from '../../../docs/guide/install-walkthrough.md?raw'
+import featureReference from '../../../docs/guide/feature-reference.md?raw'
+import themeStudio from '../../../docs/guide/theme-studio.md?raw'
+import dockerRuntimeSettings from '../../../docs/guide/docker-runtime-settings.md?raw'
+import externalProxy from '../../../docs/guide/external-proxy.md?raw'
 import { docCatalog } from './catalog.js'
 
 export { docCategories, docRoute, docSearchEntries } from './catalog.js'
@@ -27,6 +32,11 @@ function headings(content) {
 }
 
 const contentBySlug = {
+  'install-walkthrough': installWalkthrough,
+  'feature-reference': featureReference,
+  'theme-studio': themeStudio,
+  'docker-runtime-settings': dockerRuntimeSettings,
+  'external-proxy': externalProxy,
   'getting-started': gettingStarted,
   'core-concepts': coreConcepts,
   'frontend-backend-example': frontendBackendExample,

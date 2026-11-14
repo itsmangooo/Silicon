@@ -1,6 +1,6 @@
 # Getting started
 
-Silicon is a self-hosted platform for applications and infrastructure. This guide covers the first useful path after installation without inventing resources or runtime state.
+Silicon runs applications on servers you control. Follow [Install Silicon and publish your first site](install-walkthrough.md) for a complete beginner walkthrough or use [Find a feature](feature-reference.md) as a reference.
 
 ## Install Silicon
 
@@ -26,7 +26,7 @@ Use the organization selector below the Silicon logo to change the active tenant
 
 Open **Dashboard** to see registered workloads, the last recorded server connection checks, and recent deployment results. The charts use up to 200 of the most recent deployment records. Application rows show the latest deployment in that set. Open an application’s runtime view to inspect its current container state.
 
-Open the account menu and choose **Appearance**. Choose Soft UI, Glassmorphism, Playful, Obsidian, Liquid Metal, Industrial, Bento, or Terminal. Set the color mode to dark, light, or System, and choose a comfortable or compact layout. Preferences follow your account across browsers.
+Open the account menu and choose [Theme Studio](theme-studio.md). Preview a style, customize colors and motion, then apply it to your account.
 
 Use **My profile** to manage your avatar and review organization memberships. **Account settings** lets you change your display name, password, and email. Email changes require configured system mail and a verification code. Password changes end all sessions.
 

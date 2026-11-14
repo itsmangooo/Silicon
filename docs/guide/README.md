@@ -6,14 +6,18 @@ The in-panel guide is installation-focused: it explains how to operate the Silic
 
 ## Getting started
 
+- [Install Silicon and publish your first site](install-walkthrough.md)
 - [Getting started](getting-started.md)
 - [Core concepts](core-concepts.md)
+- [Find a feature](feature-reference.md)
+- [Theme Studio](theme-studio.md)
 
 ## Workloads
 
 - [Complete frontend + backend example](frontend-backend-example.md)
 - [Self-hosted project](self-hosted-project.md)
 - [Applications and configuration](applications.md)
+- [Docker runtime settings](docker-runtime-settings.md)
 - [Deployments](deployments.md)
 
 ## Infrastructure and integrations
@@ -22,6 +26,7 @@ The in-panel guide is installation-focused: it explains how to operate the Silic
 - [Private networking](private-networking.md)
 - [GitHub setup and auto-deploy](github.md)
 - [Cloudflare DNS and Tunnel](cloudflare.md)
+- [Route an application through Nginx or Traefik](external-proxy.md)
 - [AWS project](aws.md)
 
 ## Security and operations

@@ -157,8 +157,10 @@ try {
   await capture(dashboardPage, previewUrl, '/', 'dashboard.png', '.deployment-chart')
   for (const style of ['glass', 'playful', 'obsidian', 'metal', 'industrial', 'bento', 'terminal']) {
     await dashboardPage.goto(`${previewUrl}/settings`, { waitUntil: 'networkidle0' })
-    await settle(dashboardPage, '.appearance-preset')
+    await settle(dashboardPage, '.studio-style')
     await dashboardPage.click(`input[name="ui-style"][value="${style}"]`)
+    await clickButton(dashboardPage, 'Apply appearance')
+    await dashboardPage.waitForFunction((value) => globalThis.document.documentElement.dataset.style === value, {}, style)
     await capture(dashboardPage, previewUrl, '/', `dashboard-${style}.png`, '.deployment-chart')
     if (['glass', 'playful'].includes(style)) {
       await capture(dashboardPage, previewUrl, '/projects/project-platform/applications/app-api', `application-detail-${style}.png`, '.runtime-editor')
