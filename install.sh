@@ -295,9 +295,9 @@ if [ "$MODE" = "update" ] && [ "$UPDATE_RUNNER" = "true" ]; then
   # The narrowly scoped runner must survive long enough to persist progress.
   # Only application services are replaced here; PostgreSQL and its volume stay in place.
   report_stage migrating
-  compose up -d postgres backend || fail 'backend startup failed; inspect docker compose logs'
+  compose up -d --no-deps --wait backend || fail 'backend startup failed; inspect docker compose logs'
   report_stage restarting
-  compose up -d frontend || fail 'frontend startup failed; inspect docker compose logs'
+  compose up -d --no-deps frontend || fail 'frontend startup failed; inspect docker compose logs'
 else
   compose up -d || fail 'service startup failed; inspect docker compose logs'
 fi
