@@ -142,6 +142,37 @@ func (a *API) deleteSecret(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (a *API) runtimeSummary(w http.ResponseWriter, r *http.Request) {
+	rows, err := a.repo.Pool.Query(r.Context(), `SELECT state,health,count(*) FROM (
+		SELECT DISTINCT ON (application_id) state,health FROM runtime_instances
+		WHERE organization_id=$1 AND removed_at IS NULL ORDER BY application_id,created_at DESC,id DESC
+	) recorded GROUP BY state,health ORDER BY state,health`, pathUUID(r, "organizationID"))
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	defer rows.Close()
+	type entry struct {
+		State  string `json:"state"`
+		Health string `json:"health"`
+		Count  int    `json:"count"`
+	}
+	items := []entry{}
+	for rows.Next() {
+		var item entry
+		if err := rows.Scan(&item.State, &item.Health, &item.Count); err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runtimeSummary": items})
+}
+
 func (a *API) getRuntime(w http.ResponseWriter, r *http.Request) {
 	organizationID, applicationID := pathUUID(r, "organizationID"), pathUUID(r, "applicationID")
 	if _, err := a.repo.ApplicationByID(r.Context(), organizationID, applicationID); err != nil {

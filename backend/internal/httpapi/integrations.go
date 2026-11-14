@@ -16,7 +16,6 @@ import (
 	"github.com/itsmangooo/Silicon/backend/internal/providers/connection"
 	dnsprovider "github.com/itsmangooo/Silicon/backend/internal/providers/dns"
 	githubprovider "github.com/itsmangooo/Silicon/backend/internal/providers/git/github"
-	tunnelprovider "github.com/itsmangooo/Silicon/backend/internal/providers/tunnel"
 	"github.com/itsmangooo/Silicon/backend/internal/store"
 )
 
@@ -350,6 +349,15 @@ func (a *API) createDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	orgID := pathUUID(r, "organizationID")
+	reserved, err := a.installationHostname(r, input.Hostname)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
+	if reserved {
+		writeError(w, http.StatusConflict, "installation_hostname", "This hostname is reserved for the Silicon installation.")
+		return
+	}
 	item, err := a.repo.CreateDomain(r.Context(), orgID, pathUUID(r, "applicationID"), currentUser(r.Context()).ID, input.Hostname, input.TargetPort, input.Protocol, input.RoutingMode, requestID(r.Context()), clientIP(r))
 	if err != nil {
 		a.persistenceError(w, err)
@@ -371,6 +379,13 @@ func (a *API) syncDomain(w http.ResponseWriter, r *http.Request) {
 	item, err := a.repo.Domain(r.Context(), pathUUID(r, "organizationID"), pathUUID(r, "domainID"))
 	if err != nil {
 		a.persistenceError(w, err)
+		return
+	}
+	if !a.allowApplicationHostname(w, r, item.Hostname) {
+		return
+	}
+	if item.RoutingMode == "cloudflare_tunnel" && item.DNSContent == "" {
+		writeError(w, http.StatusConflict, "tunnel_route_required", "Configure the tunnel hostname route before reconciling its DNS record.")
 		return
 	}
 	synced, ok := a.reconcileDomain(r, w, item)
@@ -401,7 +416,23 @@ func (a *API) updateDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	orgID := pathUUID(r, "organizationID")
 	domainID := pathUUID(r, "domainID")
-	if err := a.repo.UpdateDomainDesired(r.Context(), orgID, domainID, currentUser(r.Context()).ID, input.TargetPort, input.Protocol, input.RoutingMode, "A", "", input.RoutingMode == "cloudflare_proxied", requestID(r.Context()), clientIP(r)); err != nil {
+	current, err := a.repo.Domain(r.Context(), orgID, domainID)
+	if err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	if !a.allowApplicationHostname(w, r, current.Hostname) {
+		return
+	}
+	if current.RoutingMode == "cloudflare_tunnel" && input.RoutingMode != current.RoutingMode {
+		writeError(w, http.StatusConflict, "tunnel_route_exists", "Remove the existing tunnel domain before switching to direct DNS.")
+		return
+	}
+	recordType, content, proxied := "A", "", input.RoutingMode == "cloudflare_proxied"
+	if current.RoutingMode == "cloudflare_tunnel" {
+		recordType, content, proxied = current.DNSRecordType, current.DNSContent, current.Proxied
+	}
+	if err := a.repo.UpdateDomainDesired(r.Context(), orgID, domainID, currentUser(r.Context()).ID, input.TargetPort, input.Protocol, input.RoutingMode, recordType, content, proxied, requestID(r.Context()), clientIP(r)); err != nil {
 		a.persistenceError(w, err)
 		return
 	}
@@ -520,6 +551,33 @@ func (a *API) deleteDomain(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.persistenceError(w, err)
 		return
+	}
+	if !a.allowApplicationHostname(w, r, domain.Hostname) {
+		return
+	}
+	route, err := a.repo.TunnelRouteByDomain(r.Context(), orgID, domain.ID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		a.serverError(w, r, err)
+		return
+	}
+	if err == nil && route.SiliconManaged {
+		tunnel, err := a.repo.Tunnel(r.Context(), orgID, route.TunnelID)
+		if err != nil {
+			a.persistenceError(w, err)
+			return
+		}
+		client, integration, ok := a.cloudflareClient(r, w, orgID)
+		if !ok {
+			return
+		}
+		if tunnel.Ownership == "external" || tunnel.IntegrationID != integration.ID {
+			writeError(w, http.StatusConflict, "tunnel_externally_managed", "Silicon cannot delete a route from an externally managed tunnel.")
+			return
+		}
+		if err := client.RemoveOwnedRoute(r.Context(), integration.AccountID, tunnel.ProviderTunnelID, route.Hostname, route.ServiceURL); err != nil {
+			writeError(w, http.StatusConflict, "tunnel_route_conflict", "The tunnel route could not be safely removed. Verify its configuration and try again.")
+			return
+		}
 	}
 	if domain.SiliconManaged && domain.ProviderRecordID != nil && domain.ProviderZoneID != nil {
 		client, _, ok := a.cloudflareClient(r, w, orgID)
@@ -756,34 +814,35 @@ func (a *API) createTunnelRoute(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	providerRoutes, err := client.Routes(r.Context(), integration.AccountID, tunnel.ProviderTunnelID)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "cloudflare_request_failed", "Cloudflare tunnel routes could not be inspected.")
+	if tunnel.IntegrationID != integration.ID {
+		writeError(w, http.StatusConflict, "integration_mismatch", "The selected tunnel belongs to a different Cloudflare connection.")
 		return
 	}
-	managedHostname := false
+	if !a.allowApplicationHostname(w, r, domain.Hostname) {
+		return
+	}
+	if domain.RoutingMode != "cloudflare_tunnel" {
+		writeError(w, http.StatusConflict, "tunnel_mode_required", "Select Cloudflare Tunnel routing before configuring its hostname.")
+		return
+	}
+	prior, loadErr := a.repo.TunnelRouteByDomain(r.Context(), orgID, domain.ID)
+	if loadErr != nil && !errors.Is(loadErr, store.ErrNotFound) {
+		a.serverError(w, r, loadErr)
+		return
+	}
+	if loadErr == nil && (prior.TunnelID != tunnel.ID || !prior.SiliconManaged) {
+		writeError(w, http.StatusConflict, "tunnel_route_conflict", "This domain already has a route on another tunnel or is externally managed.")
+		return
+	}
+	var previousService string
 	for _, route := range routes {
-		if strings.EqualFold(route.Hostname, domain.Hostname) && route.SiliconManaged {
-			managedHostname = true
+		if route.DomainID == domain.ID && route.SiliconManaged {
+			previousService = route.ServiceURL
 			break
 		}
 	}
-	replaced := false
-	for index, route := range providerRoutes {
-		if strings.EqualFold(route.Hostname, domain.Hostname) {
-			if !managedHostname {
-				writeError(w, http.StatusConflict, "tunnel_route_conflict", "This tunnel hostname is not owned by Silicon.")
-				return
-			}
-			providerRoutes[index] = tunnelprovider.Route{Hostname: domain.Hostname, Service: serviceURL}
-			replaced = true
-		}
-	}
-	if !replaced {
-		providerRoutes = append(providerRoutes, tunnelprovider.Route{Hostname: domain.Hostname, Service: serviceURL})
-	}
-	if err := client.ConfigureRoutes(r.Context(), integration.AccountID, tunnel.ProviderTunnelID, providerRoutes); err != nil {
-		writeError(w, http.StatusBadGateway, "cloudflare_request_failed", "Cloudflare could not configure the tunnel route.")
+	if err := client.PutOwnedRoute(r.Context(), integration.AccountID, tunnel.ProviderTunnelID, domain.Hostname, previousService, serviceURL); err != nil {
+		writeError(w, http.StatusConflict, "tunnel_route_conflict", "Cloudflare could not update this hostname safely. Verify tunnel ownership and configuration.")
 		return
 	}
 	route, err := a.repo.SaveTunnelRoute(r.Context(), orgID, tunnel.ID, domain.ID, domain.Hostname, serviceURL)

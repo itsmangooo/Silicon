@@ -19,6 +19,7 @@ var (
 	ErrNotFound           = errors.New("record not found")
 	ErrConflict           = errors.New("resource has dependent records")
 	ErrNetworkHasServices = errors.New("detach all application services before deleting the network")
+	ErrManagedDomains     = errors.New("remove the Silicon-managed domain associations before deleting this workload")
 )
 
 type Repository struct{ Pool *pgxpool.Pool }
@@ -42,11 +43,12 @@ type Organization struct {
 }
 
 type Member struct {
-	UserID      uuid.UUID `json:"userId"`
-	Email       string    `json:"email"`
-	DisplayName string    `json:"displayName"`
-	Role        string    `json:"role"`
-	CreatedAt   time.Time `json:"createdAt"`
+	UserID        uuid.UUID `json:"userId"`
+	Email         string    `json:"email"`
+	DisplayName   string    `json:"displayName"`
+	Role          string    `json:"role"`
+	IsSystemAdmin bool      `json:"isSystemAdmin"`
+	CreatedAt     time.Time `json:"createdAt"`
 }
 
 type Project struct {
@@ -305,7 +307,7 @@ func (r Repository) MembershipRole(ctx context.Context, organizationID, userID u
 }
 
 func (r Repository) ListMembers(ctx context.Context, organizationID uuid.UUID) ([]Member, error) {
-	rows, err := r.Pool.Query(ctx, `SELECT u.id,u.email,u.display_name,m.role,m.created_at FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.organization_id=$1 ORDER BY u.display_name,u.email`, organizationID)
+	rows, err := r.Pool.Query(ctx, `SELECT u.id,u.email,u.display_name,m.role,u.is_system_admin,m.created_at FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.organization_id=$1 ORDER BY u.display_name,u.email`, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +315,7 @@ func (r Repository) ListMembers(ctx context.Context, organizationID uuid.UUID) (
 	items := []Member{}
 	for rows.Next() {
 		var item Member
-		if err := rows.Scan(&item.UserID, &item.Email, &item.DisplayName, &item.Role, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.UserID, &item.Email, &item.DisplayName, &item.Role, &item.IsSystemAdmin, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -415,6 +417,15 @@ func (r Repository) DeleteProject(ctx context.Context, organizationID, projectID
 		return err
 	}
 	defer tx.Rollback(ctx)
+	var domains bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM domains d JOIN applications a ON a.id=d.application_id
+		WHERE d.organization_id=$1 AND a.project_id=$2 AND (d.silicon_managed OR EXISTS(SELECT 1 FROM cloudflare_tunnel_routes WHERE domain_id=d.id AND silicon_managed)))`,
+		organizationID, projectID).Scan(&domains); err != nil {
+		return err
+	}
+	if domains {
+		return ErrManagedDomains
+	}
 	tag, err := tx.Exec(ctx, `DELETE FROM projects WHERE organization_id=$1 AND id=$2`, organizationID, projectID)
 	if err != nil {
 		return err
@@ -601,6 +612,15 @@ func (r Repository) DeleteApplication(ctx context.Context, organizationID, appli
 		return err
 	}
 	defer tx.Rollback(ctx)
+	var domains bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM domains d WHERE d.organization_id=$1 AND d.application_id=$2
+		AND (d.silicon_managed OR EXISTS(SELECT 1 FROM cloudflare_tunnel_routes WHERE domain_id=d.id AND silicon_managed)))`,
+		organizationID, applicationID).Scan(&domains); err != nil {
+		return err
+	}
+	if domains {
+		return ErrManagedDomains
+	}
 	tag, err := tx.Exec(ctx, `DELETE FROM applications WHERE organization_id=$1 AND id=$2`, organizationID, applicationID)
 	if err != nil {
 		return err

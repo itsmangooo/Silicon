@@ -170,6 +170,7 @@ func (c Client) Routes(ctx context.Context, accountID, tunnelID string) ([]tunne
 			Ingress []struct {
 				Hostname string `json:"hostname"`
 				Service  string `json:"service"`
+				Path     string `json:"path"`
 			} `json:"ingress"`
 		} `json:"config"`
 	}]
@@ -179,10 +180,101 @@ func (c Client) Routes(ctx context.Context, accountID, tunnelID string) ([]tunne
 	routes := []tunnelprovider.Route{}
 	for _, item := range response.Result.Config.Ingress {
 		if item.Hostname != "" {
-			routes = append(routes, tunnelprovider.Route{Hostname: item.Hostname, Service: item.Service})
+			routes = append(routes, tunnelprovider.Route{Hostname: item.Hostname, Service: item.Service, Path: item.Path})
 		}
 	}
 	return routes, nil
+}
+
+// RemoveOwnedRoute preserves all provider configuration, including path rules and origin options.
+func (c Client) RemoveOwnedRoute(ctx context.Context, accountID, tunnelID, hostname, service string) error {
+	return c.reconcileHostname(ctx, accountID, tunnelID, hostname, service, "", true)
+}
+
+func (c Client) PutOwnedRoute(ctx context.Context, accountID, tunnelID, hostname, previous, service string) error {
+	return c.reconcileHostname(ctx, accountID, tunnelID, hostname, previous, service, false)
+}
+
+func (c Client) reconcileHostname(ctx context.Context, accountID, tunnelID, hostname, previous, service string, remove bool) error {
+	endpoint := "/accounts/" + url.PathEscape(accountID) + "/cfd_tunnel/" + url.PathEscape(tunnelID) + "/configurations"
+	var response envelope[struct {
+		Config map[string]json.RawMessage `json:"config"`
+	}]
+	if err := c.request(ctx, http.MethodGet, endpoint, nil, &response); err != nil {
+		return err
+	}
+	var ingress []json.RawMessage
+	if response.Result.Config == nil {
+		response.Result.Config = make(map[string]json.RawMessage)
+	}
+	if existing := response.Result.Config["ingress"]; len(existing) > 0 {
+		if err := json.Unmarshal(existing, &ingress); err != nil {
+			return err
+		}
+	}
+	entry, err := json.Marshal(map[string]string{"hostname": hostname, "service": service})
+	if err != nil {
+		return err
+	}
+	preserved := make([]json.RawMessage, 0, len(ingress))
+	matches := 0
+	for _, rule := range ingress {
+		var route struct {
+			Hostname string `json:"hostname"`
+			Service  string `json:"service"`
+			Path     string `json:"path"`
+		}
+		if err := json.Unmarshal(rule, &route); err != nil {
+			return err
+		}
+		if strings.EqualFold(route.Hostname, hostname) {
+			if route.Service != previous || route.Path != "" {
+				return errors.New("tunnel hostname configuration changed externally")
+			}
+			matches++
+			if !remove {
+				var rawRule map[string]json.RawMessage
+				if err := json.Unmarshal(rule, &rawRule); err != nil {
+					return err
+				}
+				rawRule["service"], _ = json.Marshal(service)
+				updated, err := json.Marshal(rawRule)
+				if err != nil {
+					return err
+				}
+				preserved = append(preserved, updated)
+			}
+		} else {
+			preserved = append(preserved, rule)
+		}
+	}
+	if matches == 0 && remove {
+		return nil
+	}
+	if matches > 1 || (remove && len(preserved) == 0) {
+		return errors.New("tunnel hostname cannot be changed safely")
+	}
+	if matches == 0 {
+		if len(preserved) == 0 {
+			preserved = append(preserved, json.RawMessage(`{"service":"http_status:404"}`))
+		}
+		last := len(preserved) - 1
+		var fallback struct {
+			Hostname string `json:"hostname"`
+			Path     string `json:"path"`
+		}
+		if err := json.Unmarshal(preserved[last], &fallback); err != nil || fallback.Hostname != "" || fallback.Path != "" {
+			return errors.New("tunnel configuration has no catch-all rule")
+		}
+		preserved = append(preserved, preserved[last])
+		preserved[last] = entry
+	}
+	raw, err := json.Marshal(preserved)
+	if err != nil {
+		return err
+	}
+	response.Result.Config["ingress"] = raw
+	return c.request(ctx, http.MethodPut, endpoint, map[string]any{"config": response.Result.Config}, nil)
 }
 
 func (c Client) request(ctx context.Context, method, path string, body any, result any) error {

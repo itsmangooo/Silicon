@@ -26,7 +26,11 @@ Use the organization selector below the Silicon logo to change the active tenant
 
 Open **Dashboard** to see registered workloads, the last recorded server connection checks, and recent deployment results. The charts use up to 200 of the most recent deployment records. Application rows show the latest deployment in that set. Open an application’s runtime view to inspect its current container state.
 
-Open **Settings → Appearance** to select Soft UI for flat graphite sections, Glassmorphism for floating translucent surfaces, or Playful for softer controls and press feedback. All three use the same neutral palette. Use **Color mode** for dark or light and **Density** to change navigation, table, form, and dashboard spacing. Choices take effect immediately and are saved in this browser across sign-ins and reloads.
+Open the account menu and choose **Appearance**. Choose Soft UI, Glassmorphism, Playful, Obsidian, Liquid Metal, Industrial, Bento, or Terminal. Set the color mode to dark, light, or System, and choose a comfortable or compact layout. Preferences follow your account across browsers.
+
+Use **My profile** to manage your avatar and review organization memberships. **Account settings** lets you change your display name, password, and email. Email changes require configured system mail and a verification code. Password changes end all sessions.
+
+Use **Messages** to contact another member of the active organization. **Support tickets** are visible to their requester and installation administrators who belong to that organization. The account menu shows unread notifications.
 
 ## Model a workload
 

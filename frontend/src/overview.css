@@ -23,7 +23,7 @@
 .appearance-options { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: var(--space-4); margin-top: var(--space-5); }
 
 .overview-metrics, .overview-columns { display: grid; gap: var(--section-gap); }
-.overview-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.overview-metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .overview-columns { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); margin-top: var(--section-gap); }
 .overview-columns:empty { display: none; }
 .overview-columns > .section { margin-top: 0; }

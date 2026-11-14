@@ -349,6 +349,54 @@ func (r Repository) ListDomains(ctx context.Context, orgID uuid.UUID) ([]Domain,
 	}
 	return items, rows.Err()
 }
+
+func (r Repository) AdoptTunnelDomain(ctx context.Context, domain Domain, tunnelID, actorID, requestID uuid.UUID, service string, ip net.IP) (Domain, error) {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return Domain{}, err
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, domain.Hostname); err != nil {
+		return Domain{}, err
+	}
+	var ownedElsewhere bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM domains WHERE provider_zone_id=$1 AND provider_record_id=$2 AND silicon_managed)`, domain.ProviderZoneID, domain.ProviderRecordID).Scan(&ownedElsewhere); err != nil {
+		return Domain{}, err
+	}
+	if ownedElsewhere {
+		return Domain{}, ErrConflict
+	}
+	var saved Domain
+	err = tx.QueryRow(ctx, `INSERT INTO domains(
+		organization_id,environment_id,application_id,target_server_id,hostname,target_port,protocol,
+		routing_mode,routing_provider,dns_provider,provider_zone_id,provider_record_id,dns_record_type,dns_content,proxied,dns_state,silicon_managed)
+		SELECT a.organization_id,a.environment_id,a.id,a.server_id,$5,$6,$7,'cloudflare_tunnel','cloudflare','cloudflare',$8,$9,'CNAME',$10,true,'active',true
+		FROM applications a JOIN cloudflare_tunnels t ON t.organization_id=a.organization_id AND t.server_id=a.server_id
+		JOIN runtime_instances ri ON ri.organization_id=a.organization_id AND ri.application_id=a.id AND ri.server_id=a.server_id
+		WHERE a.organization_id=$1 AND a.id=$2 AND t.id=$3 AND ri.id=$4 AND ri.removed_at IS NULL AND ri.state='running' AND ri.host_port=$6
+		ON CONFLICT (organization_id,hostname) DO UPDATE SET
+			environment_id=excluded.environment_id,application_id=excluded.application_id,target_server_id=excluded.target_server_id,
+		target_runtime_instance_id=NULL,target_port=excluded.target_port,protocol=excluded.protocol,
+			routing_mode=excluded.routing_mode,routing_provider=excluded.routing_provider,dns_provider=excluded.dns_provider,
+			provider_zone_id=excluded.provider_zone_id,provider_record_id=excluded.provider_record_id,dns_record_type=excluded.dns_record_type,
+			dns_content=excluded.dns_content,proxied=excluded.proxied,dns_state=excluded.dns_state,silicon_managed=true,last_sync_error='',updated_at=now()
+		WHERE NOT domains.silicon_managed AND domains.provider_record_id IS NULL
+		AND NOT EXISTS(SELECT 1 FROM cloudflare_tunnel_routes WHERE domain_id=domains.id)
+		RETURNING `+domainColumns,
+		domain.OrganizationID, domain.ApplicationID, tunnelID, domain.TargetRuntimeInstanceID, domain.Hostname, domain.TargetPort, domain.Protocol,
+		domain.ProviderZoneID, domain.ProviderRecordID, domain.DNSContent).Scan(domainScan(&saved)...)
+	if err != nil {
+		return Domain{}, notFound(err)
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO cloudflare_tunnel_routes(organization_id,tunnel_id,domain_id,hostname,service_url) VALUES($1,$2,$3,$4,$5)`,
+		domain.OrganizationID, tunnelID, saved.ID, saved.Hostname, service); err != nil {
+		return Domain{}, err
+	}
+	if err = insertAudit(ctx, tx, &domain.OrganizationID, &actorID, "domain.adopted", "domain", &saved.ID, requestID, map[string]any{"hostname": saved.Hostname}, ip); err != nil {
+		return Domain{}, err
+	}
+	return saved, tx.Commit(ctx)
+}
 func (r Repository) Domain(ctx context.Context, orgID, domainID uuid.UUID) (Domain, error) {
 	var d Domain
 	err := r.Pool.QueryRow(ctx, `SELECT `+domainColumns+` FROM domains WHERE organization_id=$1 AND id=$2`, orgID, domainID).Scan(domainScan(&d)...)
@@ -471,6 +519,14 @@ func (r Repository) TunnelRoutes(ctx context.Context, orgID, tunnelID uuid.UUID)
 		items = append(items, x)
 	}
 	return items, rows.Err()
+}
+
+func (r Repository) TunnelRouteByDomain(ctx context.Context, orgID, domainID uuid.UUID) (TunnelRoute, error) {
+	var route TunnelRoute
+	err := r.Pool.QueryRow(ctx, `SELECT id,organization_id,tunnel_id,domain_id,hostname,service_url,silicon_managed
+		FROM cloudflare_tunnel_routes WHERE organization_id=$1 AND domain_id=$2`, orgID, domainID).
+		Scan(&route.ID, &route.OrganizationID, &route.TunnelID, &route.DomainID, &route.Hostname, &route.ServiceURL, &route.SiliconManaged)
+	return route, notFound(err)
 }
 
 func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }

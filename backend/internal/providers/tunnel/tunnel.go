@@ -10,6 +10,7 @@ type Tunnel struct {
 type Route struct {
 	Hostname string `json:"hostname"`
 	Service  string `json:"service"`
+	Path     string `json:"path,omitempty"`
 }
 
 type Provider interface {

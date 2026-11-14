@@ -118,9 +118,24 @@ try {
     ['/access', 'access.png'],
     ['/identity', 'identity-providers.png'],
     ['/audit', 'audit.png'],
+    ['/account/profile', 'account-profile.png'],
+    ['/account/settings', 'account-settings.png'],
+    ['/account/messages', 'account-messages.png'],
+    ['/account/support', 'account-support.png'],
     ['/settings', 'settings.png'],
   ]
   for (const [route, filename] of previews) await capture(page, previewUrl, route, filename)
+
+  await page.goto(`${previewUrl}/projects/project-platform/applications/app-api`, { waitUntil: 'networkidle0' })
+  await captureElement(page, 'application-domains.png', '#domains .section')
+  await captureElement(page, 'application-docker-settings.png', '#settings .section:has(.runtime-editor)')
+  await clickButton(page, 'Open lifecycle and logs')
+  await settle(page, '.runtime-log')
+  await clickButton(page, 'Tail')
+  await page.waitForFunction(() => !globalThis.document.querySelector('.runtime-log')?.textContent.includes('No log output loaded.'))
+  await captureElement(page, 'application-runtime-logs.png', '.dialog')
+
+  await page.goto(`${previewUrl}/settings`, { waitUntil: 'networkidle0' })
 
   await page.addStyleTag({ content: '.topbar { display: none !important; }' })
   await captureElement(page, 'settings-appearance.png', '#appearance .section')
@@ -140,14 +155,16 @@ try {
     }
   })
   await capture(dashboardPage, previewUrl, '/', 'dashboard.png', '.deployment-chart')
-  for (const style of ['glass', 'playful']) {
+  for (const style of ['glass', 'playful', 'obsidian', 'metal', 'industrial', 'bento', 'terminal']) {
     await dashboardPage.goto(`${previewUrl}/settings`, { waitUntil: 'networkidle0' })
     await settle(dashboardPage, '.appearance-preset')
     await dashboardPage.click(`input[name="ui-style"][value="${style}"]`)
     await capture(dashboardPage, previewUrl, '/', `dashboard-${style}.png`, '.deployment-chart')
-    await capture(dashboardPage, previewUrl, '/projects/project-platform/applications/app-api', `application-detail-${style}.png`, 'textarea[name="arguments"]')
-    await dashboardPage.goto(`${previewUrl}/settings#appearance`, { waitUntil: 'networkidle0' })
-    await captureElement(dashboardPage, `settings-appearance-${style}.png`, '#appearance .section')
+    if (['glass', 'playful'].includes(style)) {
+      await capture(dashboardPage, previewUrl, '/projects/project-platform/applications/app-api', `application-detail-${style}.png`, '.runtime-editor')
+      await dashboardPage.goto(`${previewUrl}/settings#appearance`, { waitUntil: 'networkidle0' })
+      await captureElement(dashboardPage, `settings-appearance-${style}.png`, '#appearance .section')
+    }
   }
   await dashboardContext.close()
 
@@ -222,7 +239,9 @@ try {
   await captureElement(page, 'guide-runtime-logs.png', '.dialog')
 
   await page.goto(`${previewUrl}/domains`, { waitUntil: 'networkidle0' })
-  await page.type('input[name="hostname"]', 'api.example.com')
+  await settle(page, '.page-actions')
+  await clickButton(page, 'Add Domain')
+  await page.type('input[name="hostname"]', 'api.example.test')
   await page.$eval('input[name="targetPort"]', (input) => {
     const inputElement = input.ownerDocument.defaultView.HTMLInputElement
     const setter = Object.getOwnPropertyDescriptor(inputElement.prototype, 'value').set
@@ -230,7 +249,7 @@ try {
     input.dispatchEvent(new Event('input', { bubbles: true }))
   })
   await page.select('select[name="routingMode"]', 'cloudflare_tunnel')
-  await captureElement(page, 'guide-domain-setup.png', '.section')
+  await captureElement(page, 'guide-domain-setup.png', '.dialog')
 
   await page.goto(`${previewUrl}/integrations`, { waitUntil: 'networkidle0' })
   await settle(page, '.section')

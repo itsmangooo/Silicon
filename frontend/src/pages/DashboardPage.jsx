@@ -57,16 +57,18 @@ export function DashboardPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const resources = useResource(async () => {
     if (!organizationId) return null
-    const collections = ['applications', 'deployments', 'servers']
-    const results = await Promise.allSettled(collections.map((name) => api(organizationPath(organizationId, `/${name}`))))
-    return Object.fromEntries(collections.map((name, index) => [name, results[index].value?.[name] ?? null]))
+    const collections = [['applications', 'applications'], ['deployments', 'deployments'], ['servers', 'servers'],
+      ['domains', 'domains'], ['runtime-summary', 'runtimeSummary'], ['audit-events', 'auditEvents']]
+    const results = await Promise.allSettled(collections.map(([path]) => api(organizationPath(organizationId, `/${path}`))))
+    return Object.fromEntries(collections.map(([, name], index) => [name, results[index].value?.[name] ?? null]))
   }, [organizationId])
   if (!organizationId) return <Page title="Silicon" description="Create an organization to establish the first security boundary."><Section title="Organization" description="Projects and infrastructure records always belong to an organization."><EmptyState title="No organization yet" action={<CreateButton onClick={() => setCreateOpen(true)}>Create organization</CreateButton>}>Create the first organization. You will become its owner.</EmptyState><CreateOrganization open={createOpen} onClose={() => setCreateOpen(false)} onCreated={refreshOrganizations} /></Section></Page>
-  const { applications, deployments, servers } = resources.data || {}
+  const { applications, deployments, servers, domains, runtimeSummary, auditEvents } = resources.data || {}
   const summary = summarizeDeployments(deployments || [])
   const connected = servers?.filter((server) => server.connectionStatus === 'connected').length
   const applicationNames = new Map(applications?.map((item) => [item.id, item.name]))
   const unavailable = !applications || !deployments || !servers
+  const running = runtimeSummary?.filter((item) => item.state === 'running').reduce((total, item) => total + item.count, 0)
 
   return <Page title="Dashboard" description={organization?.name} actions={<button className="button" onClick={resources.refresh} disabled={resources.loading}><ArrowClockwiseIcon size={16} aria-hidden="true" />Refresh</button>}>
     <ErrorNotice error={resources.error} />
@@ -75,6 +77,7 @@ export function DashboardPage() {
       {unavailable && <Notice>Some records are unavailable. Check your organization permissions or refresh to try again.</Notice>}
       <div className="overview-metrics">
         <OverviewMetric icon={CubeIcon} to="/applications" label="Applications" value={applications?.length} detail="Registered workloads" />
+        <OverviewMetric icon={CubeIcon} to="/applications" label="Running applications" value={running} detail="Last recorded runtime state" />
         <OverviewMetric icon={RocketLaunchIcon} to="/deployments" label="Deployments" value={deployments?.length} detail={deployments?.length === 200 ? 'Showing the latest 200 records' : 'Deployment records'} />
         <OverviewMetric icon={ShieldCheckIcon} to="/deployments" label="Healthy deployments" value={deployments ? summary.outcomes.healthy : null} detail={deployments ? `${summary.outcomes.failed} failed in the same set` : 'Deployment records unavailable'} />
         <OverviewMetric icon={HardDrivesIcon} to="/servers" label="Connected servers" value={connected} detail={servers ? `${servers.length} registered · last connection checks` : 'Server records unavailable'} />
@@ -83,6 +86,9 @@ export function DashboardPage() {
         <Section title="Deployment activity" description="Last 14 days · based on recent deployment records"><DeploymentTrend days={summary.days} /></Section>
         <Section title="Deployment outcomes" description="Status of the latest records"><DeploymentOutcomes outcomes={summary.outcomes} count={deployments.length} /></Section>
       </div>}
+      {runtimeSummary?.length > 0 && <Section title="Runtime health" description="Last recorded inspection for each managed application runtime">
+        <dl className="deployment-outcomes">{runtimeSummary.map((item) => <div key={`${item.state}/${item.health}`}><dt>{item.state} · {item.health}</dt><dd>{item.count}</dd></div>)}</dl>
+      </Section>}
       <div className="overview-columns">
         {deployments && <Section title="Recent deployments" actions={<OverviewLink to="/deployments">All deployments</OverviewLink>}>
           {summary.recent.length ? <ol className="overview-list overview-activity">
@@ -103,12 +109,15 @@ export function DashboardPage() {
           </ul> : <EmptyState title="No servers registered">Add a server to deploy workloads to it.</EmptyState>}
         </Section>}
       </div>
+      {auditEvents?.length > 0 && <Section title="Recent infrastructure activity" actions={<OverviewLink to="/audit">Audit history</OverviewLink>}>
+        <ul className="overview-list">{auditEvents.slice(0, 5).map((item) => <li key={item.id}><div><strong>{item.action}</strong><small>{item.actorName || 'System'} · {formatDate(item.createdAt)}</small></div></li>)}</ul>
+      </Section>}
       {applications && <Section title="Applications" description="Latest recorded deployment for each workload" actions={<OverviewLink to="/applications">All applications</OverviewLink>}>
         {applications.length ? <table><thead><tr><th>Application</th><th>Source</th><th>Target</th><th>Latest deployment</th></tr></thead><tbody>
           {applications.slice(0, 8).map((item) => {
             const latest = summary.latestByApplication.get(item.id)
             const target = item.serverId ? servers?.find((server) => server.id === item.serverId)?.name || '—' : 'Local'
-            return <tr key={item.id}><td data-label="Application"><Link className="table-primary" to={`/applications/${item.id}`}>{item.name}</Link></td><td data-label="Source"><span className="cell-stack">{item.sourceType === 'git_dockerfile' ? 'Git + Dockerfile' : item.sourceType === 'docker_image' ? 'Docker image' : item.sourceType}{item.image && <span className="cell-subtle mono">{item.image}</span>}</span></td><td data-label="Target"><span className="cell-stack">{target}{item.internalPort && <span className="cell-subtle mono">Port {item.internalPort}</span>}</span></td><td data-label="Latest deployment">{latest ? <Status value={latest.status} /> : deployments ? 'No recent record' : 'Unavailable'}</td></tr>
+            return <tr key={item.id}><td data-label="Application"><Link className="table-primary" to={`/applications/${item.id}`}>{item.name}</Link>{domains?.filter((domain) => domain.applicationId === item.id).map((domain) => <small className="cell-stack" key={domain.id}><a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer">{domain.hostname}</a></small>)}</td><td data-label="Source"><span className="cell-stack">{item.sourceType === 'git_dockerfile' ? 'Git + Dockerfile' : item.sourceType === 'docker_image' ? 'Docker image' : item.sourceType}{item.image && <span className="cell-subtle mono">{item.image}</span>}</span></td><td data-label="Target"><span className="cell-stack">{target}{item.internalPort && <span className="cell-subtle mono">Port {item.internalPort}</span>}</span></td><td data-label="Latest deployment">{latest ? <Status value={latest.status} /> : deployments ? 'No recent record' : 'Unavailable'}</td></tr>
           })}
         </tbody></table> : <EmptyState title="No applications registered">Create a workload under a project and environment.</EmptyState>}
       </Section>}

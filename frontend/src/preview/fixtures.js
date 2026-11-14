@@ -117,6 +117,7 @@ export function previewResponse(path, options = {}) {
   if (options.method && options.method !== 'GET') return undefined
   if (path === '/auth/session') return { user: previewFixtures.user }
   if (path === '/organizations') return { organizations: previewFixtures.organizations }
+  if (path === '/account/notifications') return { notifications: [], unread: 0 }
   if (path === '/system/updates') return { releaseCheckStatus: 'available', version: { currentVersion: 'dev', commitSha: '0123456', buildTime: '2026-10-01T10:00:00Z', latestRelease: { tagName: 'v0.1.0', name: 'Silicon v0.1.0', notes: 'First stable development release with verified in-panel updates.', htmlUrl: 'https://github.com/itsmangooo/Silicon/releases/tag/v0.1.0' }, updateAvailable: true, checkedAt: '2026-10-01T10:00:00Z' } }
   if (path === '/system/public-access') return { active: null, operation: null, installation: { publicUrl: 'http://192.0.2.10', httpPort: 80, bindAddress: '0.0.0.0', localOrigin: 'http://127.0.0.1:80' }, connections: [{ organizationId: 'org-preview', organizationName: 'Acme Infrastructure', integration: { id: 'cloudflare-preview', organizationId: 'org-preview', accountId: 'preview-cloudflare-account', status: 'connected' }, zones: previewFixtures.zones, tunnels: [{ ...previewFixtures.tunnels[0], id: 'tunnel-local', name: 'silicon-host', serverId: 'server-local' }] }] }
   if (path === '/system/email') return { configured: true, configuration: { id: 'mail-preview', provider: 'smtp', fromName: 'Silicon', fromAddress: 'silicon@example.test', replyTo: 'support@example.test', settings: { smtpPreset: 'stalwart', smtpHost: 'mail.example.test', smtpPort: 587, smtpUsername: 'silicon', smtpEncryption: 'starttls' }, credentialConfigured: true, status: 'healthy', lastSuccessAt: '2026-10-04T08:20:00Z', createdAt: '2026-10-04T08:00:00Z', updatedAt: '2026-10-04T08:20:00Z' } }
@@ -125,11 +126,14 @@ export function previewResponse(path, options = {}) {
     return { query, results: previewFixtures.searchResults.filter((item) => `${item.title} ${item.subtitle} ${item.type}`.toLowerCase().includes(query)) }
   }
   const root = '/organizations/org-preview'
+  if (path.startsWith(`${root}/messages?`)) return { messages: [{ id: 'message-preview', sender: 'Preview Operator', recipient: 'Demo Reviewer', subject: 'Review the production deployment', body: 'The deployment is ready for review.', createdAt: '2026-09-29T14:10:00Z' }], hasMore: false }
+  if (path.startsWith(`${root}/support?`)) return { tickets: [{ id: 'ticket-preview', subject: 'Check reporting worker logs', category: 'deployment', status: 'in_progress', priority: 'normal', updatedAt: '2026-09-29T14:10:00Z' }], hasMore: false }
   if (path === `${root}/projects`) return { projects: previewFixtures.projects }
   if (path === `${root}/applications`) return { applications: previewFixtures.applications }
   if (path === `${root}/deployments`) return { deployments: previewFixtures.deployments }
   if (path === `${root}/servers`) return { servers: previewFixtures.servers, localRuntimeAvailable: true }
   if (path === `${root}/domains`) return { domains: previewFixtures.domains }
+  if (path === `${root}/runtime-summary`) return { runtimeSummary: [{ state: 'running', health: 'healthy', count: 1 }, { state: 'stopped', health: 'unknown', count: 1 }] }
   if (path === `${root}/networks`) return { networks: previewFixtures.networks }
   if (path === `${root}/members`) return { members: previewFixtures.members }
   if (path === `${root}/access`) return { role: 'owner', permissions: ['audit.read', 'application.create', 'application.delete', 'application.read', 'application.update', 'deployment.create', 'deployment.read', 'deployment.rollback', 'domain.manage', 'identity_provider.manage', 'logs.read', 'network.manage', 'network.read', 'project.create', 'project.delete', 'project.read', 'project.update', 'secret.write', 'server.manage', 'server.read'] }

@@ -15,6 +15,8 @@ import { AccessPage } from './pages/AccessPage.jsx'
 import { IdentityProvidersPage } from './pages/IdentityProvidersPage.jsx'
 import { AuditPage } from './pages/AuditPage.jsx'
 import { SettingsPage } from './pages/SettingsPage.jsx'
+import { AccountPage } from './pages/AccountPage.jsx'
+import { CommunicationPage } from './pages/CommunicationPage.jsx'
 import { IntegrationsPage } from './pages/IntegrationsPage.jsx'
 import { DomainsPage } from './pages/DomainsPage.jsx'
 import { AWSPage } from './pages/AWSPage.jsx'
@@ -67,6 +69,11 @@ export function App() {
         <Route path="aws/storage" element={<AWSPage section="storage" />} />
         <Route path="aws/costs" element={<AWSPage section="costs" />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="account/profile" element={<AccountPage section="profile" />} />
+        <Route path="account/settings" element={<AccountPage section="settings" />} />
+        <Route path="account/appearance" element={<AccountPage section="appearance" />} />
+        <Route path="account/messages" element={<CommunicationPage key="messages" />} />
+        <Route path="account/support" element={<CommunicationPage key="support" support />} />
         <Route path="docs" element={<Navigate replace to="/docs/overview/getting-started" />} />
         <Route path="docs/:category/:slug" element={<Suspense fallback={<div role="status">Loading documentation…</div>}><DocsArticlePage /></Suspense>} />
       </Route>

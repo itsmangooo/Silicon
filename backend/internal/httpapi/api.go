@@ -107,6 +107,15 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/password-reset/complete", a.completePasswordReset)
 	mux.HandleFunc("POST /api/v1/webhooks/github", a.githubWebhook)
 	mux.Handle("GET /api/v1/auth/session", a.auth(http.HandlerFunc(a.session)))
+	mux.Handle("GET /api/v1/account", a.auth(http.HandlerFunc(a.accountProfile)))
+	mux.Handle("PUT /api/v1/account", a.auth(http.HandlerFunc(a.updateAccountProfile)))
+	mux.Handle("PUT /api/v1/account/appearance", a.auth(http.HandlerFunc(a.updateAccountAppearance)))
+	mux.Handle("GET /api/v1/account/avatar", a.auth(http.HandlerFunc(a.accountAvatar)))
+	mux.Handle("PUT /api/v1/account/avatar", a.auth(http.HandlerFunc(a.updateAccountAvatar)))
+	mux.Handle("DELETE /api/v1/account/avatar", a.auth(http.HandlerFunc(a.updateAccountAvatar)))
+	mux.Handle("PUT /api/v1/account/password", a.auth(http.HandlerFunc(a.updateAccountPassword)))
+	mux.Handle("POST /api/v1/account/email", a.auth(http.HandlerFunc(a.requestAccountEmail)))
+	mux.Handle("POST /api/v1/account/email/verify", a.auth(http.HandlerFunc(a.verifyAccountEmail)))
 	mux.Handle("POST /api/v1/auth/logout", a.auth(http.HandlerFunc(a.logout)))
 	mux.Handle("GET /api/v1/organizations", a.auth(http.HandlerFunc(a.listOrganizations)))
 	mux.Handle("POST /api/v1/organizations", a.auth(http.HandlerFunc(a.createOrganization)))
@@ -168,6 +177,7 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("PUT /api/v1/organizations/{organizationID}/applications/{applicationID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.putSecret)))
 	mux.Handle("DELETE /api/v1/organizations/{organizationID}/applications/{applicationID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.deleteSecret)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/runtime", a.org(authorization.ApplicationRead, http.HandlerFunc(a.getRuntime)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/runtime-summary", a.org(authorization.ApplicationRead, http.HandlerFunc(a.runtimeSummary)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/applications/{applicationID}/runtime/{action}", a.org(authorization.DeploymentCreate, http.HandlerFunc(a.runtimeAction)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/runtime/logs", a.org(authorization.LogsRead, http.HandlerFunc(a.runtimeLogs)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/servers", a.org(authorization.ServerRead, http.HandlerFunc(a.listServers)))
@@ -202,8 +212,11 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("GET /api/v1/organizations/{organizationID}/integrations/cloudflare/zones", a.org(authorization.IntegrationRead, http.HandlerFunc(a.listCloudflareZones)))
 	mux.Handle("PUT /api/v1/organizations/{organizationID}/integrations/cloudflare/zones/{zoneID}", a.org(authorization.IntegrationManage, http.HandlerFunc(a.selectCloudflareZone)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/domains", a.org(authorization.OrganizationRead, http.HandlerFunc(a.listDomains)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/domains/inspect", a.org(authorization.DomainManage, http.HandlerFunc(a.inspectExistingDomain)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/domains/adopt", a.org(authorization.DomainManage, http.HandlerFunc(a.adoptExistingDomain)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/applications/{applicationID}/domains", a.org(authorization.DomainManage, http.HandlerFunc(a.createDomain)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/domains/{domainID}/sync", a.org(authorization.DomainManage, http.HandlerFunc(a.syncDomain)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/domains/{domainID}/verify", a.org(authorization.DomainManage, http.HandlerFunc(a.verifyDomain)))
 	mux.Handle("PUT /api/v1/organizations/{organizationID}/domains/{domainID}", a.org(authorization.DomainManage, http.HandlerFunc(a.updateDomain)))
 	mux.Handle("DELETE /api/v1/organizations/{organizationID}/domains/{domainID}", a.org(authorization.DomainManage, http.HandlerFunc(a.deleteDomain)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/integrations/cloudflare/tunnels", a.org(authorization.IntegrationRead, http.HandlerFunc(a.listTunnels)))
@@ -243,6 +256,7 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("POST /api/v1/organizations/{organizationID}/budgets", a.org(authorization.BudgetManage, http.HandlerFunc(a.createBudget)))
 	mux.Handle("DELETE /api/v1/organizations/{organizationID}/budgets/{budgetID}", a.org(authorization.BudgetManage, http.HandlerFunc(a.deleteBudget)))
 
+	a.communicationRoutes(mux)
 	return a.recover(a.security(a.cors(a.requestLog(mux))))
 }
 
@@ -1043,6 +1057,10 @@ func (a *API) recover(next http.Handler) http.Handler {
 }
 
 func (a *API) persistenceError(w http.ResponseWriter, err error) {
+	if errors.Is(err, store.ErrManagedDomains) {
+		writeError(w, http.StatusConflict, "managed_domains", "Remove the Silicon-managed domain associations before deleting this workload.")
+		return
+	}
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "not_found", "Resource not found.")
 		return

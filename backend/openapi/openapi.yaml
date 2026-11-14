@@ -106,6 +106,91 @@ paths:
                 required: [user]
                 properties: {user: {$ref: '#/components/schemas/User'}}
         '401': {$ref: '#/components/responses/AuthenticationError'}
+  /account:
+    get: {tags: [Authentication], summary: Read the signed-in account profile and appearance, responses: {'200': {description: Profile and preferences}}}
+    put:
+      tags: [Authentication]
+      summary: Change the signed-in account display name
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [displayName], properties: {displayName: {type: string, maxLength: 120}}}}}}
+      responses: {'204': {description: Profile updated}}
+  /account/appearance:
+    put:
+      tags: [Authentication]
+      summary: Save the signed-in account appearance preferences
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Appearance'}}}}
+      responses: {'200': {description: Saved preferences}}
+  /account/avatar:
+    get: {tags: [Authentication], summary: Read the signed-in account avatar, responses: {'200': {description: Normalized PNG}, '404': {description: No avatar}}}
+    put:
+      tags: [Authentication]
+      summary: Upload a bounded PNG or JPEG avatar
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {image/png: {schema: {type: string, format: binary}}, image/jpeg: {schema: {type: string, format: binary}}}}
+      responses: {'204': {description: Avatar saved}, '413': {description: Image exceeds 512 KiB}}
+    delete: {tags: [Authentication], summary: Remove the signed-in account avatar, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: Avatar removed}}}
+  /account/password:
+    put:
+      tags: [Authentication]
+      summary: Reauthenticate and change password with session revocation
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [currentPassword, password, confirmPassword], properties: {currentPassword: {type: string}, password: {type: string}, confirmPassword: {type: string}}}}}}
+      responses: {'204': {description: Password changed and sessions revoked}}
+  /account/email:
+    post:
+      tags: [Authentication]
+      summary: Queue email verification after verifying the current password
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [email, currentPassword], properties: {email: {type: string, format: email}, currentPassword: {type: string}}}}}}
+      responses: {'202': {description: Verification message queued}, '503': {description: System mail unavailable}}
+  /account/email/verify:
+    post:
+      tags: [Authentication]
+      summary: Consume the account-bound verification code
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [token], properties: {token: {type: string}}}}}}
+      responses: {'204': {description: Email changed}, '422': {description: Code invalid or expired}}
+  /account/notifications:
+    get: {tags: [Authentication], summary: List the signed-in account notifications and unread count, responses: {'200': {description: Notifications and count}}}
+  /account/notifications/{notificationID}/read:
+    parameters: [{in: path, name: notificationID, required: true, schema: {$ref: '#/components/schemas/UUID'}}]
+    post: {tags: [Authentication], summary: Mark a personal notification read, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'204': {description: Marked read}}}
+  /organizations/{organizationID}/messages:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get: {tags: [Organizations], summary: Search an organization inbox or sent folder, responses: {'200': {description: Up to 50 messages and pagination state}}}
+    post:
+      tags: [Organizations]
+      summary: Send a private message to another member
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [recipientId, subject, body], properties: {recipientId: {$ref: '#/components/schemas/UUID'}, parentId: {$ref: '#/components/schemas/UUID'}, subject: {type: string}, body: {type: string}}}}}}
+      responses: {'201': {description: Message saved}}
+  /organizations/{organizationID}/messages/{messageID}/read:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {in: path, name: messageID, required: true, schema: {$ref: '#/components/schemas/UUID'}}]
+    post: {tags: [Organizations], summary: Open a permitted message and mark it read for the recipient, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'200': {description: Message}, '404': {description: Message unavailable}}}
+  /organizations/{organizationID}/support:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get: {tags: [Organizations], summary: List permitted support tickets, responses: {'200': {description: Up to 50 tickets and pagination state}}}
+    post:
+      tags: [Organizations]
+      summary: Create a support ticket
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [subject, category, body], properties: {subject: {type: string}, category: {type: string}, body: {type: string}}}}}}
+      responses: {'201': {description: Ticket saved}}
+  /organizations/{organizationID}/support/{ticketID}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {in: path, name: ticketID, required: true, schema: {$ref: '#/components/schemas/UUID'}}]
+    get: {tags: [Organizations], summary: Open a permitted ticket and its paginated history, responses: {'200': {description: Ticket and history}, '404': {description: Ticket unavailable}}}
+  /organizations/{organizationID}/support/{ticketID}/events:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {in: path, name: ticketID, required: true, schema: {$ref: '#/components/schemas/UUID'}}]
+    post:
+      tags: [Organizations]
+      summary: Reply to a ticket or apply an authorized status priority or assignment change
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [kind], properties: {kind: {type: string, enum: [reply, status, priority, assignment]}, body: {type: string}, assigneeId: {$ref: '#/components/schemas/UUID'}}}}}}
+      responses: {'204': {description: Ticket event saved}}
+  /organizations/{organizationID}/runtime-summary:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get: {tags: [Runtime], summary: Aggregate last recorded runtime states for the active organization, responses: {'200': {description: Persisted runtime state and health counts}}}
   /system/version:
     get:
       tags: [System]
@@ -845,6 +930,22 @@ paths:
   /organizations/{organizationID}/domains:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}]
     get: {tags: [Domains], summary: List organization domains and DNS state, responses: {'200': {description: Domains}}}
+  /organizations/{organizationID}/domains/inspect:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    post:
+      tags: [Domains]
+      summary: Inspect a Cloudflare Tunnel hostname against an application runtime
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DomainAdoptionInput'}}}}
+      responses: {'200': {description: Matching provider route and DNS record}, '409': {description: Routing or ownership mismatch}}
+  /organizations/{organizationID}/domains/adopt:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    post:
+      tags: [Domains]
+      summary: Adopt a verified Cloudflare Tunnel hostname in place
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DomainAdoptionInput'}}}}
+      responses: {'201': {description: Domain adopted}, '409': {description: Routing or ownership mismatch}}
   /organizations/{organizationID}/applications/{applicationID}/domains:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ApplicationID'}]
     post:
@@ -856,6 +957,9 @@ paths:
   /organizations/{organizationID}/domains/{domainID}/sync:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/DomainID'}]
     post: {tags: [Domains], summary: Reconcile a Silicon-owned record, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'200': {description: Reconciled}, '409': {description: Ownership conflict}}}
+  /organizations/{organizationID}/domains/{domainID}/verify:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/DomainID'}]
+    post: {tags: [Domains], summary: Compare provider records and check hostname resolution, parameters: [{$ref: '#/components/parameters/CSRFToken'}], responses: {'200': {description: Verification results}}}
   /organizations/{organizationID}/domains/{domainID}:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/DomainID'}]
     put: {tags: [Domains], summary: Update and reconcile a Silicon-owned DNS record, parameters: [{$ref: '#/components/parameters/CSRFToken'}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DomainUpdateInput'}}}}, responses: {'200': {description: Updated}, '409': {description: Ownership conflict}}}
@@ -1229,6 +1333,13 @@ components:
       type: object
       required: [user, csrfToken]
       properties: {user: {$ref: '#/components/schemas/User'}, csrfToken: {type: string}}
+    Appearance:
+      type: object
+      required: [style, mode, density]
+      properties:
+        style: {type: string, enum: [soft, glass, playful, obsidian, metal, industrial, bento, terminal]}
+        mode: {type: string, enum: [dark, light, system]}
+        density: {type: string, enum: [comfortable, compact]}
     User:
       type: object
       required: [id, email, displayName, status, isSystemAdmin, createdAt]
@@ -1684,6 +1795,14 @@ components:
       allOf:
         - {$ref: '#/components/schemas/GitSourceInput'}
         - {type: object, properties: {applicationId: {$ref: '#/components/schemas/UUID'}, organizationId: {$ref: '#/components/schemas/UUID'}, provider: {type: string, enum: [github]}}}
+    DomainAdoptionInput:
+      type: object
+      additionalProperties: false
+      required: [hostname, applicationId, tunnelId]
+      properties:
+        hostname: {type: string, maxLength: 253}
+        applicationId: {$ref: '#/components/schemas/UUID'}
+        tunnelId: {$ref: '#/components/schemas/UUID'}
     DomainInput:
       type: object
       additionalProperties: false

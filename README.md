@@ -16,7 +16,9 @@ Docker applications can configure persistent named volumes, a memory limit, cont
 
 ## Interface previews
 
-Use **Settings → Appearance** to switch between Soft UI, Glassmorphism, and Playful. Each preset supports light or dark mode and comfortable or compact density. Silicon saves these choices in the current browser. The dashboard summarizes deployment activity and the last recorded server connection checks for the selected organization.
+Use **Settings → Appearance** to choose Soft UI, Glassmorphism, Playful, Obsidian, Liquid Metal, Industrial, Bento, or Terminal. Silicon saves the style, color mode, and density to your account. The organization dashboard summarizes deployments, recorded runtime status, server connection checks, domains, and audit activity.
+
+Use **Domains** or an application's **Domains** section to connect a hostname. If a Cloudflare Tunnel route already exists, use **Adopt domain** to inspect it and attach it to the matching Silicon application. The account menu opens your profile, account security, messages, notifications, and support tickets.
 
 These previews were captured from the running application at a consistent desktop viewport. Authenticated views use temporary, isolated preview fixtures so the implemented data-backed states are visible; Silicon does not ship with seeded users, organizations, or workload records. The current previews include local, SSH, and AWS-backed targets plus provider-independent Cloudflare routing.
 
@@ -31,6 +33,10 @@ These previews were captured from the running application at a consistent deskto
 | Glassmorphism | Playful | Appearance settings |
 | --- | --- | --- |
 | [![Glassmorphism dashboard](docs/previews/dashboard-glass.png)](docs/previews/dashboard-glass.png) | [![Playful dashboard](docs/previews/dashboard-playful.png)](docs/previews/dashboard-playful.png) | [![Appearance settings](docs/previews/settings-appearance.png)](docs/previews/settings-appearance.png) |
+
+More dashboard previews: [Obsidian](docs/previews/dashboard-obsidian.png), [Liquid Metal](docs/previews/dashboard-metal.png), [Industrial](docs/previews/dashboard-industrial.png), [Bento](docs/previews/dashboard-bento.png), and [Terminal](docs/previews/dashboard-terminal.png).
+
+Account previews: [Profile](docs/previews/account-profile.png), [Account security](docs/previews/account-settings.png), [Messages](docs/previews/account-messages.png), and [Support](docs/previews/account-support.png).
 
 | In-panel documentation | Global search |
 | --- | --- |
@@ -55,6 +61,8 @@ These previews were captured from the running application at a consistent deskto
 | Environment workspace | Application workspace |
 | --- | --- |
 | [![Silicon environment workspace](docs/previews/environment-detail.png)](docs/previews/environment-detail.png) | [![Silicon application workspace](docs/previews/application-detail.png)](docs/previews/application-detail.png) |
+
+Application tools: [Domains](docs/previews/application-domains.png), [Docker runtime settings](docs/previews/application-docker-settings.png), and [Lifecycle and logs](docs/previews/application-runtime-logs.png).
 
 | Deployment detail | |
 | --- | --- |

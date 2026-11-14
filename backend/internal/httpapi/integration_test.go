@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"log/slog"
 	"net/http"
@@ -261,6 +263,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	if ownerSession["isSystemAdmin"] != true || viewerSession["isSystemAdmin"] != false {
 		t.Fatalf("unexpected bootstrap system administration: owner=%#v viewer=%#v", ownerSession, viewerSession)
 	}
+	owner.post("/account/email", map[string]any{"email": "new-owner@example.com", "currentPassword": "correct horse battery staple"}, http.StatusServiceUnavailable)
 	noMailReset := owner.post("/auth/password-reset/request", map[string]any{"email": "owner@example.com"}, http.StatusAccepted)
 	if noMailReset["message"] != genericResetResponse {
 		t.Fatalf("unconfigured mail changed the generic reset response: %#v", noMailReset)
@@ -876,6 +879,29 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	if cloudflareState.deletes.Load() != 1 {
 		t.Fatal("external DNS record was deleted")
 	}
+	adoption := map[string]any{"hostname": "adopt.example.com", "applicationId": runtimeApplicationID, "tunnelId": tunnelID}
+	if _, err := pool.Exec(ctx, `UPDATE applications SET server_id=$1 WHERE id=$2`, serverID, runtimeApplicationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE runtime_instances SET server_id=$1,state='running',host_address='127.0.0.1',host_port=32781,removed_at=NULL
+		WHERE deployment_id=$2`, serverID, stringField(t, secondRuntimeDeployment, "id")); err != nil {
+		t.Fatal(err)
+	}
+	checked := owner.post("/organizations/"+orgA+"/domains/inspect", adoption, http.StatusOK)
+	if checked["service"] != "http://127.0.0.1:32781" {
+		t.Fatalf("unexpected inspected service: %v", checked)
+	}
+	owner.post("/organizations/"+orgB+"/domains/adopt", adoption, http.StatusNotFound)
+	adopted := owner.post("/organizations/"+orgA+"/domains/adopt", adoption, http.StatusCreated)
+	if adopted["siliconManaged"] != true || cloudflareState.routes.Load() != 1 {
+		t.Fatalf("adoption changed provider routes or omitted ownership: %v", adopted)
+	}
+	owner.post("/organizations/"+orgA+"/domains/adopt", adoption, http.StatusConflict)
+	owner.post("/organizations/"+orgA+"/applications/"+applicationID+"/domains", map[string]any{"hostname": "silicon.test", "targetPort": 3000, "protocol": "http", "routingMode": "dns_only"}, http.StatusConflict)
+	owner.delete("/organizations/"+orgA+"/domains/"+stringField(t, adopted, "id"), http.StatusNoContent)
+	if cloudflareState.routes.Load() != 2 || cloudflareState.deletes.Load() != 2 {
+		t.Fatalf("adopted route was not cleaned up: routes=%d DNS deletes=%d", cloudflareState.routes.Load(), cloudflareState.deletes.Load())
+	}
 	viewer.get("/organizations/"+orgA+"/integrations/cloudflare", http.StatusNotFound)
 	viewer.get("/organizations/"+orgA+"/integrations/github", http.StatusNotFound)
 
@@ -888,6 +914,41 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	viewer.get("/organizations/"+orgA+"/audit-events", http.StatusNotFound)
 
 	owner.post("/organizations/"+orgA+"/members", map[string]any{"email": "viewer@example.com", "role": "viewer"}, http.StatusCreated)
+	owner.put("/account/appearance", map[string]any{"style": "terminal", "mode": "system", "density": "compact"}, http.StatusOK)
+	owner.put("/account/appearance", map[string]any{"style": "invalid", "mode": "dark", "density": "compact"}, http.StatusUnprocessableEntity)
+	if mapField(t, owner.get("/account", http.StatusOK), "appearance")["style"] != "terminal" ||
+		mapField(t, viewer.get("/account", http.StatusOK), "appearance")["style"] != "soft" {
+		t.Fatal("appearance was not isolated per account")
+	}
+	viewerID := stringField(t, mapField(t, viewer.get("/auth/session", http.StatusOK), "user"), "id")
+	msg := owner.post("/organizations/"+orgA+"/messages", map[string]any{"recipientId": viewerID, "subject": "Deploy check", "body": "Please review."}, http.StatusCreated)
+	msgID := stringField(t, msg, "id")
+	viewer.post("/organizations/"+orgB+"/messages/"+msgID+"/read", nil, http.StatusNotFound)
+	if len(arrayField(t, viewer.get("/organizations/"+orgA+"/messages?q=Deploy", http.StatusOK), "messages")) != 1 {
+		t.Fatal("inbox search did not find the message")
+	}
+	if viewer.get("/account/notifications", http.StatusOK)["unread"] != float64(1) {
+		t.Fatal("unread message notification missing")
+	}
+	if viewer.post("/organizations/"+orgA+"/messages/"+msgID+"/read", nil, http.StatusOK)["readAt"] == nil {
+		t.Fatal("reading the message did not persist its read state")
+	}
+	ownerID := stringField(t, mapField(t, owner.get("/auth/session", http.StatusOK), "user"), "id")
+	viewer.post("/organizations/"+orgA+"/messages", map[string]any{"recipientId": ownerID, "parentId": msgID, "subject": "Deploy check", "body": "Reviewed."}, http.StatusCreated)
+	if len(arrayField(t, viewer.get("/organizations/"+orgA+"/messages?folder=sent", http.StatusOK), "messages")) != 1 {
+		t.Fatal("sent folder did not find the reply")
+	}
+	ticket := viewer.post("/organizations/"+orgA+"/support", map[string]any{"subject": "Deployment failed", "category": "deployment", "body": "Please investigate."}, http.StatusCreated)
+	ticketID := stringField(t, ticket, "id")
+	viewer.get("/organizations/"+orgB+"/support/"+ticketID, http.StatusNotFound)
+	viewer.post("/organizations/"+orgA+"/support/"+ticketID+"/events", map[string]any{"kind": "priority", "body": "urgent"}, http.StatusForbidden)
+	owner.post("/organizations/"+orgA+"/support/"+ticketID+"/events", map[string]any{"kind": "assignment", "assigneeId": ownerID}, http.StatusNoContent)
+	owner.post("/organizations/"+orgA+"/support/"+ticketID+"/events", map[string]any{"kind": "reply", "body": "Investigating."}, http.StatusNoContent)
+	owner.post("/organizations/"+orgA+"/support/"+ticketID+"/events", map[string]any{"kind": "status", "body": "in_progress"}, http.StatusNoContent)
+	if details := viewer.get("/organizations/"+orgA+"/support/"+ticketID, http.StatusOK); len(arrayField(t, details, "events")) != 4 ||
+		mapField(t, details, "ticket")["status"] != "in_progress" {
+		t.Fatalf("support workflow was not persisted: %v", details)
+	}
 	viewer.post("/organizations/"+orgA+"/projects", map[string]any{"name": "Forbidden", "slug": "forbidden"}, http.StatusForbidden)
 	viewer.get("/organizations/"+orgA+"/projects", http.StatusOK)
 	viewer.put("/organizations/"+orgA+"/projects/"+projectID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "FORBIDDEN", "value": "write"}}}, http.StatusForbidden)
@@ -1016,11 +1077,75 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 		t.Fatalf("expected audit events, got %v", audit)
 	}
 
+	accountAvatarRoundTrip(t, owner)
+	viewer.post("/account/email", map[string]any{"email": "verified@example.com", "currentPassword": "incorrect"}, http.StatusForbidden)
+	owner.post("/account/email", map[string]any{"email": "verified@example.com", "currentPassword": "correct horse battery staple"}, http.StatusAccepted)
+	var deliveryID uuid.UUID
+	var encryptedVerification []byte
+	if err := pool.QueryRow(ctx, `SELECT id,encrypted_message FROM mail_deliveries WHERE purpose='account_email_verification' AND recipient='verified@example.com'`).Scan(&deliveryID, &encryptedVerification); err != nil {
+		t.Fatal(err)
+	}
+	plaintext, err := box.Open(encryptedVerification, "mail-delivery:"+deliveryID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var verificationMessage mailprovider.Message
+	if err := json.Unmarshal(plaintext, &verificationMessage); err != nil {
+		t.Fatal(err)
+	}
+	token := strings.Split(verificationMessage.Text, "\n\n")[1]
+	viewer.post("/account/email/verify", map[string]any{"token": token}, http.StatusUnprocessableEntity)
+	owner.post("/account/email/verify", map[string]any{"token": token}, http.StatusNoContent)
+	owner.post("/account/email/verify", map[string]any{"token": token}, http.StatusUnprocessableEntity)
+	if mapField(t, owner.get("/account", http.StatusOK), "user")["email"] != "verified@example.com" {
+		t.Fatal("verified email change was not persisted")
+	}
+	owner.put("/account/password", map[string]any{"currentPassword": "wrong", "password": "new correct horse battery staple", "confirmPassword": "new correct horse battery staple"}, http.StatusForbidden)
+	owner.put("/account/password", map[string]any{"currentPassword": "correct horse battery staple", "password": "new correct horse battery staple", "confirmPassword": "new correct horse battery staple"}, http.StatusNoContent)
+	owner.get("/auth/session", http.StatusUnauthorized)
+	owner.login("verified@example.com", "new correct horse battery staple")
 	owner.post("/auth/logout", map[string]any{}, http.StatusNoContent)
 	owner.get("/auth/session", http.StatusUnauthorized)
 
 	// Validation rejects malformed identifiers and unknown JSON fields.
 	viewer.post("/organizations/"+orgB+"/projects", map[string]any{"name": "x", "slug": "bad slug", "unexpected": true}, http.StatusBadRequest)
+}
+
+func accountAvatarRoundTrip(t *testing.T, client *testClient) {
+	t.Helper()
+	var valid bytes.Buffer
+	if err := png.Encode(&valid, image.NewRGBA(image.Rect(0, 0, 16, 16))); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		body []byte
+		code int
+	}{{[]byte("<svg/>"), http.StatusUnprocessableEntity}, {bytes.Repeat([]byte("x"), (512<<10)+1), http.StatusRequestEntityTooLarge}, {valid.Bytes(), http.StatusNoContent}} {
+		req, err := http.NewRequest(http.MethodPut, client.base+"/api/v1/account/avatar", bytes.NewReader(test.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("X-CSRF-Token", client.csrf)
+		response, err := client.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != test.code {
+			t.Fatalf("avatar status=%d want=%d", response.StatusCode, test.code)
+		}
+	}
+	response, err := client.client.Get(client.base + "/api/v1/account/avatar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, decodeErr := png.Decode(response.Body)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "image/png" || decodeErr != nil {
+		t.Fatal("normalized avatar was not returned")
+	}
+	client.delete("/account/avatar", http.StatusNoContent)
+	client.get("/account/avatar", http.StatusNotFound)
 }
 
 type captureExecutor struct{ spec jobs.DeploymentSpec }
@@ -1056,7 +1181,9 @@ func newCloudflareServer(t *testing.T) (*httptest.Server, *cloudflareTestState) 
 		case r.URL.Path == "/zones":
 			io.WriteString(w, `{"success":true,"result":[{"id":"zone-1","name":"example.com","status":"active"}],"result_info":{"page":1,"total_pages":1}}`)
 		case r.URL.Path == "/zones/zone-1/dns_records" && r.Method == http.MethodGet:
-			if r.URL.Query().Get("name") == "conflict.example.com" {
+			if r.URL.Query().Get("name") == "adopt.example.com" {
+				io.WriteString(w, `{"success":true,"result":[{"id":"record-adopt","type":"CNAME","name":"adopt.example.com","content":"tunnel-1.cfargotunnel.com","proxied":true}]}`)
+			} else if r.URL.Query().Get("name") == "conflict.example.com" {
 				io.WriteString(w, `{"success":true,"result":[{"id":"external-1","type":"A","name":"conflict.example.com","content":"198.51.100.2","proxied":false}]}`)
 			} else if state.created.Load() {
 				io.WriteString(w, `{"success":true,"result":[{"id":"record-1","type":"A","name":"api.example.com","content":"203.0.113.10","proxied":true}]}`)
@@ -1074,7 +1201,7 @@ func newCloudflareServer(t *testing.T) (*httptest.Server, *cloudflareTestState) 
 			_ = json.NewDecoder(r.Body).Decode(&desired)
 			desired["id"] = "record-1"
 			writeEnvelope(t, w, desired)
-		case r.URL.Path == "/zones/zone-1/dns_records/record-1" && r.Method == http.MethodDelete:
+		case (r.URL.Path == "/zones/zone-1/dns_records/record-1" || r.URL.Path == "/zones/zone-1/dns_records/record-adopt") && r.Method == http.MethodDelete:
 			state.deletes.Add(1)
 			state.created.Store(false)
 			io.WriteString(w, `{"success":true,"result":{"id":"record-1"}}`)
@@ -1085,8 +1212,12 @@ func newCloudflareServer(t *testing.T) (*httptest.Server, *cloudflareTestState) 
 		case r.URL.Path == "/accounts/account-1/cfd_tunnel" && r.Method == http.MethodGet:
 			io.WriteString(w, `{"success":true,"result":[{"id":"shared-1","name":"shared","status":"healthy"}]}`)
 		case r.URL.Path == "/accounts/account-1/cfd_tunnel/tunnel-1/configurations" && r.Method == http.MethodGet:
-			io.WriteString(w, `{"success":true,"result":{"config":{"ingress":[{"hostname":"existing.example.com","service":"http://existing:8080"},{"service":"http_status:404"}]}}}`)
+			io.WriteString(w, `{"success":true,"result":{"config":{"ingress":[{"hostname":"existing.example.com","service":"http://existing:8080","path":"/existing","originRequest":{"connectTimeout":5}},{"hostname":"adopt.example.com","service":"http://127.0.0.1:32781"},{"service":"http_status:404"}]}}}`)
 		case r.URL.Path == "/accounts/account-1/cfd_tunnel/tunnel-1/configurations" && r.Method == http.MethodPut:
+			body, err := io.ReadAll(r.Body)
+			if err != nil || !bytes.Contains(body, []byte(`"path":"/existing"`)) || !bytes.Contains(body, []byte(`"connectTimeout":5`)) {
+				t.Errorf("unrelated tunnel configuration was lost: %s", body)
+			}
 			state.routes.Add(1)
 			io.WriteString(w, `{"success":true,"result":{}}`)
 		default:

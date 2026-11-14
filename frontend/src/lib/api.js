@@ -16,12 +16,20 @@ function cookie(name) {
 
 export async function api(path, options = {}) {
   if (previewMode) {
+    if (path === '/account/appearance' && options.method === 'PUT') {
+      localStorage.setItem('silicon.preview.appearance', JSON.stringify(options.body))
+      return options.body
+    }
+    if (path === '/account' && !options.method) {
+      return { user: previewResponse('/auth/session').user, hasAvatar: false, appearance: JSON.parse(localStorage.getItem('silicon.preview.appearance')) || { style: 'soft', mode: 'dark', density: 'comfortable' } }
+    }
     const fixture = previewResponse(path, options)
     if (fixture !== undefined) return Promise.resolve(fixture)
   }
   const method = options.method || 'GET'
   const headers = { Accept: 'application/json', ...options.headers }
-  if (options.body && !(options.body instanceof FormData)) headers['Content-Type'] = 'application/json'
+  const isJSON = options.body && !(options.body instanceof FormData || options.body instanceof Blob)
+  if (isJSON) headers['Content-Type'] = 'application/json'
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
     const csrf = cookie('silicon_csrf')
     if (csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf)
@@ -31,7 +39,7 @@ export async function api(path, options = {}) {
     method,
     headers,
     credentials: 'include',
-    body: options.body && !(options.body instanceof FormData) ? JSON.stringify(options.body) : options.body,
+    body: isJSON ? JSON.stringify(options.body) : options.body,
   })
   if (response.status === 204) return null
   const payload = await response.json().catch(() => ({}))

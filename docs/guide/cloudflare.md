@@ -55,18 +55,20 @@ For direct DNS, also give the server a stable public address in Silicon and conf
 
 ## 4. Add a domain
 
-1. Open **Domains**.
-2. Select **Add domain**.
+1. Open **Domains** or the **Domains** section of an application.
+2. Select **Add Domain**.
 3. Enter the full hostname, such as `api.example.com`.
-4. Select the application and target server.
-5. Enter the reachable origin host port and protocol. For a same-host reverse proxy or Tunnel, this is the application's explicit `127.0.0.1` published port.
-6. Select the Cloudflare connection and matching zone.
+4. Select the application. Silicon derives its target server; the application detail page preselects the application.
+5. Confirm the reachable origin host port and protocol. For a same-host reverse proxy or Tunnel, use the application's explicit `127.0.0.1` published port.
+6. Confirm the Cloudflare account and matching enabled zone displayed by the form.
 7. Choose **DNS only**, **Cloudflare proxy**, or **Cloudflare Tunnel**.
-8. Review the resolved origin and save.
+8. For Tunnel routing, select a Tunnel on that server. Save and inspect DNS state in the domain list.
 
 [![Domain target and Cloudflare routing mode](../previews/guide-domain-setup.png)](../previews/guide-domain-setup.png)
 
 The hostname must belong to the selected zone. The application, server, Cloudflare connection, and zone are all organization-scoped; the backend rejects cross-organization relationships even when a user belongs to both organizations.
+
+To adopt an existing Tunnel hostname, use **Domains → Import Existing Domain**. Enter the hostname and select its application and imported or Silicon-managed Tunnel. Silicon checks the current provider route and proxied CNAME against the running application's loopback port. After reviewing the result, choose **Adopt domain**. Adoption records ownership without rewriting Cloudflare resources. Path-specific routes, unmatched origins, and the installation hostname are excluded. **Verify DNS and route** compares provider records and checks DNS resolution. Open the hostname separately to verify HTTPS end to end.
 
 ## 5. Use DNS-only or Cloudflare proxy mode
 
