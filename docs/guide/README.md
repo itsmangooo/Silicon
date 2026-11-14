@@ -26,7 +26,7 @@ The in-panel guide is installation-focused: it explains how to operate the Silic
 - [Private networking](private-networking.md)
 - [GitHub setup and auto-deploy](github.md)
 - [Cloudflare DNS and Tunnel](cloudflare.md)
-- [Route an application through Nginx or Traefik](external-proxy.md)
+- [Reverse proxy setup with Caddy, Nginx, or Traefik](external-proxy.md)
 - [AWS project](aws.md)
 
 ## Security and operations

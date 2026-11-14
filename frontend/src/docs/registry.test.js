@@ -19,5 +19,6 @@ describe('documentation registry', () => {
     expect(searchEntries('auto deploy', entries)[0]?.slug).toBe('github')
     expect(searchEntries('budget', entries).some((article) => article.slug === 'aws')).toBe(true)
     expect(searchEntries('frontend backend', entries)[0]?.slug).toBe('frontend-backend-example')
+    expect(searchEntries('caddy', entries)[0]?.slug).toBe('external-proxy')
   })
 })

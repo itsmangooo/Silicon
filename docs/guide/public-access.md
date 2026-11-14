@@ -2,6 +2,8 @@
 
 Use **Settings → Public access** to publish the Silicon installation itself through an existing Cloudflare Tunnel. This is separate from organization application domains.
 
+Already running a reverse proxy? See [how to route the Silicon panel through Caddy, Nginx, or Traefik](external-proxy.md#the-silicon-panel-is-a-separate-hostname).
+
 The resulting request path is:
 
 ```text

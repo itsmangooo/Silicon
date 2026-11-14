@@ -18,7 +18,7 @@ Docker applications can configure persistent named volumes, a memory limit, cont
 
 Use **Account → Theme Studio** to preview and apply eight styles, pick colors and backgrounds, tune motion, and save custom presets. Your settings follow your account. The organization dashboard summarizes deployments, recorded runtime status, server connection checks, domains, and audit activity.
 
-New to Silicon? [Install it and deploy a test site](docs/guide/install-walkthrough.md), [find a feature](docs/guide/feature-reference.md), or [connect an existing Nginx or Traefik proxy](docs/guide/external-proxy.md).
+New to Silicon? [Install it and deploy a test site](docs/guide/install-walkthrough.md), [find a feature](docs/guide/feature-reference.md), or [connect an existing Caddy, Nginx, or Traefik proxy](docs/guide/external-proxy.md).
 
 Use **Domains** or an application's **Domains** section to connect a hostname. If a Cloudflare Tunnel route already exists, use **Adopt domain** to inspect it and attach it to the matching Silicon application. The account menu opens your profile, account security, messages, notifications, and support tickets.
 

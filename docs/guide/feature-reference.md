@@ -27,7 +27,7 @@ Start with the [first-site walkthrough](install-walkthrough.md). Use this page w
 | **Application → Deploy** and **Deployments** | Queue a deployment, follow its stages and inspect the resulting revision or image. [Deployments](deployments.md) |
 | **Application → Runtime & logs** | Inspect container state and recent output. Authorized users can start, stop, restart, or remove a managed runtime. Read the confirmation before removal. |
 | **Networks** | Create a private WireGuard network, connect servers, attach application services, and add explicit same-organization cross-project rules where needed. [Private networking](private-networking.md) |
-| **Domains** or **Application → Domains** | Add a hostname, check DNS and Tunnel routing, or import an existing eligible Cloudflare route. Use the application host port for same-server proxies. [Cloudflare](cloudflare.md) · [Nginx and Traefik](external-proxy.md) |
+| **Domains** or **Application → Domains** | Add a hostname, check DNS and Tunnel routing, or import an existing eligible Cloudflare route. Use the application host port for same-server proxies. [Cloudflare](cloudflare.md) · [Caddy, Nginx, and Traefik](external-proxy.md) |
 
 ## Connect providers
 

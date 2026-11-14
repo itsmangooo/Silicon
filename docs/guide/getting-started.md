@@ -2,6 +2,8 @@
 
 Silicon runs applications on servers you control. Follow [Install Silicon and publish your first site](install-walkthrough.md) for a complete beginner walkthrough or use [Find a feature](feature-reference.md) as a reference.
 
+Already have a web server? Follow [Reverse proxy setup with Caddy, Nginx, or Traefik](external-proxy.md) to publish your app or the Silicon panel.
+
 ## Install Silicon
 
 Review and run the production installer:

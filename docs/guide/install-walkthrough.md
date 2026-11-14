@@ -50,5 +50,5 @@ Replace the example address and domain with your own. Perform the first setup on
 - For code in GitHub, follow [GitHub setup](github.md) to connect a GitHub App, grant access only to the intended repository, bind a branch, and verify the deployed commit.
 - For a frontend and backend, follow [the two-app walkthrough](frontend-backend-example.md). Browser-side requests use a public API URL. Container-side requests can use the Docker environment network on one server or a configured private network across servers.
 - Put ordinary app configuration in **Environment variables** and credentials in **Secrets**. Save changes and redeploy. Add named volumes before relying on a container for persistent storage.
-- For a public hostname, choose [Cloudflare Tunnel](cloudflare.md) or [your own Nginx or Traefik proxy](external-proxy.md). Use the separate [Public access](public-access.md) guide if the hostname is for the Silicon panel itself.
+- For a public hostname, choose [Cloudflare Tunnel](cloudflare.md) or [your own Caddy, Nginx, or Traefik proxy](external-proxy.md). Use the separate [Public access](public-access.md) guide if the hostname is for the Silicon panel itself.
 - Use [Find a feature](feature-reference.md) to locate the rest of the controls.
