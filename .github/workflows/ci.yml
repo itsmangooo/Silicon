@@ -126,6 +126,22 @@ jobs:
           ./install.sh
           after=$(sha256sum "$SILICON_INSTALL_DIR/config/silicon.env")
           test "$before" = "$after"
+      - name: Verify tagged update from inside the updater
+        env:
+          SILICON_INSTALL_DIR: ${{ runner.temp }}/silicon-install
+        run: |
+          source_dir="$SILICON_INSTALL_DIR/source"
+          git -C "$source_dir" tag v0.0.0 HEAD
+          git clone --bare --no-hardlinks "$source_dir" "$SILICON_INSTALL_DIR/ci-origin.git"
+          git -C "$source_dir" remote set-url origin /opt/silicon/ci-origin.git
+          sudo chown -R root:root "$source_dir" "$SILICON_INSTALL_DIR/ci-origin.git"
+          compose() { docker compose --env-file "$SILICON_INSTALL_DIR/config/silicon.env" -f "$source_dir/docker-compose.production.yml" "$@"; }
+          before=$(sha256sum "$SILICON_INSTALL_DIR/config/silicon.env")
+          postgres=$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' "$(compose ps -q postgres)")
+          compose exec -T -e SILICON_REQUIRE_TAGGED_RELEASE=true -e SILICON_UPDATE_RUNNER=true updater \
+            sh /opt/silicon/source/install.sh --update --version v0.0.0
+          test "$before" = "$(sha256sum "$SILICON_INSTALL_DIR/config/silicon.env")"
+          test "$postgres" = "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' "$(compose ps -q postgres)")"
       - name: Show installation diagnostics on failure
         if: failure()
         run: docker compose --env-file "${{ runner.temp }}/silicon-install/config/silicon.env" -f "${{ runner.temp }}/silicon-install/source/docker-compose.production.yml" ps || true

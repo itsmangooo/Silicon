@@ -130,7 +130,6 @@ existing_installation_owns_port() {
 
 if [ "$TEST_MODE" != "true" ]; then
   command -v git >/dev/null 2>&1 || fail 'git is required'
-  command -v openssl >/dev/null 2>&1 || fail 'openssl is required for secure configuration generation'
   command -v curl >/dev/null 2>&1 || fail 'curl is required for readiness checks'
   command -v docker >/dev/null 2>&1 || fail 'Docker is required'
   docker version >/dev/null 2>&1 || fail 'Docker is installed but the daemon is unavailable to this user'
@@ -221,8 +220,9 @@ else
     DATABASE_PASSWORD="test-generated-database-password"
     ENCRYPTION_KEY="dGVzdC1vbmx5LWtleS0zMi1ieXRlcy1sb25nISEhISE="
   else
-    DATABASE_PASSWORD=$(openssl rand -hex 32)
-    ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '\n')
+    command -v openssl >/dev/null 2>&1 || fail 'openssl is required for secure configuration generation'
+    DATABASE_PASSWORD=$(openssl rand -hex 32) || fail 'could not generate the database password'
+    ENCRYPTION_KEY=$(openssl rand -base64 32) || fail 'could not generate the encryption key'
   fi
   COOKIE_SECURE="false"; TRUST_FORWARDED_PROTO="false"; BIND_ADDRESS="0.0.0.0"
   case "$PUBLIC_URL" in https://*) COOKIE_SECURE="true"; TRUST_FORWARDED_PROTO="true"; BIND_ADDRESS="127.0.0.1" ;; esac
