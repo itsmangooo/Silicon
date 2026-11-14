@@ -12,6 +12,8 @@ Silicon occupies the same broad problem space as infrastructure deployment produ
 
 The independent [Silicon public documentation](https://itsmangooo.github.io/Silicon-Docs/) is the main operator and contributor manual. Its source lives in the separate [Silicon-Docs project](https://github.com/itsmangooo/Silicon-Docs), while installation-local procedures remain available in the authenticated in-panel Docs area.
 
+Docker applications can configure persistent named volumes, a memory limit, container arguments, and a shared network for applications on the same Docker host. See [Docker runtime settings](docs/guide/docker-runtime-settings.md).
+
 ## Interface previews
 
 These previews were captured from the running application at a consistent desktop viewport. Authenticated views use temporary, isolated preview fixtures so the implemented data-backed states are visible; Silicon does not ship with seeded users, organizations, or workload records. The current previews include local, SSH, and AWS-backed targets plus provider-independent Cloudflare routing.

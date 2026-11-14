@@ -475,6 +475,14 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	apiServer.cfg.LocalDockerEnabled = true
 	application := owner.post("/organizations/"+orgA+"/environments/"+environmentID+"/applications", map[string]any{"name": "api", "sourceType": "docker_image", "image": "example/api:1", "internalPort": 3000}, http.StatusCreated)
 	applicationID := stringField(t, application, "id")
+	runtimeSettingsPath := "/organizations/" + orgA + "/applications/" + applicationID + "/runtime-settings"
+	owner.put(runtimeSettingsPath, map[string]any{"volumes": []map[string]any{{"name": "data", "target": "/data,source=/etc"}}}, http.StatusUnprocessableEntity)
+	owner.put(runtimeSettingsPath, map[string]any{"memoryMiB": 192}, http.StatusOK)
+	if got := owner.get(runtimeSettingsPath, http.StatusOK)["memoryMiB"]; got != float64(192) {
+		t.Fatalf("runtime settings did not persist: %v", got)
+	}
+	viewer.get("/organizations/"+orgB+"/applications/"+applicationID+"/runtime-settings", http.StatusNotFound)
+	viewer.put("/organizations/"+orgB+"/applications/"+applicationID+"/runtime-settings", map[string]any{}, http.StatusForbidden)
 	owner.put("/organizations/"+orgA+"/applications/"+applicationID+"/server", map[string]any{"serverId": serverID}, http.StatusOK)
 	viewer.put("/organizations/"+orgB+"/applications/"+applicationID+"/server", map[string]any{"serverId": stringField(t, serverB, "id")}, http.StatusNotFound)
 

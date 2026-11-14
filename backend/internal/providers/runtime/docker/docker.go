@@ -73,7 +73,13 @@ func (p Provider) Deploy(ctx context.Context, spec runtimeprovider.DeploymentSpe
 	for _, search := range spec.DNSSearch {
 		args = append(args, "--dns-search", search)
 	}
+	options, err := p.runtimeOptions(ctx, spec)
+	if err != nil {
+		return runtimeprovider.InstanceStatus{}, err
+	}
+	args = append(args, options...)
 	args = append(args, "--", spec.Image)
+	args = append(args, spec.Settings.Arguments...)
 	output, err := p.output(ctx, args...)
 	if err != nil {
 		return runtimeprovider.InstanceStatus{}, fmt.Errorf("create container: %w", err)

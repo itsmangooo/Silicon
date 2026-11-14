@@ -156,6 +156,8 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("PUT /api/v1/organizations/{organizationID}/applications/{applicationID}/environment-variables", a.org(authorization.ApplicationUpdate, http.HandlerFunc(a.replaceEnvironmentVariables)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/applications/{applicationID}/environment-variables/parse", a.org(authorization.ApplicationUpdate, http.HandlerFunc(a.parseDotEnv)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/configuration", a.org(authorization.ApplicationRead, http.HandlerFunc(a.getEffectiveConfiguration)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}/runtime-settings", a.org(authorization.ApplicationRead, http.HandlerFunc(a.getApplicationRuntimeSettings)))
+	mux.Handle("PUT /api/v1/organizations/{organizationID}/applications/{applicationID}/runtime-settings", a.systemAdmin(a.org(authorization.ServerManage, http.HandlerFunc(a.putApplicationRuntimeSettings))))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/projects/{projectID}/secrets", a.org(authorization.ProjectRead, http.HandlerFunc(a.listProjectSecrets)))
 	mux.Handle("PUT /api/v1/organizations/{organizationID}/projects/{projectID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.putProjectSecret)))
 	mux.Handle("DELETE /api/v1/organizations/{organizationID}/projects/{projectID}/secrets/{secret}", a.org(authorization.SecretWrite, http.HandlerFunc(a.deleteProjectSecret)))

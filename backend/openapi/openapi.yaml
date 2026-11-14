@@ -545,6 +545,25 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/DotEnv'}
       responses:
         '200': {$ref: '#/components/responses/DotEnvPreview'}
+  /organizations/{organizationID}/applications/{applicationID}/runtime-settings:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ApplicationID'}]
+    get:
+      tags: [Runtime]
+      summary: Read application Docker runtime settings
+      responses:
+        '200': {description: Runtime settings, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationRuntimeSettings'}}}}
+        '404': {$ref: '#/components/responses/NotFoundError'}
+    put:
+      tags: [Runtime]
+      summary: Set Docker runtime settings for the next deployment
+      description: Requires installation administrator privileges and server management permission in the organization.
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationRuntimeSettings'}}}}
+      responses:
+        '200': {description: Runtime settings updated, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationRuntimeSettings'}}}}
+        '403': {$ref: '#/components/responses/ForbiddenError'}
+        '404': {$ref: '#/components/responses/NotFoundError'}
+        '422': {$ref: '#/components/responses/ValidationError'}
   /organizations/{organizationID}/applications/{applicationID}/configuration:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}, {$ref: '#/components/parameters/ApplicationID'}]
     get:
@@ -1473,6 +1492,24 @@ components:
       properties:
         variables: {type: array, items: {$ref: '#/components/schemas/ScopedVariable'}}
         secrets: {type: array, items: {$ref: '#/components/schemas/SecretMetadata'}}
+    ApplicationRuntimeSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        memoryMiB: {type: integer, minimum: 0, maximum: 1048576, description: Zero uses the Docker default; nonzero values must be at least 64.}
+        arguments: {type: array, maxItems: 64, items: {type: string, maxLength: 2048}, description: Arguments after the image name. Use Secrets for credentials.}
+        environmentNetwork: {type: boolean, description: Join a scoped Docker bridge shared by opted-in applications in this environment on the same host.}
+        volumes:
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, target]
+            properties:
+              name: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,31}$'}
+              target: {type: string, maxLength: 255, description: Canonical absolute Linux container path.}
+              readOnly: {type: boolean}
     RuntimeInstance:
       type: object
       properties:

@@ -35,6 +35,10 @@ func (e DockerDeploymentExecutor) Execute(ctx context.Context, spec jobs.Deploym
 	if err != nil {
 		return fmt.Errorf("load application: %w", err)
 	}
+	settings, err := repository.ApplicationRuntimeSettings(ctx, spec.OrganizationID, spec.ApplicationID)
+	if err != nil {
+		return fmt.Errorf("load application runtime settings: %w", err)
+	}
 	image := strings.TrimSpace(spec.Image)
 	pullImage := false
 	targetServer := ""
@@ -100,6 +104,7 @@ func (e DockerDeploymentExecutor) Execute(ctx context.Context, spec jobs.Deploym
 	runtimeSpec := runtimeprovider.DeploymentSpec{
 		DeploymentID: spec.DeploymentID.String(), OrganizationID: spec.OrganizationID.String(), ApplicationID: application.ID.String(), Application: application.Name,
 		Image: image, PullImage: pullImage, Environment: values,
+		EnvironmentID: application.EnvironmentID.String(), Settings: settings,
 	}
 	if application.ServerID != nil {
 		runtimeSpec.ServerID = application.ServerID.String()
@@ -136,7 +141,7 @@ func (e DockerDeploymentExecutor) Execute(ctx context.Context, spec jobs.Deploym
 		return fmt.Errorf("load previous runtime instances: %w", err)
 	}
 	stoppedForBinding := make([]store.RuntimeInstance, 0, len(previous))
-	if runtimeSpec.HostPort > 0 || len(runtimeSpec.PortBindings) > 0 {
+	if runtimeSpec.HostPort > 0 || len(runtimeSpec.PortBindings) > 0 || len(settings.Volumes) > 0 || settings.EnvironmentNetwork {
 		for _, old := range previous {
 			if err = e.Runtime.Stop(ctx, old.ExternalID); err != nil {
 				for _, stopped := range stoppedForBinding {

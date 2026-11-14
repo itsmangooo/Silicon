@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	runtimeprovider "github.com/itsmangooo/Silicon/backend/internal/providers/runtime"
 )
 
@@ -72,6 +73,26 @@ func TestStatusFromDockerInspectUsesRealHealth(t *testing.T) {
 	}
 }
 
+func TestRuntimeSettingsRejectUnsafeMounts(t *testing.T) {
+	for _, mount := range []runtimeprovider.VolumeMount{
+		{Name: "/etc", Target: "/data"},
+		{Name: "data", Target: "/"},
+		{Name: "data", Target: "/app/../data"},
+		{Name: "data", Target: "/data,source=/etc"},
+	} {
+		settings := runtimeprovider.Settings{Volumes: []runtimeprovider.VolumeMount{mount}}
+		if err := settings.Validate(); err == nil {
+			t.Errorf("unsafe mount accepted: %#v", mount)
+		}
+	}
+	settings := runtimeprovider.Settings{Volumes: []runtimeprovider.VolumeMount{
+		{Name: "data", Target: "/data"}, {Name: "nested", Target: "/data/nested"},
+	}}
+	if err := settings.Validate(); err == nil {
+		t.Fatal("overlapping mounts were accepted")
+	}
+}
+
 func TestDockerRuntimeProviderIntegration(t *testing.T) {
 	if os.Getenv("SILICON_DOCKER_INTEGRATION") != "1" {
 		t.Skip("set SILICON_DOCKER_INTEGRATION=1 to run destructive, namespaced Docker tests")
@@ -82,6 +103,55 @@ func TestDockerRuntimeProviderIntegration(t *testing.T) {
 	if _, err := provider.output(ctx, "version"); err != nil {
 		t.Fatalf("Docker is unavailable: %v", err)
 	}
+	t.Run("scoped storage and network survive replacement", func(t *testing.T) {
+		org, environment, app := uuid.NewString(), uuid.NewString(), uuid.NewString()
+		volume := "silicon-vol-" + org + "-" + app + "-data"
+		network := "silicon-env-" + org + "-" + environment
+		defer provider.run(context.Background(), "volume", "rm", "--", volume)
+		defer provider.run(context.Background(), "network", "rm", "--", network)
+		spec := runtimeprovider.DeploymentSpec{
+			DeploymentID: uuid.NewString(), OrganizationID: org, ApplicationID: app, EnvironmentID: environment,
+			Image: "alpine:3.22", PullImage: true,
+			Settings: runtimeprovider.Settings{
+				Volumes:            []runtimeprovider.VolumeMount{{Name: "data", Target: "/data"}},
+				Arguments:          []string{"sh", "-c", "echo durable >/data/check; sleep 300"},
+				EnvironmentNetwork: true, MemoryMiB: 64,
+			},
+		}
+		first, err := provider.Deploy(ctx, spec)
+		if first.InstanceID != "" {
+			defer provider.Remove(context.Background(), first.InstanceID)
+		}
+		if err != nil || !first.Healthy {
+			t.Fatalf("first instance: %#v, %v", first, err)
+		}
+		if err = provider.Remove(ctx, first.InstanceID); err != nil {
+			t.Fatal(err)
+		}
+		spec.DeploymentID = uuid.NewString()
+		spec.Settings.Arguments = []string{"sh", "-c", "test \"$(cat /data/check)\" = durable && sleep 300"}
+		second, err := provider.Deploy(ctx, spec)
+		if second.InstanceID != "" {
+			defer provider.Remove(context.Background(), second.InstanceID)
+		}
+		if err != nil || !second.Healthy {
+			t.Fatalf("replacement instance: %#v, %v", second, err)
+		}
+		if got, err := provider.output(ctx, "exec", second.InstanceID, "cat", "/data/check"); err != nil || strings.TrimSpace(got) != "durable" {
+			t.Fatalf("persistent volume was not attached: %q, %v", got, err)
+		}
+		format := fmt.Sprintf("{{.HostConfig.Memory}} {{json (index .NetworkSettings.Networks %q).Aliases}}", network)
+		got, err := provider.output(ctx, "inspect", "--format", format, "--", second.InstanceID)
+		if err != nil || !strings.HasPrefix(got, "67108864 ") || !strings.Contains(got, "app-"+app) {
+			t.Fatalf("memory and network settings missing: %q, %v", got, err)
+		}
+		if err := provider.ensureVolume(ctx, volume, uuid.NewString(), app); err == nil {
+			t.Fatal("volume with different organization ownership was accepted")
+		}
+		if err := provider.ensureEnvironmentNetwork(ctx, network, org, uuid.NewString()); err == nil {
+			t.Fatal("network with different environment ownership was accepted")
+		}
+	})
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	spec := runtimeprovider.DeploymentSpec{DeploymentID: "deployment-" + suffix, OrganizationID: "organization-" + suffix, ApplicationID: "application-" + suffix, Application: "nginx", Image: "nginx:alpine", PullImage: true, Environment: map[string]string{"SILICON_TEST_VALUE": "injected", "SILICON_TEST_SECRET": "encrypted-before-injection"}}
 	status, err := provider.Deploy(ctx, spec)

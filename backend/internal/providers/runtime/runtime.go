@@ -21,6 +21,8 @@ type DeploymentSpec struct {
 	PortBindings   []PortBinding
 	DNSServers     []string
 	DNSSearch      []string
+	EnvironmentID  string
+	Settings       Settings
 }
 
 type PortBinding struct {
