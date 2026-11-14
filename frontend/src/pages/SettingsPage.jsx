@@ -3,6 +3,7 @@ import { ArrowClockwiseIcon, DownloadSimpleIcon, EnvelopeSimpleIcon, GlobeHemisp
 import { api } from '../lib/api.js'
 import { waitForUpdatedSilicon } from '../lib/update-reconnect.js'
 import { useAuth } from '../state/AuthContext.jsx'
+import { AppearanceSettings } from '../components/AppearanceSettings.jsx'
 import { ErrorNotice, Mono, Notice, Page, Section, Status, formatDate } from '../components/ui.jsx'
 
 const activeStates = new Set(['queued', 'checking', 'preparing', 'updating', 'migrating', 'restarting', 'waiting_for_health', 'reconnecting'])
@@ -325,9 +326,10 @@ function UpdatePanel() {
 
 export function SettingsPage() {
   return <Page title="Settings" description="Platform capabilities and installation-level operations.">
-    <PublicAccessPanel />
-    <EmailPanel />
-    <UpdatePanel />
+    <div id="appearance"><AppearanceSettings /></div>
+    <div id="public-access"><PublicAccessPanel /></div>
+    <div id="email"><EmailPanel /></div>
+    <div id="updates"><UpdatePanel /></div>
     <Section title="Platform"><dl className="definition-grid"><div><dt>Architecture</dt><dd>Modular monolith</dd></div><div><dt>API</dt><dd><Mono>/api/v1</Mono></dd></div><div><dt>Runtime provider</dt><dd>Docker (local / SSH / AWS)</dd></div><div><dt>Cloud provider</dt><dd>AWS EC2, VPC, EBS, SSM, Cost Explorer</dd></div><div><dt>Routing provider</dt><dd>External / Cloudflare</dd></div><div><dt>TLS management</dt><dd>External</dd></div><div><dt>Authentication</dt><dd>Local server-side session</dd></div></dl></Section>
     <Section title="Deliberately unavailable" description="These capabilities are future milestones, not simulated integrations."><ul className="plain-list"><li>Azure and Kubernetes server connection providers</li><li>AWS RDS, ECS, EKS, Lambda, Route53, S3 management, and Auto Scaling Groups</li><li>Docker Compose workload execution</li><li>X3 Gateway and custom reverse proxy</li><li>Automatic TLS</li><li>Traefik and Nginx routing adapters</li><li>SAML, Kafka, service mesh, and microservices</li></ul></Section>
     <Section title="Operational configuration" description="Encryption keys and infrastructure configuration are managed through environment variables on the Silicon host."><p className="muted">See <Mono>.env.example</Mono>, the installation guide, and the security guide in the repository.</p></Section>

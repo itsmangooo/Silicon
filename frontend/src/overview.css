@@ -1,0 +1,109 @@
+.appearance-fieldset { min-width: 0; margin: 0; border: 0; padding: 0; }
+.appearance-fieldset legend { margin-bottom: var(--space-3); padding: 0; font-size: .8rem; font-weight: 500; }
+.appearance-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.appearance-preset {
+  position: relative;
+  display: grid;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  background: var(--input);
+  cursor: pointer;
+}
+.appearance-preset:hover { border-color: var(--border-strong); }
+.appearance-preset:has(input:checked) { border-color: var(--accent); background: var(--selection); }
+.appearance-preset:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+.appearance-preset input { position: absolute; inset: 0; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
+.appearance-preset-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-1); color: var(--accent); }
+.preset-check { visibility: hidden; }
+.appearance-preset:has(input:checked) .preset-check { visibility: visible; }
+.appearance-preset strong { font-size: .88rem; font-weight: 600; }
+.appearance-preset small { color: var(--text-muted); line-height: 1.5; }
+.appearance-options { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: var(--space-4); margin-top: var(--space-5); }
+
+.overview-metrics, .overview-columns { display: grid; gap: var(--section-gap); }
+.overview-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.overview-columns { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); margin-top: var(--section-gap); }
+.overview-columns:empty { display: none; }
+.overview-columns > .section { margin-top: 0; }
+.overview-metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--panel-padding);
+  background: var(--section-bg);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--panel-blur);
+}
+.overview-metric:hover { border-color: var(--accent); text-decoration: none; }
+.overview-metric-top { width: 100%; display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); }
+.overview-icon, .overview-list-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 38px;
+  aspect-ratio: 1;
+  border-radius: var(--radius);
+  background: var(--selection);
+  color: var(--accent);
+}
+.overview-metric-label { margin-top: var(--space-1); font-size: .83rem; font-weight: 500; }
+.overview-metric strong { font-size: clamp(1.7rem, 3vw, 2.25rem); font-weight: 600; letter-spacing: -.045em; line-height: 1.18; font-variant-numeric: tabular-nums; }
+.overview-metric small { color: var(--text-muted); font-size: .71rem; line-height: 1.4; }
+.overview-link { display: inline-flex; align-items: center; gap: 6px; font-size: .76rem; }
+.overview-link svg { flex: 0 0 auto; }
+.loading-message { margin: 0; padding-block: var(--space-3); }
+
+.deployment-chart { margin: 0; }
+.deployment-chart figcaption { display: flex; align-items: baseline; gap: var(--space-2); color: var(--text-muted); font-size: .8rem; }
+.deployment-chart figcaption strong { color: var(--text); font-size: 1.5rem; font-weight: 600; }
+.deployment-chart-bars {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: clamp(4px, .7vw, 10px);
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+.deployment-chart-bars li { display: grid; grid-template-rows: 94px 19px; gap: var(--space-2); }
+.deployment-chart-track { display: flex; align-items: flex-end; overflow: hidden; border-radius: min(var(--radius), 6px); background: var(--input); }
+.deployment-chart-track span { width: 100%; height: var(--bar-fill); border-radius: inherit; background: var(--accent); }
+.deployment-chart-bars li:hover .deployment-chart-track { background: var(--hover); }
+.deployment-chart-date { color: var(--text-muted); font-size: .66rem; white-space: nowrap; }
+.deployment-chart-bars li:last-child .deployment-chart-date { justify-self: end; }
+
+.outcome-healthy { --outcome: var(--success); }
+.outcome-failed { --outcome: var(--danger); }
+.outcome-active { --outcome: var(--info); }
+.outcome-other { --outcome: var(--text-muted); }
+.deployment-outcome-bar { display: flex; gap: 3px; height: 13px; overflow: hidden; border-radius: 999px; margin-bottom: var(--space-4); }
+.deployment-outcome-bar span { min-width: 2px; background: var(--outcome); }
+.deployment-outcomes { display: grid; margin: 0; }
+.deployment-outcomes div { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); padding: 7px 0; font-size: .8rem; }
+.deployment-outcomes dt { display: flex; align-items: center; gap: var(--space-2); color: var(--text-muted); }
+.deployment-outcomes dt::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--outcome); }
+.deployment-outcomes dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.overview-list { list-style: none; margin: 0; padding: 0; }
+.overview-list li { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding-block: var(--row-padding); font-size: .8rem; }
+.overview-list li + li { border-top: 1px solid var(--border); }
+.overview-list li:first-child { padding-top: 0; }
+.overview-list li:last-child { padding-bottom: 0; }
+.overview-list li > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.overview-list li strong, .overview-list li a { color: var(--text); font-weight: 500; }
+.overview-list small { display: block; color: var(--text-muted); margin-top: var(--space-1); font-size: .7rem; }
+
+@media (max-width: 1090px) {
+  .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .overview-columns, .appearance-presets { grid-template-columns: 1fr; }
+  .overview-metric { padding: min(var(--panel-padding), var(--space-4)); }
+}

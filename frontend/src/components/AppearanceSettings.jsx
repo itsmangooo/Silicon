@@ -1,0 +1,37 @@
+import { CheckCircleIcon, CloudIcon, SquareHalfIcon, SparkleIcon } from '@phosphor-icons/react'
+import { useAppearance } from '../state/AppearanceContext.jsx'
+import { Field, Section } from './ui.jsx'
+
+const styles = [
+  { id: 'soft', name: 'Soft UI', description: 'Rounded surfaces with a quiet mint accent.', icon: SquareHalfIcon },
+  { id: 'glass', name: 'Glassmorphism', description: 'Frosted surfaces with a cool blue accent.', icon: CloudIcon },
+  { id: 'playful', name: 'Playful', description: 'Bolder shapes with a warm violet accent.', icon: SparkleIcon },
+]
+
+export function AppearanceSettings() {
+  const { appearance, updateAppearance } = useAppearance()
+  return <Section title="Appearance" description="Changes apply immediately and are saved in this browser.">
+    <fieldset className="appearance-fieldset">
+      <legend>UI style</legend>
+      <div className="appearance-presets">
+        {styles.map(({ id, name, description, icon }) => {
+          const Icon = icon
+          return <label className="appearance-preset" key={id}>
+            <input type="radio" name="ui-style" value={id} checked={appearance.style === id} onChange={() => updateAppearance('style', id)} />
+            <span className="appearance-preset-top"><Icon size={23} aria-hidden="true" /><CheckCircleIcon className="preset-check" size={19} weight="fill" aria-hidden="true" /></span>
+            <strong>{name}</strong>
+            <small>{description}</small>
+          </label>
+        })}
+      </div>
+    </fieldset>
+    <div className="appearance-options">
+      <Field label="Color mode"><select value={appearance.mode} onChange={(event) => updateAppearance('mode', event.target.value)}>
+        <option value="dark">Dark</option><option value="light">Light</option>
+      </select></Field>
+      <Field label="Density"><select value={appearance.density} onChange={(event) => updateAppearance('density', event.target.value)}>
+        <option value="comfortable">Comfortable</option><option value="compact">Compact</option>
+      </select></Field>
+    </div>
+  </Section>
+}

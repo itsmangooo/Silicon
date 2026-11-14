@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   BuildingsIcon,
@@ -46,7 +46,17 @@ export function AppLayout() {
   const { organizations, organizationId, selectOrganization, loading } = useWorkspace()
   const location = useLocation()
   const navigationRef = useRef(null)
+  const menuButtonRef = useRef(null)
   const [open, setOpen] = useState(false)
+
+  function closeNavigation() {
+    setOpen(false)
+    menuButtonRef.current?.focus()
+  }
+
+  useLayoutEffect(() => {
+    if (open) navigationRef.current?.querySelector('.nav-item.active')?.focus()
+  }, [open])
 
   useEffect(() => {
     const navigation = navigationRef.current
@@ -60,10 +70,18 @@ export function AppLayout() {
     }
   }, [location.pathname])
 
+  useEffect(() => {
+    if (!loading && location.pathname === '/settings' && location.hash) {
+      document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' })
+    }
+  }, [loading, location.pathname, location.hash])
+
   return (
     <div className="shell">
       <a className="skip-link" href="#main">Skip to content</a>
-      <aside className={`sidebar ${open ? 'sidebar-open' : ''}`} aria-label="Primary navigation">
+      <aside className={`sidebar ${open ? 'sidebar-open' : ''}`} aria-label="Primary navigation" onKeyDown={(event) => {
+        if (open && event.key === 'Escape') closeNavigation()
+      }}>
         <div className="sidebar-header">
           <Brand />
           <label className="sidebar-organization">
@@ -74,7 +92,7 @@ export function AppLayout() {
             </select></span>
           </label>
         </div>
-        <nav ref={navigationRef}>
+        <nav id="primary-navigation" ref={navigationRef}>
           <NavigationItem end to="/" icon={GaugeIcon} onClick={() => setOpen(false)}>Dashboard</NavigationItem>
           {groups.map(([label, links]) => (
             <div className="nav-group" key={label}>
@@ -84,13 +102,19 @@ export function AppLayout() {
           ))}
         </nav>
       </aside>
-      {open && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setOpen(false)} />}
+      {open && <button className="sidebar-scrim" aria-label="Close navigation" onClick={closeNavigation} />}
       <div className="workspace">
         <header className="topbar">
-          <button className="menu-button" aria-label="Open navigation" onClick={() => setOpen(true)}><ListIcon size={19} aria-hidden="true" /><span>Menu</span></button>
+          <button ref={menuButtonRef} className="menu-button" aria-label={open ? 'Close navigation' : 'Open navigation'} aria-controls="primary-navigation" aria-expanded={open} onClick={() => {
+            if (open) closeNavigation()
+            else setOpen(true)
+          }}><ListIcon size={19} aria-hidden="true" /><span>Menu</span></button>
           <GlobalSearch />
           <UpdateIndicator />
-          <div className="user-menu"><span>{user.displayName}</span><button className="button ghost compact" onClick={logout}><SignOutIcon size={16} aria-hidden="true" /><span>Sign out</span></button></div>
+          <div className="user-menu">
+            <span className="user-identity"><span className="user-avatar" aria-hidden="true">{Array.from(user.displayName?.trim() || '')[0]?.toUpperCase()}</span><span>{user.displayName}</span></span>
+            <button className="button ghost compact" onClick={logout}><SignOutIcon size={16} aria-hidden="true" /><span>Sign out</span></button>
+          </div>
         </header>
         <main id="main" className="main" tabIndex="-1">
           {loading ? <div role="status">Loading organization…</div> : <TenantScope organizationId={organizationId}><Outlet /></TenantScope>}

@@ -1,28 +1,118 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ArrowClockwiseIcon, ArrowRightIcon, CubeIcon, HardDrivesIcon, RocketLaunchIcon, ShieldCheckIcon } from '@phosphor-icons/react'
 import { api, organizationPath } from '../lib/api.js'
+import { summarizeDeployments } from '../lib/dashboard.js'
 import { useWorkspace } from '../state/WorkspaceContext.jsx'
-import { CreateButton, Dialog, EmptyState, ErrorNotice, Field, LoadingRows, Page, Section, Status, SubmitRow, formatDate, useResource } from '../components/ui.jsx'
+import { CreateButton, Dialog, EmptyState, ErrorNotice, Field, Notice, Page, Section, Status, SubmitRow, formatDate, useResource } from '../components/ui.jsx'
+
+const shortDate = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
+const fullDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
+const outcomeGroups = [['healthy', 'Healthy'], ['failed', 'Failed'], ['active', 'In progress'], ['other', 'Other']]
+
+function OverviewLink({ to, children }) {
+  return <Link className="overview-link" to={to}>{children}<ArrowRightIcon size={15} aria-hidden="true" /></Link>
+}
+
+function OverviewMetric({ icon, to, label, value, detail }) {
+  const Icon = icon
+  return <Link className="overview-metric" to={to}>
+    <span className="overview-metric-top"><span className="overview-icon"><Icon size={20} aria-hidden="true" /></span><ArrowRightIcon size={16} aria-hidden="true" /></span>
+    <span className="overview-metric-label">{label}</span>
+    <strong>{value ?? '—'}</strong>
+    <small>{detail}</small>
+  </Link>
+}
+
+function DeploymentTrend({ days }) {
+  const total = days.reduce((sum, day) => sum + day.count, 0)
+  if (!total) return <EmptyState title="No deployments in this period">The chart fills in as deployments are created.</EmptyState>
+  const scale = Math.max(...days.map((day) => day.count))
+  return <figure className="deployment-chart">
+    <figcaption><strong>{total}</strong> {total === 1 ? 'deployment' : 'deployments'}</figcaption>
+    <ol className="deployment-chart-bars" aria-label="Daily deployment counts">
+      {days.map(({ date, count }, index) => <li key={date.getTime()} title={`${fullDate.format(date)}: ${count}`}>
+        <span className="sr-only">{fullDate.format(date)}: {count}</span>
+        <div className="deployment-chart-track" aria-hidden="true"><span style={{ '--bar-fill': `${100 * count / scale}%` }} /></div>
+        <span className="deployment-chart-date" aria-hidden="true">{[0, 4, 8, 13].includes(index) ? shortDate.format(date) : ''}</span>
+      </li>)}
+    </ol>
+  </figure>
+}
+
+function DeploymentOutcomes({ outcomes, count }) {
+  if (!count) return <EmptyState title="No deployment outcomes yet">Deployment results appear here after the first run.</EmptyState>
+  return <>
+    <div className="deployment-outcome-bar" aria-hidden="true">
+      {outcomeGroups.map(([key]) => outcomes[key] > 0 && <span key={key} className={`outcome-${key}`} style={{ flexGrow: outcomes[key] }} />)}
+    </div>
+    <dl className="deployment-outcomes">
+      {outcomeGroups.map(([key, label]) => <div className={`outcome-${key}`} key={key}><dt>{label}</dt><dd>{outcomes[key]}</dd></div>)}
+    </dl>
+  </>
+}
 
 export function DashboardPage() {
-  const { organizationId, refresh: refreshOrganizations } = useWorkspace()
+  const { organizationId, organization, refresh: refreshOrganizations } = useWorkspace()
   const [createOpen, setCreateOpen] = useState(false)
   const resources = useResource(async () => {
     if (!organizationId) return null
-    const [applications, deployments, servers] = await Promise.all([
-      api(organizationPath(organizationId, '/applications')),
-      api(organizationPath(organizationId, '/deployments')),
-      api(organizationPath(organizationId, '/servers')),
-    ])
-    return { applications: applications.applications, deployments: deployments.deployments, servers: servers.servers }
+    const collections = ['applications', 'deployments', 'servers']
+    const results = await Promise.allSettled(collections.map((name) => api(organizationPath(organizationId, `/${name}`))))
+    return Object.fromEntries(collections.map((name, index) => [name, results[index].value?.[name] ?? null]))
   }, [organizationId])
   if (!organizationId) return <Page title="Silicon" description="Create an organization to establish the first security boundary."><Section title="Organization" description="Projects and infrastructure records always belong to an organization."><EmptyState title="No organization yet" action={<CreateButton onClick={() => setCreateOpen(true)}>Create organization</CreateButton>}>Create the first organization. You will become its owner.</EmptyState><CreateOrganization open={createOpen} onClose={() => setCreateOpen(false)} onCreated={refreshOrganizations} /></Section></Page>
-  const data = resources.data
-  if (resources.loading || !data) return <Page title="Dashboard" description="Current organization records. Runtime metrics appear only when a runtime provider reports them."><p role="status" className="muted">Loading organization records…</p></Page>
-  return <Page title="Dashboard" description="Current organization records. Runtime state is read from Docker on application runtime views.">
+  const { applications, deployments, servers } = resources.data || {}
+  const summary = summarizeDeployments(deployments || [])
+  const connected = servers?.filter((server) => server.connectionStatus === 'connected').length
+  const applicationNames = new Map(applications?.map((item) => [item.id, item.name]))
+  const unavailable = !applications || !deployments || !servers
+
+  return <Page title="Dashboard" description={organization?.name} actions={<button className="button" onClick={resources.refresh} disabled={resources.loading}><ArrowClockwiseIcon size={16} aria-hidden="true" />Refresh</button>}>
     <ErrorNotice error={resources.error} />
-    <Section title="Applications" description="Registered workloads across environments."><table><thead><tr><th>Name</th><th>Source</th><th>Image</th><th>Internal port</th></tr></thead><tbody>{data.applications.length ? data.applications.slice(0, 8).map((item) => <tr key={item.id}><td data-label="Name">{item.name}</td><td data-label="Source">{item.sourceType}</td><td data-label="Image" className="mono">{item.image || '—'}</td><td data-label="Internal port" className="mono">{item.internalPort || '—'}</td></tr>) : <tr><td colSpan="4" className="table-message">No applications yet.</td></tr>}</tbody></table></Section>
-    <Section title="Recent deployments" description="Historical records for manual and provider-triggered runtime deployments."><table><thead><tr><th>Deployment</th><th>Status</th><th>Revision</th><th>Created</th></tr></thead><tbody>{data.deployments.length ? data.deployments.slice(0, 8).map((item) => <tr key={item.id}><td data-label="Deployment" className="mono">#{item.number}</td><td data-label="Status"><Status value={item.status} /></td><td data-label="Revision" className="mono">{item.sourceRevision || '—'}</td><td data-label="Created">{formatDate(item.createdAt)}</td></tr>) : <tr><td colSpan="4" className="table-message">No deployments yet. Add an application before creating a deployment.</td></tr>}</tbody></table></Section>
-    <Section title="Servers" description="Local and SSH targets with active connection checks."><p className="metric-line"><strong>{data.servers.length}</strong> registered server record{data.servers.length === 1 ? '' : 's'}</p></Section>
+    {resources.loading && !resources.data && <Section title="Overview"><p className="muted loading-message" role="status">Loading organization records…</p></Section>}
+    {resources.data && <>
+      {unavailable && <Notice>Some records are unavailable. Check your organization permissions or refresh to try again.</Notice>}
+      <div className="overview-metrics">
+        <OverviewMetric icon={CubeIcon} to="/applications" label="Applications" value={applications?.length} detail="Registered workloads" />
+        <OverviewMetric icon={RocketLaunchIcon} to="/deployments" label="Deployments" value={deployments?.length} detail={deployments?.length === 200 ? 'Showing the latest 200 records' : 'Deployment records'} />
+        <OverviewMetric icon={ShieldCheckIcon} to="/deployments" label="Healthy deployments" value={deployments ? summary.outcomes.healthy : null} detail={deployments ? `${summary.outcomes.failed} failed in the same set` : 'Deployment records unavailable'} />
+        <OverviewMetric icon={HardDrivesIcon} to="/servers" label="Connected servers" value={connected} detail={servers ? `${servers.length} registered · last connection checks` : 'Server records unavailable'} />
+      </div>
+      {deployments && <div className="overview-columns">
+        <Section title="Deployment activity" description="Last 14 days · based on recent deployment records"><DeploymentTrend days={summary.days} /></Section>
+        <Section title="Deployment outcomes" description="Status of the latest records"><DeploymentOutcomes outcomes={summary.outcomes} count={deployments.length} /></Section>
+      </div>}
+      <div className="overview-columns">
+        {deployments && <Section title="Recent deployments" actions={<OverviewLink to="/deployments">All deployments</OverviewLink>}>
+          {summary.recent.length ? <ol className="overview-list overview-activity">
+            {summary.recent.map((item) => <li key={item.id}>
+              <span className="overview-list-icon"><RocketLaunchIcon size={17} aria-hidden="true" /></span>
+              <div><Link to={`/deployments/${item.id}`}>{applicationNames.get(item.applicationId) || 'Deployment'} <span className="mono">#{item.number}</span></Link><small><time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time>{item.sourceRevision && <> · <span className="mono">{item.sourceRevision.slice(0, 12)}</span></>}</small></div>
+              <Status value={item.status} />
+            </li>)}
+          </ol> : <EmptyState title="No deployments yet">Open an application to start a deployment.</EmptyState>}
+        </Section>}
+        {servers && <Section title="Servers" description="Last recorded connection state" actions={<OverviewLink to="/servers">All servers</OverviewLink>}>
+          {servers.length ? <ul className="overview-list">
+            {servers.slice(0, 6).map((item) => <li key={item.id}>
+              <span className="overview-list-icon"><HardDrivesIcon size={17} aria-hidden="true" /></span>
+              <div><strong>{item.name}</strong><small>{[item.providerType === 'aws' && 'AWS', item.connectionType?.toUpperCase()].filter(Boolean).join(' · ')}</small></div>
+              <Status value={item.connectionStatus} />
+            </li>)}
+          </ul> : <EmptyState title="No servers registered">Add a server to deploy workloads to it.</EmptyState>}
+        </Section>}
+      </div>
+      {applications && <Section title="Applications" description="Latest recorded deployment for each workload" actions={<OverviewLink to="/applications">All applications</OverviewLink>}>
+        {applications.length ? <table><thead><tr><th>Application</th><th>Source</th><th>Target</th><th>Latest deployment</th></tr></thead><tbody>
+          {applications.slice(0, 8).map((item) => {
+            const latest = summary.latestByApplication.get(item.id)
+            const target = item.serverId ? servers?.find((server) => server.id === item.serverId)?.name || '—' : 'Local'
+            return <tr key={item.id}><td data-label="Application"><Link className="table-primary" to={`/applications/${item.id}`}>{item.name}</Link></td><td data-label="Source"><span className="cell-stack">{item.sourceType === 'git_dockerfile' ? 'Git + Dockerfile' : item.sourceType === 'docker_image' ? 'Docker image' : item.sourceType}{item.image && <span className="cell-subtle mono">{item.image}</span>}</span></td><td data-label="Target"><span className="cell-stack">{target}{item.internalPort && <span className="cell-subtle mono">Port {item.internalPort}</span>}</span></td><td data-label="Latest deployment">{latest ? <Status value={latest.status} /> : deployments ? 'No recent record' : 'Unavailable'}</td></tr>
+          })}
+        </tbody></table> : <EmptyState title="No applications registered">Create a workload under a project and environment.</EmptyState>}
+      </Section>}
+    </>}
   </Page>
 }
 

@@ -16,6 +16,8 @@ Docker applications can configure persistent named volumes, a memory limit, cont
 
 ## Interface previews
 
+Use **Settings → Appearance** to switch between Soft UI, Glassmorphism, and Playful. Each preset supports light or dark mode and comfortable or compact density. Silicon saves these choices in the current browser. The dashboard summarizes deployment activity and the last recorded server connection checks for the selected organization.
+
 These previews were captured from the running application at a consistent desktop viewport. Authenticated views use temporary, isolated preview fixtures so the implemented data-backed states are visible; Silicon does not ship with seeded users, organizations, or workload records. The current previews include local, SSH, and AWS-backed targets plus provider-independent Cloudflare routing.
 
 | Login | Register |
@@ -25,6 +27,10 @@ These previews were captured from the running application at a consistent deskto
 | Dashboard | Projects |
 | --- | --- |
 | [![Silicon dashboard](docs/previews/dashboard.png)](docs/previews/dashboard.png) | [![Silicon projects page](docs/previews/projects.png)](docs/previews/projects.png) |
+
+| Glassmorphism | Playful | Appearance settings |
+| --- | --- | --- |
+| [![Glassmorphism dashboard](docs/previews/dashboard-glass.png)](docs/previews/dashboard-glass.png) | [![Playful dashboard](docs/previews/dashboard-playful.png)](docs/previews/dashboard-playful.png) | [![Appearance settings](docs/previews/settings-appearance.png)](docs/previews/settings-appearance.png) |
 
 | In-panel documentation | Global search |
 | --- | --- |

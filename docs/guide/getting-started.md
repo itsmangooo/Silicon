@@ -22,6 +22,12 @@ Register a local account, then create an organization. The organization is the t
 
 Use the organization selector below the Silicon logo to change the active tenant. The interface clears tenant-local state on a switch; the backend independently enforces membership and permissions.
 
+## Dashboard and appearance
+
+Open **Dashboard** to see registered workloads, the last recorded server connection checks, and recent deployment results. The charts use up to 200 of the most recent deployment records. Application rows show the latest deployment in that set. Open an application’s runtime view to inspect its current container state.
+
+Open **Settings → Appearance** to select Soft UI, Glassmorphism, or Playful. Use **Color mode** for dark or light and **Density** to change spacing. Choices take effect immediately and are saved in this browser across sign-ins and reloads.
+
 ## Model a workload
 
 Create records in this order:

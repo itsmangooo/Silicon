@@ -1,7 +1,7 @@
 import Fuse from 'fuse.js'
 
 export const pageSearchEntries = [
-  { kind: 'page', group: 'Pages', title: 'Dashboard', subtitle: 'Operational overview for the active organization', route: '/', sections: ['Services', 'Recent deployments'], aliases: ['home', 'overview'], keywords: ['health', 'status'] },
+  { kind: 'page', group: 'Pages', title: 'Dashboard', subtitle: 'Operational overview for the active organization', route: '/', sections: ['Deployment activity', 'Recent deployments', 'Applications', 'Servers'], aliases: ['home', 'overview'], keywords: ['health', 'status'] },
   { kind: 'page', group: 'Pages', title: 'Projects', subtitle: 'Group related environments and workloads', route: '/projects', sections: ['Project settings', 'Environments'], aliases: ['project settings'], keywords: ['rename', 'slug', 'delete'] },
   { kind: 'page', group: 'Pages', title: 'Environments', subtitle: 'Production, staging, and development configuration boundaries', route: '/environments', sections: ['Environment variables'], aliases: ['env', 'envs'], keywords: ['production', 'staging', 'configuration'] },
   { kind: 'page', group: 'Pages', title: 'Applications', subtitle: 'Deployable workloads and runtime configuration', route: '/applications', sections: ['Runtime', 'Environment variables', 'Secrets', 'Ports', 'Logs'], aliases: ['apps', 'containers'], keywords: ['docker', 'workloads', 'image', 'health'] },
@@ -19,6 +19,7 @@ export const pageSearchEntries = [
   { kind: 'page', group: 'Pages', title: 'Audit', subtitle: 'Organization-scoped security and operational events', route: '/audit', sections: ['Audit events'], aliases: ['history'], keywords: ['security', 'actor', 'request id'] },
   { kind: 'page', group: 'Pages', title: 'Integrations', subtitle: 'GitHub, Cloudflare, and provider connections', route: '/integrations', sections: ['GitHub App', 'Cloudflare', 'Cloudflare Tunnel'], aliases: ['providers'], keywords: ['webhook', 'dns', 'token', 'repository'] },
   { kind: 'page', group: 'Pages', title: 'Settings', subtitle: 'Installation and organization settings', route: '/settings', sections: ['Public access', 'Updates', 'Platform boundaries', 'Security posture'], aliases: ['configuration'], keywords: ['system', 'organization'] },
+  { kind: 'page', group: 'Pages', title: 'Appearance', subtitle: 'UI style, color mode, and density', route: '/settings#appearance', sections: ['Soft UI', 'Glassmorphism', 'Playful'], aliases: ['theme'], keywords: ['dark', 'light', 'compact'] },
 ]
 
 export const commandSearchEntries = [

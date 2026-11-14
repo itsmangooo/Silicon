@@ -44,14 +44,14 @@ export function CommandPalette({ organizations, organizationId, selectOrganizati
           return !current
         })
       }
-      if (event.key === 'Escape') {
+      if (open && event.key === 'Escape') {
         setOpen(false)
         requestAnimationFrame(() => triggerRef.current?.focus())
       }
     }
     document.addEventListener('keydown', shortcut)
     return () => document.removeEventListener('keydown', shortcut)
-  }, [])
+  }, [open])
 
   useEffect(() => {
     if (open) requestAnimationFrame(() => inputRef.current?.focus())

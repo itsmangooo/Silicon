@@ -102,7 +102,6 @@ try {
   await page.screenshot({ path: path.join(outputDirectory, 'global-search.png') })
 
   const previews = [
-    ['/', 'dashboard.png'],
     ['/projects', 'projects.png'],
     ['/projects/project-platform', 'project-detail.png'],
     ['/environments', 'environments.png'],
@@ -123,11 +122,31 @@ try {
   ]
   for (const [route, filename] of previews) await capture(page, previewUrl, route, filename)
 
-  await capture(page, previewUrl, '/settings#updates', 'settings-updates.png', '.update-version-grid', false)
-  await capture(page, previewUrl, '/settings', 'settings-public-access.png', '.section:first-of-type', false)
-  await page.goto(`${previewUrl}/settings`, { waitUntil: 'networkidle0' })
   await page.addStyleTag({ content: '.topbar { display: none !important; }' })
-  await captureElement(page, 'settings-email.png', '.section:nth-of-type(2)')
+  await captureElement(page, 'settings-appearance.png', '#appearance .section')
+  await captureElement(page, 'settings-updates.png', '#updates .section')
+  await captureElement(page, 'settings-public-access.png', '#public-access .section')
+  await captureElement(page, 'settings-email.png', '#email .section')
+
+  const dashboardContext = await browser.createBrowserContext()
+  const dashboardPage = await dashboardContext.newPage()
+  await dashboardPage.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 })
+  await dashboardPage.evaluateOnNewDocument(() => {
+    const NativeDate = globalThis.Date
+    globalThis.Date = class extends NativeDate {
+      constructor(...args) {
+        super(...(args.length ? args : ['2026-09-29T18:00:00Z']))
+      }
+    }
+  })
+  await capture(dashboardPage, previewUrl, '/', 'dashboard.png', '.deployment-chart')
+  for (const style of ['glass', 'playful']) {
+    await dashboardPage.goto(`${previewUrl}/settings`, { waitUntil: 'networkidle0' })
+    await settle(dashboardPage, '.appearance-preset')
+    await dashboardPage.click(`input[name="ui-style"][value="${style}"]`)
+    await capture(dashboardPage, previewUrl, '/', `dashboard-${style}.png`, '.deployment-chart')
+  }
+  await dashboardContext.close()
 
   await page.goto(`${previewUrl}/servers`, { waitUntil: 'networkidle0' })
   await settle(page, '.section')
