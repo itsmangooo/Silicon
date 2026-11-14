@@ -11,7 +11,8 @@ vi.mock('../lib/api.js', () => ({
   organizationPath: (organizationId, suffix = '') => `/organizations/${organizationId}${suffix}`,
 }))
 
-vi.mock('../state/WorkspaceContext.jsx', () => ({ useWorkspace: () => ({ organizationId: 'org-preview' }) }))
+vi.mock('../state/WorkspaceContext.jsx', () => ({ useWorkspace: () => ({ organizationId: 'org-preview', organization: { role: 'owner' } }) }))
+vi.mock('../state/AuthContext.jsx', () => ({ useAuth: () => ({ user: { isSystemAdmin: true } }) }))
 
 import { ApplicationDetailPage } from './ApplicationsPage.jsx'
 import { EnvironmentsPage } from './EnvironmentsPage.jsx'
@@ -20,6 +21,7 @@ import { ProjectDetailPage } from './ProjectsPage.jsx'
 beforeEach(() => {
   apiMock.mockReset()
   apiMock.mockImplementation((path, options = {}) => {
+    if (path.endsWith('/runtime-settings') && !options.method) return Promise.resolve({})
     if (!options.method || options.method === 'GET') return Promise.resolve(previewResponse(path, options))
     if (options.method === 'POST' && path.endsWith('/applications')) return Promise.resolve(previewFixtures.applications[0])
     if (options.method === 'POST' && path.endsWith('/deployments')) return Promise.resolve(previewFixtures.deployments[0])
@@ -58,6 +60,7 @@ describe('project-first workflow', () => {
   it('queues a manual deployment from the application workspace', async () => {
     render(<MemoryRouter initialEntries={['/projects/project-platform/applications/app-api']}><Routes><Route path="/projects/:projectId/applications/:applicationId" element={<ApplicationDetailPage />} /></Routes></MemoryRouter>)
     await screen.findByRole('heading', { name: 'api', level: 1 })
+    expect(await screen.findByRole('button', { name: 'Save runtime settings' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
     const dialog = screen.getByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText(/Exact source revision/), { target: { value: '8f319ad6e62e0deaf3f9b404d31d9a5ec2c9f321' } })
