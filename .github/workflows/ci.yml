@@ -109,6 +109,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The installer clones this checkout as its source repository.
+          fetch-depth: 0
       - name: Install Silicon from a clean layout
         env:
           SILICON_REPOSITORY_URL: ${{ github.workspace }}
@@ -118,6 +121,7 @@ jobs:
           SILICON_HTTP_PORT: "18080"
         run: |
           ./install.sh
+          test "$(git -C "$SILICON_INSTALL_DIR/source" rev-parse HEAD)" = "$SILICON_VERSION"
           before=$(sha256sum "$SILICON_INSTALL_DIR/config/silicon.env")
           ./install.sh
           after=$(sha256sum "$SILICON_INSTALL_DIR/config/silicon.env")

@@ -257,7 +257,11 @@ fi
 if [ ! -d "$SOURCE_DIR/.git" ]; then
   [ ! -e "$SOURCE_DIR" ] || fail "$SOURCE_DIR exists but is not a Silicon Git checkout"
   info "obtaining Silicon source ref $REF"
-  git clone --filter=blob:none "$REPOSITORY_URL" "$SOURCE_DIR"
+  if [ -d "$REPOSITORY_URL" ]; then
+    git clone --no-hardlinks "$REPOSITORY_URL" "$SOURCE_DIR"
+  else
+    git clone --filter=blob:none "$REPOSITORY_URL" "$SOURCE_DIR"
+  fi
   if [ "$REF" = "main" ]; then git -C "$SOURCE_DIR" checkout main; else git -C "$SOURCE_DIR" checkout --detach "$REF"; fi
 elif [ "$MODE" = "update" ]; then
   [ -z "$(git -C "$SOURCE_DIR" status --porcelain)" ] || fail 'installed source contains local changes; refusing to overwrite them'

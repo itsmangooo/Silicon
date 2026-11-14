@@ -93,7 +93,9 @@ expect_failure 'missing Docker' env PATH="$TEST_PATH" FAKE_DOCKER_MODE=missing S
 expect_failure 'missing Compose' env PATH="$TEST_PATH" FAKE_DOCKER_MODE=missing-compose SILICON_INSTALL_DIR="$TEMP_ROOT/missing-compose" sh "$REPOSITORY_ROOT/install.sh"
 
 INSTALL_DIR="$TEMP_ROOT/fresh"
-env PATH="$TEST_PATH" SILICON_INSTALL_DIR="$INSTALL_DIR" SILICON_PUBLIC_URL=http://localhost:18083 SILICON_HTTP_PORT=18083 SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh" >/dev/null
+CLONE_LOG="$TEMP_ROOT/git-clone.log"
+env PATH="$TEST_PATH" FAKE_GIT_LOG="$CLONE_LOG" SILICON_REPOSITORY_URL="$REPOSITORY_ROOT" SILICON_INSTALL_DIR="$INSTALL_DIR" SILICON_PUBLIC_URL=http://localhost:18083 SILICON_HTTP_PORT=18083 SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh" >/dev/null
+grep -q '^clone --no-hardlinks ' "$CLONE_LOG"
 ENV_FILE="$INSTALL_DIR/config/silicon.env"
 [ -s "$ENV_FILE" ] || { printf 'fresh configuration was not generated\n' >&2; exit 1; }
 BEFORE=$(sha256sum "$ENV_FILE" | cut -d ' ' -f 1)
@@ -124,7 +126,8 @@ grep -Fq 'version=v0.1.0 commit=0123456789abcdef0123456789abcdef01234567 args=co
 expect_failure 'release-only update from main' env PATH="$TEST_PATH" SILICON_REQUIRE_TAGGED_RELEASE=true SILICON_INSTALL_DIR="$INSTALL_DIR" sh "$REPOSITORY_ROOT/install.sh" --update --version main
 grep -q 'exact stable semantic tag' "$TEMP_ROOT/output"
 
-expect_failure 'startup failure' env PATH="$TEST_PATH" FAKE_DOCKER_MODE=startup SILICON_HTTP_PORT=18084 SILICON_INSTALL_DIR="$TEMP_ROOT/startup" SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh"
+expect_failure 'startup failure' env PATH="$TEST_PATH" FAKE_GIT_LOG="$CLONE_LOG" SILICON_REPOSITORY_URL=https://example.test/Silicon.git FAKE_DOCKER_MODE=startup SILICON_HTTP_PORT=18084 SILICON_INSTALL_DIR="$TEMP_ROOT/startup" SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh"
+grep -q '^clone --filter=blob:none https://example.test/Silicon.git ' "$CLONE_LOG"
 expect_failure 'readiness failure' env PATH="$TEST_PATH" FAKE_CURL_MODE=fail SILICON_HTTP_PORT=18085 SILICON_INSTALL_DIR="$TEMP_ROOT/readiness" SILICON_READINESS_ATTEMPTS=1 sh "$REPOSITORY_ROOT/install.sh"
 
 printf 'installer tests passed\n'
