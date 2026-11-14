@@ -49,7 +49,8 @@ th { background: var(--table-heading); }
 [data-preview='playful'] .sample-panel b { height: 9px; border-radius: 5px; box-shadow: var(--floating-shadow); }
 [data-preview='obsidian'] :is(.sample-nav, .sample-panel) { background: transparent; }
 [data-preview='obsidian'] .sample-panel b { background: var(--text); }
-[data-preview='metal'] :is(.sample-nav, .sample-panel, .sample-panel b) { background: linear-gradient(150deg, var(--border-strong), var(--surface-muted)); border-radius: 6px; }
+[data-preview='metal'] :is(.sample-nav, .sample-panel) { background: radial-gradient(ellipse at 76% 68%, var(--surface-muted) 26%, var(--border-strong) 40%, var(--surface) 61%); border-radius: 6px; }
+[data-preview='metal'] .sample-panel b { background: linear-gradient(160deg, #eef1f6, #a8b2c0 55%, #d6dde7); }
 [data-preview='industrial'] .sample-panel { height: 36px; border: 1px solid var(--border-strong); }
 [data-preview='bento'] .sample-panel { grid-template-columns: 1.5fr 1fr; background: var(--surface); border-radius: 9px; }
 [data-preview='bento'] .sample-panel i, [data-preview='bento'] .sample-panel b { width: 100%; }
@@ -58,6 +59,7 @@ th { background: var(--table-heading); }
 .related-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--section-gap); }
 .related-panels > * { min-width: 0; }
 .related-panels > .section { margin-top: 0; }
+.application-settings { margin-top: var(--section-gap); }
 .dialog .related-panels > .subsection { margin-top: 0; padding-top: 0; }
 .detail-form { margin: 0; }
 .detail-form > .notice, .detail-form > .form-actions, .detail-form > .form-grid-span { grid-column: 1 / -1; }
@@ -118,7 +120,33 @@ th { background: var(--table-heading); }
 :root[data-style='obsidian'] .nav-item.active { font-weight: 600; }
 :root[data-style='obsidian'] .deployment-chart-track { background: var(--row-tint); }
 :root[data-style='metal'] :is(.sidebar, .dialog, .command-palette, .button:not(.primary, .ghost)) { background: var(--section-bg); }
-:root[data-style='metal'] .button:hover { box-shadow: var(--shadow); }
+:root[data-style='metal'] :is(.sidebar, .section, .dialog) {
+  color: var(--text);
+  background-image: var(--metal-reflection), var(--metal-fold), var(--section-bg);
+  background-size: 180% 235%, 225% 185%, 100% 100%;
+  background-position: 82% 24%, 22% 82%, center;
+  background-repeat: no-repeat;
+}
+:root[data-style='metal'] .button.primary {
+  color: #171a20;
+  border-color: #b1bac7;
+  background: linear-gradient(165deg, #eef1f6, #b7c0cd 48%, #d6dde7 70%, #a8b2c0);
+  box-shadow: inset 0 1px rgb(255 255 255 / 55%), 0 2px 4px rgb(0 0 0 / 18%);
+}
+:root[data-style='metal'] .button:not(.primary):hover { box-shadow: var(--shadow); }
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-style='metal'] :is(.sidebar, .section:hover, .section:focus-within, .dialog) {
+    animation: metal-flow 12s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes metal-flow {
+  0% { background-position: 82% 24%, 22% 82%, center; }
+  50% { background-position: 38% 58%, 57% 44%, center; }
+  100% { background-position: 12% 84%, 82% 19%, center; }
+}
+
 :root[data-style='industrial'] .nav-item { padding-block: max(2px, calc(var(--nav-padding) - 2px)); }
 :root[data-style='industrial'] :is(td, th) { padding-block: max(4px, calc(var(--row-padding) - 2px)); }
 :root[data-style='bento'] .overview-metrics { grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)); }

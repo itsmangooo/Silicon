@@ -7,7 +7,7 @@ const styles = [
   { id: 'glass', name: 'Glassmorphism', description: 'Floating navigation and translucent panels.', icon: CloudIcon },
   { id: 'playful', name: 'Playful', description: 'Softer shapes and tactile controls.', icon: SparkleIcon },
   { id: 'obsidian', name: 'Obsidian', description: 'Monochrome surfaces and minimal elevation.', icon: CircleHalfIcon },
-  { id: 'metal', name: 'Liquid Metal', description: 'Brushed surfaces and dimensional controls.', icon: DiamondIcon },
+  { id: 'metal', name: 'Liquid Metal', description: 'Flowing reflections and silver controls.', icon: DiamondIcon },
   { id: 'industrial', name: 'Industrial', description: 'Tight rows and precise edges.', icon: HardDrivesIcon },
   { id: 'bento', name: 'Bento', description: 'Modular panels and a wider activity chart.', icon: GridFourIcon },
   { id: 'terminal', name: 'Terminal', description: 'Monospaced controls and rectangular surfaces.', icon: TerminalWindowIcon },

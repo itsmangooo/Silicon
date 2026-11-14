@@ -134,10 +134,19 @@
   --dialog-radius: 16px;
   --section-edge: var(--border-strong);
   --section-padding: var(--panel-padding);
-  --section-bg: linear-gradient(155deg, var(--surface-muted), var(--surface) 58%);
+  --metal-highlight: rgb(233 239 249 / 18%);
+  --metal-shadow: rgb(0 0 0 / 26%);
+  --metal-reflection: radial-gradient(ellipse at 53% 47%, transparent 16%, var(--metal-shadow) 25%, var(--metal-highlight) 30%, transparent 47%);
+  --metal-fold: radial-gradient(ellipse at 32% 54%, transparent 12%, var(--metal-highlight) 24%, var(--metal-shadow) 34%, transparent 58%);
+  --section-bg: linear-gradient(148deg, var(--surface-muted), var(--surface) 62%, var(--surface-muted));
   --widget-bg: var(--section-bg);
   --input-edge: var(--border-strong);
   --shadow: 0 3px 10px rgb(0 0 0 / 20%);
+}
+
+:root[data-style='metal'][data-mode='light'] {
+  --metal-highlight: rgb(255 255 255 / 85%);
+  --metal-shadow: rgb(83 92 106 / 18%);
 }
 
 :root[data-style='industrial'] {
