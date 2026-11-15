@@ -20,7 +20,16 @@
   box-shadow: var(--shadow);
   backdrop-filter: var(--panel-blur);
 }
-.overview-metric:hover { border-color: var(--accent); text-decoration: none; }
+.overview-metric:hover { text-decoration: none; }
+.dashboard-layout :is(.section, .overview-metric) {
+  border-color: transparent;
+  transition: border-color 300ms ease;
+}
+@media (hover: hover) {
+  .dashboard-layout :is(.section, .overview-metric):hover {
+    border-color: color-mix(in srgb, var(--text) 14%, transparent);
+  }
+}
 .overview-metric-top { width: 100%; display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); }
 .overview-icon, .overview-list-icon {
   display: grid;

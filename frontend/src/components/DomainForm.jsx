@@ -105,7 +105,7 @@ export function DomainForm({ application, applications = [], servers, projects =
       <Field label="Routing mode"><select name="routingMode" value={mode} onChange={(event) => setMode(event.target.value)} disabled={Boolean(savedDomain)}>
         <option value="dns_only">DNS only</option><option value="cloudflare_proxied">Cloudflare proxied</option><option value={tunnelMode}>Cloudflare Tunnel</option>
       </select></Field>
-      <Field label="Cloudflare zone"><input readOnly value={zone?.name || ''} placeholder={options.loading ? 'Loading zones…' : 'Matched by hostname'} /></Field>
+      <Field label="Cloudflare zone"><input readOnly value={zone?.name || ''} placeholder={zone ? undefined : options.loading ? 'Loading zones…' : options.error ? 'Zone lookup unavailable' : host ? 'No matching zone' : 'Enter a hostname'} /></Field>
       {options.data && <Field label="Cloudflare account"><input readOnly value={options.data.integration.accountId} /></Field>}
       {mode === tunnelMode && <Field label="Tunnel"><select name="tunnelId" required defaultValue="">
         <option value="" disabled>Select a tunnel on this server</option>

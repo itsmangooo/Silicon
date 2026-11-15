@@ -87,13 +87,15 @@ export function AccountPage({ section }) {
         </form>
       </Section>
       <Section title="Change email" description="Verify the new address using the code delivered by your installation's mail provider.">
-        <form className="form-stack" onSubmit={(event) => {
+        <form className="form-stack" autoComplete="off" onSubmit={(event) => {
           event.preventDefault()
-          const body = Object.fromEntries(new FormData(event.currentTarget))
+          const fields = new FormData(event.currentTarget)
+          const body = { email: fields.get('newEmailAddress'), currentPassword: fields.get('currentPassword') }
           run(() => api('/account/email', { method: 'POST', body }), 'Verification email queued. Enter the code when it arrives.')
         }}>
-          <Field label="New email address"><input name="email" type="email" autoComplete="email" required /></Field>
-          <Field label="Current password for email change"><input name="currentPassword" type="password" autoComplete="current-password" required /></Field>
+          <input type="email" name="username" value={user.email} autoComplete="section-change-email username" hidden readOnly />
+          <Field label="New email address"><input name="newEmailAddress" type="email" placeholder="you@example.com" autoComplete="off" required /></Field>
+          <Field label="Current password for email change"><input name="currentPassword" type="password" autoComplete="section-change-email current-password" required /></Field>
           <button className="button" disabled={busy}>Send verification code</button>
         </form>
         <form className="inline-form" onSubmit={(event) => {

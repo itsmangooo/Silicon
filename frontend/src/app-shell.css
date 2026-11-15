@@ -1,14 +1,13 @@
 /* The same functional shell is used for every color scheme. */
 .shell > .app-sidebar {
-  border: 1px solid var(--border);
   border-radius: 0;
   background: var(--sidebar-bg);
 }
 .shell > .workspace > .app-header {
-  border: 1px solid var(--border);
   border-radius: 0;
   background: var(--header-bg);
 }
+.app-header .search-trigger, .app-header .search-trigger kbd { border-color: transparent; }
 .section-header p, .page-header p { color: var(--text-secondary); }
 .button.secondary { background: var(--surface-muted); }
 .chart-tooltip {

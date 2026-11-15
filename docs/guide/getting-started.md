@@ -30,7 +30,9 @@ Open **Dashboard** to see registered workloads, the last recorded server connect
 
 Open the account menu and choose [Appearance](theme-studio.md). Pick a color scheme and density. Your changes apply immediately.
 
-Use **My profile** to manage your avatar and review organization memberships. **Account settings** lets you change your display name, password, and email. Email changes require configured system mail and a verification code. Password changes end all sessions.
+Use **My profile** to manage your avatar and review organization memberships. **Account settings** lets you change your display name, password, and email. Password changes end all sessions.
+
+To change your email address, open **Account settings → Change email**. Type the new address and your current Silicon login password, then select **Send verification code**. Open the email at the new address, enter its code in Silicon, and select **Verify email**. An installation administrator must configure system mail first.
 
 Use **Messages** to contact another member of the active organization. **Support tickets** are visible to their requester and installation administrators who belong to that organization. The account menu shows unread notifications.
 
