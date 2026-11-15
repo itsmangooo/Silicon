@@ -915,9 +915,9 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	viewer.get("/organizations/"+orgA+"/audit-events", http.StatusNotFound)
 
 	owner.post("/organizations/"+orgA+"/members", map[string]any{"email": "viewer@example.com", "role": "viewer"}, http.StatusCreated)
-	owner.put("/account/appearance", map[string]any{"style": "terminal", "mode": "system", "density": "compact"}, http.StatusOK)
+	owner.put("/account/appearance", map[string]any{"style": "obsidian", "mode": "system", "density": "compact"}, http.StatusOK)
 	owner.put("/account/appearance", map[string]any{"style": "invalid", "mode": "dark", "density": "compact"}, http.StatusUnprocessableEntity)
-	if mapField(t, owner.get("/account", http.StatusOK), "appearance")["style"] != "terminal" ||
+	if mapField(t, owner.get("/account", http.StatusOK), "appearance")["style"] != "obsidian" ||
 		mapField(t, viewer.get("/account", http.StatusOK), "appearance")["style"] != "soft" {
 		t.Fatal("appearance was not isolated per account")
 	}
@@ -1121,9 +1121,11 @@ func accountStudioRoundTrip(t *testing.T, owner, viewer *testClient) {
 	theme := map[string]any{
 		"colors":     map[string]any{"text": "#f8f8f8", "background": "#111116"},
 		"background": "image", "placement": "dashboard", "fit": "contain", "motion": "reduced",
-		"effects": map[string]any{"glassBlur": 22, "imageOpacity": 33},
+		"effects":  map[string]any{"glassBlur": 22, "imageOpacity": 33},
+		"surfaces": map[string]any{"sidebar": map[string]any{"material": "glass", "color": "#aabbcc80", "opacity": 0}},
+		"layout":   map[string]any{"sidebar": "floating", "dashboard": "modular"},
 	}
-	studio := map[string]any{"version": 2, "theme": theme, "presets": []map[string]any{{
+	studio := map[string]any{"version": 3, "theme": theme, "presets": []map[string]any{{
 		"name": "Midnight", "style": "glass", "mode": "dark", "density": "compact", "theme": theme,
 	}}}
 	base["studio"] = studio
@@ -1131,7 +1133,12 @@ func accountStudioRoundTrip(t *testing.T, owner, viewer *testClient) {
 	delete(base, "studio")
 	owner.put(preferences, base, http.StatusOK)
 	saved := mapField(t, mapField(t, owner.get("/account", http.StatusOK), "appearance"), "studio")
-	if saved["version"] != float64(2) || len(arrayField(t, saved, "presets")) != 1 || mapField(t, viewer.get("/account", http.StatusOK), "appearance")["studio"] != nil {
+	savedTheme := mapField(t, saved, "theme")
+	sidebar := mapField(t, mapField(t, savedTheme, "surfaces"), "sidebar")
+	if sidebar["color"] != "#aabbcc80" || sidebar["opacity"] != float64(0) || mapField(t, savedTheme, "layout")["dashboard"] != "modular" {
+		t.Fatal("surface alpha, opacity, or layout were not preserved")
+	}
+	if saved["version"] != float64(3) || len(arrayField(t, saved, "presets")) != 1 || mapField(t, viewer.get("/account", http.StatusOK), "appearance")["studio"] != nil {
 		t.Fatal("studio preferences were lost or exposed to another account")
 	}
 	base["studio"] = map[string]any{"version": 2, "theme": map[string]any{"colors": map[string]string{"text": "#111111"}}}
@@ -1158,6 +1165,14 @@ func accountStudioRoundTrip(t *testing.T, owner, viewer *testClient) {
 			t.Fatalf("background status=%d want=%d", response.StatusCode, test.code)
 		}
 	}
+	invalidUpload := map[string]any{"style": "flat", "mode": "dark", "density": "comfortable", "backgroundImage": []byte("<svg/>")}
+	owner.put(preferences, invalidUpload, http.StatusUnprocessableEntity)
+	if mapField(t, owner.get("/account", http.StatusOK), "appearance")["style"] != "glass" {
+		t.Fatal("invalid image changed the active theme")
+	}
+	base["studio"] = studio
+	base["backgroundImage"] = webp
+	owner.put(preferences, base, http.StatusOK)
 	viewer.get(background, http.StatusNotFound)
 	if owner.get("/account", http.StatusOK)["hasBackground"] != true {
 		t.Fatal("account omitted the saved background")
@@ -1171,7 +1186,8 @@ func accountStudioRoundTrip(t *testing.T, owner, viewer *testClient) {
 	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "image/png" || decodeErr != nil {
 		t.Fatal("normalized background was not returned")
 	}
-	owner.delete(background, http.StatusNoContent)
+	base["backgroundImage"] = ""
+	owner.put(preferences, base, http.StatusOK)
 	owner.get(background, http.StatusNotFound)
 }
 

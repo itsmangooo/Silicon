@@ -49,19 +49,35 @@ func (a *API) updateAccountProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateAccountAppearance(w http.ResponseWriter, r *http.Request) {
-	var input store.Appearance
-	if !decode(w, r, &input) {
+	var input struct {
+		store.Appearance
+		BackgroundImage *[]byte `json:"backgroundImage"`
+	}
+	if !decodeJSON(w, r, &input, 2<<20) {
 		return
 	}
-	if err := validateAppearance(input); err != nil {
+	if err := validateAppearance(input.Appearance); err != nil {
 		validation(w, err.Error())
 		return
 	}
-	if err := a.repo.SetAccountAppearance(r.Context(), currentUser(r.Context()).ID, input); err != nil {
+	var content []byte
+	if input.BackgroundImage != nil && len(*input.BackgroundImage) > 0 {
+		if len(*input.BackgroundImage) > 1<<20 {
+			writeError(w, http.StatusRequestEntityTooLarge, "background_too_large", "Upload an image up to 1 MiB.")
+			return
+		}
+		var err error
+		content, err = normalizeBackground(*input.BackgroundImage)
+		if err != nil {
+			validation(w, err.Error())
+			return
+		}
+	}
+	if err := a.repo.SetAccountAppearance(r.Context(), currentUser(r.Context()).ID, input.Appearance, input.BackgroundImage != nil, content); err != nil {
 		a.persistenceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, input)
+	writeJSON(w, http.StatusOK, input.Appearance)
 }
 
 func (a *API) accountAvatar(w http.ResponseWriter, r *http.Request) {

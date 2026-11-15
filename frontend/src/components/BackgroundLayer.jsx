@@ -17,10 +17,11 @@ export function BackgroundLayer({ style, theme = {}, motion, asset, dashboard, p
   const showBackground = background !== 'default' && (placement !== 'dashboard' || dashboard) && (background !== 'image' || asset?.available)
   if (!glass && !showBackground) return null
   const image = asset?.preview || (asset?.available ? apiUrl('/account/appearance/background') + '?revision=' + asset.revision : '')
+  const blobs = (name, count) => Array.from({ length: Math.min(6, Math.max(1, count)) }, (_, index) => <i key={name + index} />)
   return <div className={`background-layer${preview ? ' background-layer-preview' : ''}`} aria-hidden="true" data-animate={allowMotion}>
-    {glass && <div className="material-glass" data-moving={Boolean(effects.glassAnimation)}><i /><i /><i /></div>}
+    {glass && <div className="material-glass" data-moving={Boolean(effects.glassAnimation)}>{blobs('glass', effects.blobCount)}</div>}
     {showBackground && <div className="background-custom" data-background={background} data-placement={placement}>
-      {background === 'blobs' && <div className="custom-blobs"><i /><i /><i /></div>}
+      {background === 'blobs' && <div className="custom-blobs">{blobs('custom', effects.blobCount)}</div>}
       {background === 'image' && <><div className="background-image" style={{ backgroundImage: `url("${image}")` }} /><div className="background-overlay" /></>}
     </div>}
   </div>

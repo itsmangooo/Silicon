@@ -17,8 +17,9 @@ function cookie(name) {
 export async function api(path, options = {}) {
   if (previewMode) {
     if (path === '/account/appearance' && options.method === 'PUT') {
-      localStorage.setItem('silicon.preview.appearance', JSON.stringify(options.body))
-      return options.body
+      const { backgroundImage: _backgroundImage, ...appearance } = options.body
+      localStorage.setItem('silicon.preview.appearance', JSON.stringify(appearance))
+      return appearance
     }
     if (path === '/account' && !options.method) {
       return { user: previewResponse('/auth/session').user, hasAvatar: false, appearance: JSON.parse(localStorage.getItem('silicon.preview.appearance')) || { style: 'soft', mode: 'dark', density: 'comfortable' } }

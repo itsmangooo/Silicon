@@ -36,7 +36,7 @@ These previews were captured from the running application at a consistent deskto
 | --- | --- | --- |
 | [![Glassmorphism dashboard](docs/previews/dashboard-glass.png)](docs/previews/dashboard-glass.png) | [![Playful dashboard](docs/previews/dashboard-playful.png)](docs/previews/dashboard-playful.png) | [![Appearance settings](docs/previews/settings-appearance.png)](docs/previews/settings-appearance.png) |
 
-More dashboard previews: [Obsidian](docs/previews/dashboard-obsidian.png), [Industrial](docs/previews/dashboard-industrial.png), [Bento](docs/previews/dashboard-bento.png), and [Terminal](docs/previews/dashboard-terminal.png).
+More dashboard previews: [Soft UI](docs/previews/dashboard.png), [Obsidian](docs/previews/dashboard-obsidian.png), [Neumorphism](docs/previews/dashboard-neumorphism.png), [Claymorphism](docs/previews/dashboard-clay.png), [Bento Grids](docs/previews/dashboard-bento.png), and [Flat UI](docs/previews/dashboard-flat.png). [Customize your account with Theme Studio](docs/guide/theme-studio.md).
 
 Account previews: [Profile](docs/previews/account-profile.png), [Account security](docs/previews/account-settings.png), [Messages](docs/previews/account-messages.png), and [Support](docs/previews/account-support.png).
 

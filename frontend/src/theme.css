@@ -128,7 +128,7 @@
   --widget-bg: transparent;
 }
 
-[data-style='industrial'] {
+[data-style='flat'] {
   --radius: 2px;
   --radius-lg: 3px;
   --dialog-radius: 4px;
@@ -147,15 +147,4 @@
   --section-padding: var(--panel-padding);
   --section-bg: var(--surface);
   --table-heading: var(--surface-muted);
-}
-
-[data-style='terminal'] {
-  --radius: 0px;
-  --radius-lg: 0px;
-  --dialog-radius: 0px;
-  --ui-font: var(--font-mono);
-  --input-edge: var(--border-strong);
-  --widget-bg: transparent;
-  --section-edge: var(--border);
-  --section-padding: var(--row-padding);
 }

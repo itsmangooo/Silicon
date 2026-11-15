@@ -16,7 +16,7 @@ function OverviewLink({ to, children }) {
 
 function OverviewMetric({ icon, to, label, value, detail }) {
   const Icon = icon
-  return <Link className="overview-metric" to={to}>
+  return <Link className="overview-metric" data-surface="widget" to={to}>
     <span className="overview-metric-top"><span className="overview-icon"><Icon size={20} aria-hidden="true" /></span><ArrowRightIcon size={16} aria-hidden="true" /></span>
     <span className="overview-metric-label">{label}</span>
     <strong>{value ?? '—'}</strong>
@@ -34,6 +34,7 @@ function DeploymentTrend({ days }) {
       {days.map(({ date, count }, index) => <li key={date.getTime()} title={`${fullDate.format(date)}: ${count}`}>
         <span className="sr-only">{fullDate.format(date)}: {count}</span>
         <div className="deployment-chart-track" aria-hidden="true"><span style={{ '--bar-fill': `${100 * count / scale}%` }} /></div>
+        <span className="chart-tooltip" aria-hidden="true">{count}</span>
         <span className="deployment-chart-date" aria-hidden="true">{[0, 4, 8, 13].includes(index) ? shortDate.format(date) : ''}</span>
       </li>)}
     </ol>
@@ -84,14 +85,14 @@ export function DashboardPage() {
         <OverviewMetric icon={HardDrivesIcon} to="/servers" label="Connected servers" value={connected} detail={servers ? `${servers.length} registered · last connection checks` : 'Server records unavailable'} />
       </div>
       {deployments && <div className="overview-columns dashboard-charts">
-        <Section title="Deployment activity" description="Last 14 days · based on recent deployment records"><DeploymentTrend days={summary.days} /></Section>
-        <Section title="Deployment outcomes" description="Status of the latest records"><DeploymentOutcomes outcomes={summary.outcomes} count={deployments.length} /></Section>
+        <Section surface="widget-activity" title="Deployment activity" description="Last 14 days · based on recent deployment records"><DeploymentTrend days={summary.days} /></Section>
+        <Section surface="widget" title="Deployment outcomes" description="Status of the latest records"><DeploymentOutcomes outcomes={summary.outcomes} count={deployments.length} /></Section>
       </div>}
-      {runtimeSummary?.length > 0 && <div className="dashboard-health"><Section title="Runtime health" description="Last recorded inspection for each managed application runtime">
+      {runtimeSummary?.length > 0 && <div className="dashboard-health"><Section surface="widget-runtime" title="Runtime health" description="Last recorded inspection for each managed application runtime">
         <dl className="deployment-outcomes">{runtimeSummary.map((item) => <div key={`${item.state}/${item.health}`}><dt>{item.state} · {item.health}</dt><dd>{item.count}</dd></div>)}</dl>
       </Section></div>}
       <div className="overview-columns dashboard-operations">
-        {deployments && <Section title="Recent deployments" actions={<OverviewLink to="/deployments">All deployments</OverviewLink>}>
+        {deployments && <Section surface="widget" title="Recent deployments" actions={<OverviewLink to="/deployments">All deployments</OverviewLink>}>
           {summary.recent.length ? <ol className="overview-list overview-activity">
             {summary.recent.map((item) => <li key={item.id}>
               <span className="overview-list-icon"><RocketLaunchIcon size={17} aria-hidden="true" /></span>
@@ -100,7 +101,7 @@ export function DashboardPage() {
             </li>)}
           </ol> : <EmptyState title="No deployments yet">Open an application to start a deployment.</EmptyState>}
         </Section>}
-        {servers && <Section title="Servers" description="Last recorded connection state" actions={<OverviewLink to="/servers">All servers</OverviewLink>}>
+        {servers && <Section surface="widget-servers" title="Servers" description="Last recorded connection state" actions={<OverviewLink to="/servers">All servers</OverviewLink>}>
           {servers.length ? <ul className="overview-list">
             {servers.slice(0, 6).map((item) => <li key={item.id}>
               <span className="overview-list-icon"><HardDrivesIcon size={17} aria-hidden="true" /></span>

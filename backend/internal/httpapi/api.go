@@ -1099,7 +1099,11 @@ type statusWriter struct {
 func (w *statusWriter) WriteHeader(code int) { w.status = code; w.ResponseWriter.WriteHeader(code) }
 
 func decode(w http.ResponseWriter, r *http.Request, destination any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	return decodeJSON(w, r, destination, 1<<20)
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, destination any, limit int64) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {

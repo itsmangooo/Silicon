@@ -119,8 +119,17 @@ paths:
       tags: [Authentication]
       summary: Save the signed-in account appearance preferences
       parameters: [{$ref: '#/components/parameters/CSRFToken'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Appearance'}}}}
-      responses: {'200': {description: Saved preferences}, '422': {description: Unsupported preferences or insufficient contrast}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Appearance'
+                - type: object
+                  properties:
+                    backgroundImage: {type: string, contentEncoding: base64, description: Optional PNG JPEG or WebP up to 1 MiB. An empty string removes the saved image.}
+      responses: {'200': {description: Saved preferences}, '413': {description: Image exceeds 1 MiB}, '422': {description: Unsupported preferences or insufficient contrast}}
   /account/appearance/background:
     get: {tags: [Authentication], summary: Read the signed-in account background, responses: {'200': {description: Normalized PNG}, '404': {description: No background}}}
     put:
@@ -1351,14 +1360,14 @@ components:
       type: object
       required: [style, mode, density]
       properties:
-        style: {type: string, enum: [soft, glass, playful, obsidian, industrial, bento, terminal]}
+        style: {type: string, enum: [soft, glass, playful, obsidian, neumorphism, clay, bento, flat]}
         mode: {type: string, enum: [dark, light, system]}
         density: {type: string, enum: [comfortable, compact]}
         studio:
           type: object
           required: [version, theme]
           properties:
-            version: {type: integer, enum: [2]}
+            version: {type: integer, enum: [2, 3]}
             theme: {$ref: '#/components/schemas/CustomTheme'}
             presets:
               type: array
@@ -1368,20 +1377,44 @@ components:
                 required: [name, style, mode, density, theme]
                 properties:
                   name: {type: string, minLength: 1, maxLength: 64}
-                  style: {type: string, enum: [soft, glass, playful, obsidian, industrial, bento, terminal]}
+                  style: {type: string, enum: [soft, glass, playful, obsidian, neumorphism, clay, bento, flat]}
                   mode: {type: string, enum: [dark, light, system]}
                   density: {type: string, enum: [comfortable, compact]}
                   theme: {$ref: '#/components/schemas/CustomTheme'}
     CustomTheme:
       type: object
       properties:
-        colors: {type: object, additionalProperties: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}}
-        background: {type: string, enum: [default, solid, gradient, animated-gradient, blobs, image]}
+        colors: {type: object, additionalProperties: {type: string, pattern: '^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'}}
+        background: {type: string, enum: [default, solid, gradient, radial, mesh, animated-gradient, blobs, image]}
         placement: {type: string, enum: [application, main, sidebar, dashboard]}
         fit: {type: string, enum: [cover, contain]}
         position: {type: string, enum: [center, top, bottom, left, right]}
         motion: {type: string, enum: [full, reduced, none, system]}
         effects: {type: object, additionalProperties: {type: integer, minimum: 0, maximum: 100}}
+        layout:
+          type: object
+          properties:
+            sidebar: {type: string, enum: [standard, compact, floating, collapsed]}
+            width: {type: string, enum: [comfortable, wide, full]}
+            dashboard: {type: string, enum: [standard, modular]}
+        surfaces:
+          type: object
+          propertyNames: {enum: [sidebar, header, card, panel, widget, input, button, dialog, table, chart, widget-activity, widget-runtime, widget-servers]}
+          additionalProperties: {$ref: '#/components/schemas/AppearanceSurface'}
+    AppearanceSurface:
+      type: object
+      properties:
+        material: {type: string, enum: [solid, transparent, glass, elevated, raised, inset, clay, flat]}
+        opacity: {type: integer, minimum: 0, maximum: 100}
+        blur: {type: integer, minimum: 0, maximum: 32}
+        radius: {type: integer, minimum: 0, maximum: 32}
+        border: {type: string, enum: [none, thin]}
+        shadow: {type: string, enum: [none, low, medium, high]}
+        density: {type: string, enum: [compact, comfortable], description: Applies to tables}
+        tooltipMaterial: {type: string, enum: [solid, glass], description: Applies to chart tooltips}
+        color: {type: string, pattern: '^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'}
+        borderColor: {type: string, pattern: '^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'}
+        colors: {type: object, additionalProperties: {type: string, pattern: '^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'}}
     User:
       type: object
       required: [id, email, displayName, status, isSystemAdmin, createdAt]

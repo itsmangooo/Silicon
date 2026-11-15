@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { CheckIcon, PlusIcon, XIcon } from '@phosphor-icons/react'
 
-export function Page({ title, description, actions, children }) {
-  return <div className="page"><header className="page-header"><div><h1>{title}</h1>{description && <p>{description}</p>}</div>{actions && <div className="page-actions">{actions}</div>}</header>{children}</div>
+export function Page({ title, description, actions, children, className = '' }) {
+  return <div className={`page ${className}`.trim()}><header className="page-header"><div><h1>{title}</h1>{description && <p>{description}</p>}</div>{actions && <div className="page-actions">{actions}</div>}</header>{children}</div>
 }
 
-export function Section({ title, description, actions, children }) {
-  return <section className="section"><div className="section-header"><div><h2>{title}</h2>{description && <p>{description}</p>}</div>{actions && <div className="section-actions">{actions}</div>}</div><div className="section-body">{children}</div></section>
+export function Section({ title, description, actions, children, surface }) {
+  return <section className="section" data-surface={surface}><div className="section-header"><div><h2>{title}</h2>{description && <p>{description}</p>}</div>{actions && <div className="section-actions">{actions}</div>}</div><div className="section-body">{children}</div></section>
 }
 
 export function EmptyState({ title, children, action }) {

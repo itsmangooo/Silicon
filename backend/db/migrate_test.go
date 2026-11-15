@@ -154,7 +154,7 @@ func TestAgentSchemaMigrationPreservesServer(t *testing.T) {
 	}
 }
 
-func TestRemoveLiquidMetalPreservesAppearance(t *testing.T) {
+func TestAppearanceMigrationsPreserveSettings(t *testing.T) {
 	ctx, pool := migrationTestPool(t)
 	files, err := migrations.ReadDir("migrations")
 	if err != nil {
@@ -183,7 +183,10 @@ func TestRemoveLiquidMetalPreservesAppearance(t *testing.T) {
 			'{"version":2,"theme":{"background":"image","quality":"high","effects":{"overlay":25,"reflection":80}},
 			  "presets":[{"name":"Chrome","style":"metal","mode":"dark","density":"compact","theme":{"effects":{"highlight":50}}},
 			             {"name":"Frost","style":"glass","mode":"dark","density":"comfortable","theme":{"effects":{"glassBlur":15,"distortion":5}}}]}',
-			decode('0102','hex'))`)
+			decode('0102','hex')),
+        ('retired@example.test', 'Retired', 'hash', 'industrial', 'system', 'comfortable',
+         '{"version":2,"theme":{"background":"gradient"},"presets":[{"name":"Classic","style":"terminal","mode":"dark","density":"compact","theme":{"colors":{"accent":"#A1AEC7"}}}]}',
+         NULL)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,11 +196,19 @@ func TestRemoveLiquidMetalPreservesAppearance(t *testing.T) {
 	var preserved bool
 	err = pool.QueryRow(ctx, `SELECT appearance_style = 'soft' AND appearance_mode = 'light' AND appearance_density = 'compact'
 		AND appearance_background = decode('0102','hex')
-		AND appearance_studio = '{"version":2,"theme":{"background":"image","effects":{"overlay":25}},
+		AND appearance_studio = '{"version":3,"theme":{"background":"image","effects":{"overlay":25}},
 			"presets":[{"name":"Chrome","style":"soft","mode":"dark","density":"compact","theme":{"effects":{}}},
 			           {"name":"Frost","style":"glass","mode":"dark","density":"comfortable","theme":{"effects":{"glassBlur":15}}}]}'::jsonb
 		FROM users WHERE email = 'appearance@example.test'`).Scan(&preserved)
 	if err != nil || !preserved {
 		t.Fatalf("appearance migration preserved settings: %v, error: %v", preserved, err)
 	}
+	err = pool.QueryRow(ctx, `SELECT appearance_style = 'flat' AND appearance_mode = 'system'
+        AND appearance_studio = '{"version":3,"theme":{"background":"gradient"},"presets":[
+          {"name":"Classic","style":"obsidian","mode":"dark","density":"compact","theme":{"colors":{"accent":"#A1AEC7"}}}]}'::jsonb
+        FROM users WHERE email = 'retired@example.test'`).Scan(&preserved)
+	if err != nil || !preserved {
+		t.Fatalf("retired styles migration preserved settings: %v, error: %v", preserved, err)
+	}
+
 }

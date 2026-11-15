@@ -138,10 +138,16 @@ try {
   await page.goto(`${previewUrl}/settings`, { waitUntil: 'networkidle0' })
 
   await page.addStyleTag({ content: '.topbar { display: none !important; }' })
-  await captureElement(page, 'settings-appearance.png', '#appearance .section')
   await captureElement(page, 'settings-updates.png', '#updates .section')
   await captureElement(page, 'settings-public-access.png', '#public-access .section')
   await captureElement(page, 'settings-email.png', '#email .section')
+
+  await capture(page, previewUrl, '/account/appearance', 'settings-appearance.png', '.studio-workbench')
+  await clickButton(page, 'Surfaces')
+  await captureElement(page, 'theme-studio-surfaces.png', '.studio-workbench')
+  await page.click('.picker-trigger')
+  await page.waitForSelector('.color-popover')
+  await page.screenshot({ path: path.join(outputDirectory, 'theme-studio-color-picker.png') })
 
   const dashboardContext = await browser.createBrowserContext()
   const dashboardPage = await dashboardContext.newPage()
@@ -155,8 +161,8 @@ try {
     }
   })
   await capture(dashboardPage, previewUrl, '/', 'dashboard.png', '.deployment-chart')
-  for (const style of ['glass', 'playful', 'obsidian', 'industrial', 'bento', 'terminal']) {
-    await dashboardPage.goto(`${previewUrl}/settings`, { waitUntil: 'networkidle0' })
+  for (const style of ['glass', 'playful', 'obsidian', 'neumorphism', 'clay', 'bento', 'flat']) {
+    await dashboardPage.goto(`${previewUrl}/account/appearance`, { waitUntil: 'networkidle0' })
     await settle(dashboardPage, '.studio-style')
     await dashboardPage.click(`input[name="ui-style"][value="${style}"]`)
     await clickButton(dashboardPage, 'Apply appearance')
@@ -164,8 +170,7 @@ try {
     await capture(dashboardPage, previewUrl, '/', `dashboard-${style}.png`, '.deployment-chart')
     if (['glass', 'playful'].includes(style)) {
       await capture(dashboardPage, previewUrl, '/projects/project-platform/applications/app-api', `application-detail-${style}.png`, '.runtime-editor')
-      await dashboardPage.goto(`${previewUrl}/settings#appearance`, { waitUntil: 'networkidle0' })
-      await captureElement(dashboardPage, `settings-appearance-${style}.png`, '#appearance .section')
+      await capture(dashboardPage, previewUrl, '/account/appearance', `settings-appearance-${style}.png`, '.studio-workbench')
     }
   }
   await dashboardContext.close()

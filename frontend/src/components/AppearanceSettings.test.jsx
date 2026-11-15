@@ -5,6 +5,7 @@ import { AppearanceSettings } from './AppearanceSettings.jsx'
 
 const renderSettings = () => render(<AppearanceProvider><AppearanceSettings /></AppearanceProvider>)
 const choose = (style) => fireEvent.click(screen.getByRole('radio', { name: new RegExp('^' + style) }))
+const tab = (name) => fireEvent.click(screen.getByRole('button', { name, exact: true }))
 const apply = () => fireEvent.click(screen.getByRole('button', { name: 'Apply appearance' }))
 
 afterEach(() => {
@@ -15,11 +16,14 @@ afterEach(() => {
 it('previews without changing the document until Apply and restores on remount', async () => {
   const { unmount } = renderSettings()
   choose('Glassmorphism')
+  tab('Layout')
   fireEvent.change(screen.getByLabelText('Density'), { target: { value: 'compact' } })
   expect(document.documentElement.dataset.style).toBe('soft')
   fireEvent.click(screen.getByRole('button', { name: 'Cancel preview' }))
+  tab('Presets')
   expect(screen.getByRole('radio', { name: /^Soft UI/ })).toBeChecked()
   choose('Glassmorphism')
+  tab('Layout')
   fireEvent.change(screen.getByLabelText('Color mode'), { target: { value: 'light' } })
   fireEvent.change(screen.getByLabelText('Density'), { target: { value: 'compact' } })
   apply()
@@ -27,16 +31,25 @@ it('previews without changing the document until Apply and restores on remount',
   unmount()
   renderSettings()
   expect(screen.getByRole('radio', { name: /^Glassmorphism/ })).toBeChecked()
+  tab('Layout')
   expect(screen.getByLabelText('Density')).toHaveValue('compact')
 })
 
 it('rejects unreadable colors and stages a named preset', async () => {
   renderSettings()
-  fireEvent.change(screen.getByLabelText('Text'), { target: { value: '#101114' } })
+  tab('Colors')
+  fireEvent.click(screen.getByRole('button', { name: /^Text / }))
+  fireEvent.change(screen.getByLabelText('HEX value'), { target: { value: '#101114' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Apply color' }))
   expect(screen.getByRole('alert')).toHaveTextContent('contrast')
   expect(screen.getByRole('button', { name: 'Apply appearance' })).toBeDisabled()
-  fireEvent.change(screen.getByLabelText('Text'), { target: { value: '#ffffff' } })
+  tab('Colors')
+  fireEvent.click(screen.getByRole('button', { name: /^Text / }))
+  fireEvent.change(screen.getByLabelText('HEX value'), { target: { value: '#ffffff' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Apply color' }))
+  tab('Presets')
   choose('Obsidian')
+  tab('My Themes')
   fireEvent.change(screen.getByLabelText('Preset name'), { target: { value: 'Midnight' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save custom preset' }))
   apply()
@@ -70,10 +83,28 @@ it('loads account settings and saves versioned preferences to the account only',
     choose('Bento')
     apply()
     await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/v1/account/appearance', expect.objectContaining({
-      method: 'PUT', body: '{"style":"bento","mode":"dark","density":"compact","studio":{"version":2,"theme":{},"presets":[]}}',
+      method: 'PUT', body: '{"style":"bento","mode":"dark","density":"compact","studio":{"version":3,"theme":{},"presets":[]}}',
     })))
     expect(window.localStorage.getItem('silicon.appearance')).toContain('glass')
   } finally {
     fetch.mockRestore()
   }
+})
+
+it('previews alpha within the Studio and applies an RGBA color only on confirmation', async () => {
+  renderSettings()
+  tab('Colors')
+  const accent = screen.getByRole('button', { name: /^Panel / })
+  fireEvent.click(accent)
+  fireEvent.change(screen.getByLabelText('Color format'), { target: { value: 'RGBA' } })
+  fireEvent.change(screen.getByLabelText('RGBA value'), { target: { value: '20, 30, 40, 0.5' } })
+  fireEvent.keyDown(screen.getByLabelText('RGBA value'), { key: 'Escape' })
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Apply appearance' })).toBeDisabled()
+  fireEvent.click(accent)
+  fireEvent.change(screen.getByLabelText('HEX value'), { target: { value: '#141e2880' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Apply color' }))
+  expect(document.documentElement.style.getPropertyValue('--panel-override')).toBe('')
+  apply()
+  await waitFor(() => expect(JSON.parse(localStorage.getItem('silicon.appearance')).studio.theme.colors.panel).toBe('#141E2880'))
 })

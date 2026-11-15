@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from '../lib/api.js'
-import { defaults, effectDefaults, styles, themeProperties } from '../lib/theme.js'
+import { defaults, effectDefaults, replacementStyle, styles, themeProperties } from '../lib/theme.js'
+import { SurfaceStyles } from '../components/SurfaceStyles.jsx'
 
 const storageKey = 'silicon.appearance'
 const AppearanceContext = createContext(null)
 
 function supportedStyle(style) {
-  return styles.some(([id]) => id === style) ? style : defaults.style
+  return styles.some(([id]) => id === style) ? style : (Object.hasOwn(replacementStyle, style) ? replacementStyle[style] : defaults.style)
 }
 
 function readStoredTheme(value) {
@@ -26,8 +27,8 @@ function readAppearance() {
       mode: ['light', 'system'].includes(saved?.mode) ? saved.mode : defaults.mode,
       density: saved?.density === 'compact' ? saved.density : defaults.density,
     }
-    if (saved?.studio?.version === 2) {
-      appearance.studio = { version: 2, theme: readStoredTheme(saved.studio.theme), presets: (saved.studio.presets || []).map((preset) => ({
+    if ([2, 3].includes(saved?.studio?.version)) {
+      appearance.studio = { version: 3, theme: readStoredTheme(saved.studio.theme), presets: (saved.studio.presets || []).map((preset) => ({
         ...preset, style: supportedStyle(preset.style), theme: readStoredTheme(preset.theme),
       })) }
     }
@@ -91,7 +92,7 @@ export function AppearanceProvider({ children, accountId, loadAccount = false })
 
   useLayoutEffect(() => {
     const root = document.documentElement
-    Object.assign(root.dataset, { style, mode: resolvedMode, density, motion })
+    Object.assign(root.dataset, { style, mode: resolvedMode, density, motion, sidebar: theme?.layout?.sidebar || '', width: theme?.layout?.width || '', dashboard: theme?.layout?.dashboard || '' })
     const properties = themeProperties(theme, resolvedMode)
     for (const [key, value] of Object.entries(properties)) root.style.setProperty(key, value)
     if (!loadAccount) {
@@ -106,11 +107,14 @@ export function AppearanceProvider({ children, accountId, loadAccount = false })
       delete root.dataset.mode
       delete root.dataset.density
       delete root.dataset.motion
+      delete root.dataset.sidebar
+      delete root.dataset.width
+      delete root.dataset.dashboard
       for (const key of Object.keys(properties)) root.style.removeProperty(key)
     }
   }, [appearance, style, resolvedMode, density, motion, theme, loadAccount])
 
-  function saveAppearance(next) {
+  function saveAppearance(next, backgroundImage) {
     if (loadAccount && !canSave) return Promise.resolve(false)
     current.current = next
     setAppearance(next)
@@ -119,7 +123,8 @@ export function AppearanceProvider({ children, accountId, loadAccount = false })
     pending.current = pending.current.then(async () => {
       if (!activeAccount.current) return false
       try {
-        confirmed.current = await api('/account/appearance', { method: 'PUT', body: next })
+        confirmed.current = await api('/account/appearance', { method: 'PUT', body: backgroundImage === undefined ? next : { ...next, backgroundImage } })
+        if (backgroundImage !== undefined) setAsset((prior) => ({ available: Boolean(backgroundImage), revision: prior.revision + 1 }))
         return true
       } catch (failure) {
         if (current.current !== next) return false
@@ -132,12 +137,10 @@ export function AppearanceProvider({ children, accountId, loadAccount = false })
     return pending.current
   }
 
-  async function updateAsset(file) {
-    await api('/account/appearance/background', file ? { method: 'PUT', body: file } : { method: 'DELETE' })
-    setAsset((prior) => ({ available: Boolean(file), revision: prior.revision + 1 }))
-  }
-
-  return <AppearanceContext.Provider value={{ appearance, systemLight, systemReduced, motion, saveAppearance, error, asset, updateAsset }}>{ready ? children : <div className="boot-screen" role="status">Loading Silicon…</div>}</AppearanceContext.Provider>
+  return <AppearanceContext.Provider value={{ appearance, systemLight, systemReduced, motion, saveAppearance, error, asset }}>
+    <SurfaceStyles theme={theme} />
+    {ready ? children : <div className="boot-screen" role="status">Loading Silicon…</div>}
+  </AppearanceContext.Provider>
 }
 
 export function useAppearance() {

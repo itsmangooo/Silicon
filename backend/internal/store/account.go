@@ -16,8 +16,8 @@ func (r Repository) AccountAppearance(ctx context.Context, userID uuid.UUID) (Ap
 	return value, avatar, background, notFound(err)
 }
 
-func (r Repository) SetAccountAppearance(ctx context.Context, userID uuid.UUID, value Appearance) error {
-	_, err := r.Pool.Exec(ctx, `UPDATE users SET appearance_style=$2,appearance_mode=$3,appearance_density=$4,appearance_studio=COALESCE($5,appearance_studio) WHERE id=$1`, userID, value.Style, value.Mode, value.Density, value.Studio)
+func (r Repository) SetAccountAppearance(ctx context.Context, userID uuid.UUID, value Appearance, replaceBackground bool, background []byte) error {
+	_, err := r.Pool.Exec(ctx, `UPDATE users SET appearance_style=$2,appearance_mode=$3,appearance_density=$4,appearance_studio=COALESCE($5,appearance_studio), appearance_background=CASE WHEN $6 THEN $7 ELSE appearance_background END WHERE id=$1`, userID, value.Style, value.Mode, value.Density, value.Studio, replaceBackground, background)
 	return err
 }
 

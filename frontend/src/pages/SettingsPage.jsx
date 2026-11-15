@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ArrowClockwiseIcon, DownloadSimpleIcon, EnvelopeSimpleIcon, GlobeHemisphereWestIcon, PaperPlaneTiltIcon, ShieldCheckIcon } from '@phosphor-icons/react'
 import { api } from '../lib/api.js'
 import { waitForUpdatedSilicon } from '../lib/update-reconnect.js'
 import { useAuth } from '../state/AuthContext.jsx'
-import { AppearanceSettings } from '../components/AppearanceSettings.jsx'
 import { ErrorNotice, Mono, Notice, Page, Section, Status, formatDate } from '../components/ui.jsx'
 
 const activeStates = new Set(['queued', 'checking', 'preparing', 'updating', 'migrating', 'restarting', 'waiting_for_health', 'reconnecting'])
@@ -326,7 +326,7 @@ function UpdatePanel() {
 
 export function SettingsPage() {
   return <Page title="Settings" description="Platform capabilities and installation-level operations.">
-    <div id="appearance"><AppearanceSettings /></div>
+    <div id="appearance"><Section title="Appearance" description="Customize your account's style, surfaces, and backgrounds." actions={<Link className="button secondary" to="/account/appearance">Open Theme Studio</Link>} /></div>
     <div className="related-panels">
       <div id="public-access"><PublicAccessPanel /></div>
       <div id="email"><EmailPanel /></div>
