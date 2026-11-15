@@ -135,6 +135,7 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("POST /api/v1/system/email/test", a.systemAdmin(http.HandlerFunc(a.testSystemMail)))
 
 	mux.Handle("GET /api/v1/organizations/{organizationID}/access", a.org(authorization.OrganizationRead, http.HandlerFunc(a.access)))
+	mux.Handle("GET /api/v1/organizations/{organizationID}/capabilities", a.org(authorization.OrganizationRead, http.HandlerFunc(a.listCapabilities)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/search", a.org(authorization.OrganizationRead, http.HandlerFunc(a.search)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/members", a.org(authorization.MemberRead, http.HandlerFunc(a.listMembers)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/members", a.org(authorization.MemberManage, http.HandlerFunc(a.addMember)))
@@ -149,6 +150,7 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("PUT /api/v1/organizations/{organizationID}/environments/{environmentID}", a.org(authorization.EnvironmentUpdate, http.HandlerFunc(a.updateEnvironment)))
 	mux.Handle("DELETE /api/v1/organizations/{organizationID}/environments/{environmentID}", a.org(authorization.EnvironmentDelete, http.HandlerFunc(a.deleteEnvironment)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/applications", a.org(authorization.ApplicationRead, http.HandlerFunc(a.listAllApplications)))
+	mux.Handle("POST /api/v1/organizations/{organizationID}/compose/validate", a.org(authorization.ApplicationCreate, http.HandlerFunc(a.validateCompose)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/environments/{environmentID}/applications", a.org(authorization.ApplicationRead, http.HandlerFunc(a.listApplications)))
 	mux.Handle("POST /api/v1/organizations/{organizationID}/environments/{environmentID}/applications", a.org(authorization.ApplicationCreate, http.HandlerFunc(a.createApplication)))
 	mux.Handle("GET /api/v1/organizations/{organizationID}/applications/{applicationID}", a.org(authorization.ApplicationRead, http.HandlerFunc(a.getApplication)))

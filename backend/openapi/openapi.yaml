@@ -563,6 +563,76 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/DotEnv'}
       responses:
         '200': {$ref: '#/components/responses/DotEnvPreview'}
+  /organizations/{organizationID}/capabilities:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      tags: [Runtime]
+      summary: List platform capabilities and organization readiness
+      description: Reports support and the latest stored configuration checks. Does not contact external providers.
+      responses:
+        '200':
+          description: Capability registry
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [capabilities]
+                properties:
+                  capabilities:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, description, category, providerType, implementationStatus, configurationStatus, requiredDependencies, operations, permissions, documentation]
+                      properties:
+                        id: {type: string}
+                        name: {type: string}
+                        description: {type: string}
+                        category: {type: string}
+                        providerType: {type: string}
+                        implementationStatus: {type: string, enum: [implemented, experimental, planned]}
+                        configurationStatus: {type: string, enum: [available, not_configured, unverified, unavailable, not_applicable]}
+                        requiredDependencies: {type: array, items: {type: string}}
+                        operations: {type: array, items: {type: string}}
+                        permissions: {type: array, items: {type: string}}
+                        lastVerifiedAt: {$ref: '#/components/schemas/Timestamp'}
+                        documentation: {type: string, format: uri}
+                        settingsPath: {type: string}
+  /organizations/{organizationID}/compose/validate:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    post:
+      tags: [Runtime]
+      summary: Validate a restricted, image-based Compose manifest
+      description: Requires permission to create applications. Returns service names in startup order without saving or executing the submitted YAML.
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text]
+              properties:
+                text: {type: string, minLength: 1, maxLength: 65536, description: One YAML document up to 64 KiB.}
+      responses:
+        '200':
+          description: Preview of service metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [services]
+                properties:
+                  services:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, hasHealthcheck]
+                      properties:
+                        name: {type: string}
+                        hasHealthcheck: {type: boolean}
+                        dependsOn: {type: array, items: {type: string}}
+        '422': {$ref: '#/components/responses/ValidationError'}
   /organizations/{organizationID}/applications:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}]
     get:

@@ -141,6 +141,7 @@ try {
   await captureElement(page, 'settings-updates.png', '#updates .section')
   await captureElement(page, 'settings-public-access.png', '#public-access .section')
   await captureElement(page, 'settings-email.png', '#email .section')
+  await captureElement(page, 'settings-capabilities.png', '#capabilities .section')
 
   await capture(page, previewUrl, '/account/appearance', 'settings-appearance.png', '.scheme-picker')
 

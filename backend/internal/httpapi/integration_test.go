@@ -468,6 +468,24 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 	assertApplicationValidation("invalid host", map[string]any{"name": "invalid-binding", "sourceType": "git_dockerfile", "internalPort": 3000, "hostAddress": "localhost", "publishedPort": 8080}, "Host address must be a valid IP address.")
 	assertApplicationValidation("docker image required", map[string]any{"name": "missing-image", "sourceType": "docker_image"}, "Docker image applications require an image reference.")
 	assertApplicationValidation("compose unsupported", map[string]any{"name": "compose", "sourceType": "compose"}, "Docker Compose applications are not supported yet.")
+	composePath := "/organizations/" + orgA + "/compose/validate"
+	manifest := map[string]any{"text": "services:\n  web:\n    image: nginx:alpine\n"}
+	if services, ok := owner.post(composePath, manifest, http.StatusOK)["services"].([]any); !ok || len(services) != 1 {
+		t.Fatal("validation should preview one Compose service")
+	}
+	owner.post(composePath, map[string]any{"text": "services: {}"}, http.StatusUnprocessableEntity)
+	viewer.post("/organizations/"+orgB+"/compose/validate", manifest, http.StatusForbidden)
+	registry := owner.get("/organizations/"+orgA+"/capabilities", http.StatusOK)["capabilities"].([]any)
+	capabilityStatuses := map[string]map[string]any{}
+	for _, item := range registry {
+		data := item.(map[string]any)
+		capabilityStatuses[data["id"].(string)] = data
+	}
+	if capabilityStatuses["docker-compose"]["implementationStatus"] != "planned" ||
+		capabilityStatuses["compose-validation"]["implementationStatus"] != "experimental" ||
+		capabilityStatuses["cloudflare-dns"]["configurationStatus"] != "not_configured" {
+		t.Fatal("capability readiness must distinguish planned deployments from implemented validation and unconfigured providers")
+	}
 	unreachableServer := owner.post("/organizations/"+orgA+"/servers", map[string]any{"name": "unreachable", "connectionType": "local", "connectivityType": "private"}, http.StatusCreated)
 	assertApplicationValidation("unreachable target", map[string]any{"name": "bad-target", "sourceType": "git_dockerfile", "serverId": stringField(t, unreachableServer, "id")}, "Selected server is not connected.")
 	boundApplication := owner.post(applicationPath, map[string]any{"name": "loopback", "sourceType": "git_dockerfile", "internalPort": 3000, "hostAddress": "127.0.0.1", "publishedPort": 8080}, http.StatusCreated)

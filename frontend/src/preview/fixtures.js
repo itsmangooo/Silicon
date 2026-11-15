@@ -134,6 +134,16 @@ export function previewResponse(path, options = {}) {
   if (path === `${root}/servers`) return { servers: previewFixtures.servers, localRuntimeAvailable: true }
   if (path === `${root}/domains`) return { domains: previewFixtures.domains }
   if (path === `${root}/runtime-summary`) return { runtimeSummary: [{ state: 'running', health: 'healthy', count: 1 }, { state: 'stopped', health: 'unknown', count: 1 }] }
+  if (path === `${root}/capabilities`) {
+    const guides = 'https://itsmangooo.github.io/Silicon-Docs/docs/guides/'
+    return { capabilities: [
+      { id: 'docker', name: 'Docker applications', description: 'Deploy a Docker image or build an exact Git revision on a supported Docker target.', implementationStatus: 'implemented', configurationStatus: 'available', lastVerifiedAt: '2026-09-29T15:24:00Z', settingsPath: '/servers', documentation: guides + 'docker-runtime-settings' },
+      { id: 'cloudflare-dns', name: 'Cloudflare DNS', description: 'Manage Silicon-owned DNS records in selected zones.', implementationStatus: 'implemented', configurationStatus: 'available', lastVerifiedAt: '2026-09-29T15:25:00Z', settingsPath: '/integrations', documentation: guides + 'cloudflare' },
+      { id: 'github', name: 'GitHub App', description: 'Choose granted repositories and deploy exact commits.', implementationStatus: 'implemented', configurationStatus: 'not_configured', settingsPath: '/integrations', documentation: guides + 'github' },
+      { id: 'compose-validation', name: 'Compose file validation', description: 'Check an image-based YAML file and preview service order through the API.', implementationStatus: 'experimental', configurationStatus: 'available', documentation: guides + 'feature-reference' },
+      { id: 'docker-compose', name: 'Compose deployments', category: 'Hosting', implementationStatus: 'planned', documentation: 'https://github.com/itsmangooo/Silicon/blob/main/ROADMAP.md' },
+    ] }
+  }
   if (path === `${root}/networks`) return { networks: previewFixtures.networks }
   if (path === `${root}/members`) return { members: previewFixtures.members }
   if (path === `${root}/access`) return { role: 'owner', permissions: ['audit.read', 'application.create', 'application.delete', 'application.read', 'application.update', 'deployment.create', 'deployment.read', 'deployment.rollback', 'domain.manage', 'identity_provider.manage', 'logs.read', 'network.manage', 'network.read', 'project.create', 'project.delete', 'project.read', 'project.update', 'secret.write', 'server.manage', 'server.read'] }

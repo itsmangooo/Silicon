@@ -8,3 +8,11 @@ Open a Docker application and find **Docker runtime settings**. An installation 
 - **Memory limit** accepts MiB. A value of zero leaves the Docker default.
 
 These settings do not move data between hosts or import existing Compose services. To migrate a stateful service, take a restore-tested backup, create a Silicon application and named volume, and restore using the software’s documented process. Quiesce the old service before a final copy, verify the new application and its routing, and keep the old service stopped until rollback is no longer needed. Existing host directories and Docker sockets cannot be mounted through these settings.
+
+## Check what your installation can run
+
+1. Select your organization in the sidebar and open **Settings → Platform capabilities**.
+2. Find **Docker applications**. If the row is missing a verified check, open **Servers** and run **Check connection** on the target. Confirm it can connect and Docker is available before deploying.
+3. Open **Planned capabilities** to see which workflows still need implementation. For example, the experimental Compose validator checks a restricted YAML file and lists the service order. To deploy today, create one Silicon application for each Docker image and enable **Environment network** on the ones that need to connect on the same host.
+
+![Platform capabilities with Docker available and Compose deployments planned](../previews/settings-capabilities.png)

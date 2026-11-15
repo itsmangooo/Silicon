@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowClockwiseIcon, DownloadSimpleIcon, EnvelopeSimpleIcon, GlobeHemisphereWestIcon, PaperPlaneTiltIcon, ShieldCheckIcon } from '@phosphor-icons/react'
-import { api } from '../lib/api.js'
+import { api, organizationPath } from '../lib/api.js'
 import { waitForUpdatedSilicon } from '../lib/update-reconnect.js'
 import { useAuth } from '../state/AuthContext.jsx'
-import { ErrorNotice, Mono, Notice, Page, Section, Status, formatDate } from '../components/ui.jsx'
+import { useWorkspace } from '../state/WorkspaceContext.jsx'
+import { ErrorNotice, LoadingRows, Mono, Notice, Page, Section, Status, formatDate, useResource } from '../components/ui.jsx'
 
 const activeStates = new Set(['queued', 'checking', 'preparing', 'updating', 'migrating', 'restarting', 'waiting_for_health', 'reconnecting'])
 const stableVersion = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
@@ -324,7 +325,49 @@ function UpdatePanel() {
   </Section>
 }
 
+const capabilityStatusLabels = {
+  available: 'Available',
+  not_configured: 'Not configured',
+  unverified: 'Not verified',
+  unavailable: 'Unavailable',
+}
+
+function CapabilitiesPanel({ organizationId }) {
+  const resource = useResource(() => organizationId
+    ? api(organizationPath(organizationId, '/capabilities'))
+    : Promise.resolve({ capabilities: [] }), [organizationId])
+  const capabilities = resource.data?.capabilities ?? []
+  const planned = capabilities.filter((item) => item.implementationStatus === 'planned')
+  const implemented = capabilities.filter((item) => item.implementationStatus !== 'planned')
+
+  return <Section title="Platform capabilities" description="Readiness reflects the selected organization and the most recent checks.">
+    <ErrorNotice error={resource.error} />
+    {!organizationId && <p className="muted">Select an organization to view its capabilities.</p>}
+    {organizationId && (resource.loading || implemented.length > 0) && <table>
+      <thead><tr><th>Capability</th><th>Readiness</th><th>Last verified</th><th>Documentation</th></tr></thead>
+      <tbody>{resource.loading ? <LoadingRows columns={4} /> : implemented.map((item) => <tr key={item.id}>
+        <td data-label="Capability">
+          <div><strong>{item.settingsPath ? <Link to={item.settingsPath}>{item.name}</Link> : item.name}</strong><div className="muted">{item.description}</div></div>
+        </td>
+        <td data-label="Readiness">
+          <div>
+            <Status value={capabilityStatusLabels[item.configurationStatus]} />
+            {item.implementationStatus === 'experimental' && <div className="muted">Experimental</div>}
+          </div>
+        </td>
+        <td data-label="Last verified">{item.lastVerifiedAt ? formatDate(item.lastVerifiedAt) : '—'}</td>
+        <td data-label="Documentation"><a href={item.documentation}>Guide<span className="sr-only"> for {item.name}</span></a></td>
+      </tr>)}</tbody>
+    </table>}
+    {planned.length > 0 && <details>
+      <summary>Planned capabilities</summary>
+      <ul className="plain-list">{planned.map((item) => <li key={item.id}><a href={item.documentation}>{item.name}</a> <span className="muted">· {item.category}</span></li>)}</ul>
+    </details>}
+  </Section>
+}
+
 export function SettingsPage() {
+  const { organizationId } = useWorkspace()
   return <Page title="Settings" description="Platform capabilities and installation-level operations.">
     <div id="appearance"><Section title="Appearance" description="Choose your account’s color scheme and density." actions={<Link className="button secondary" to="/account/appearance">Open Appearance</Link>} /></div>
     <div className="related-panels">
@@ -333,7 +376,7 @@ export function SettingsPage() {
     </div>
     <div id="updates"><UpdatePanel /></div>
     <Section title="Platform"><dl className="definition-grid"><div><dt>Architecture</dt><dd>Modular monolith</dd></div><div><dt>API</dt><dd><Mono>/api/v1</Mono></dd></div><div><dt>Runtime provider</dt><dd>Docker (local / SSH / AWS)</dd></div><div><dt>Cloud provider</dt><dd>AWS EC2, VPC, EBS, SSM, Cost Explorer</dd></div><div><dt>Routing provider</dt><dd>External / Cloudflare</dd></div><div><dt>TLS management</dt><dd>External</dd></div><div><dt>Authentication</dt><dd>Local server-side session</dd></div></dl></Section>
-    <Section title="Deliberately unavailable" description="These capabilities are future milestones, not simulated integrations."><ul className="plain-list"><li>Azure and Kubernetes server connection providers</li><li>AWS RDS, ECS, EKS, Lambda, Route53, S3 management, and Auto Scaling Groups</li><li>Docker Compose workload execution</li><li>X3 Gateway and custom reverse proxy</li><li>Automatic TLS</li><li>Traefik and Nginx routing adapters</li><li>SAML, Kafka, service mesh, and microservices</li></ul></Section>
+    <div id="capabilities"><CapabilitiesPanel key={organizationId} organizationId={organizationId} /></div>
     <Section title="Operational configuration" description="Encryption keys and infrastructure configuration are managed through environment variables on the Silicon host."><p className="muted">See <Mono>.env.example</Mono>, the installation guide, and the security guide in the repository.</p></Section>
   </Page>
 }

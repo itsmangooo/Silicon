@@ -68,7 +68,7 @@ Direct peer optimization, high-availability hubs, SSM configuration transfer, au
 
 - Generic OIDC login and secure explicit account linking; Authentik preset
 - Additional routing adapters, including a separately built X3 Gateway
-- Docker Compose deployment sources
+- Docker Compose deployment sources. The experimental validation endpoint accepts a restricted image-based YAML subset and previews service order. Native deployment, Git sources, revisions, runtime lifecycle, and routing for Compose services remain planned.
 - Azure and Kubernetes providers only after core boundaries prove stable
 - External secrets and logging providers
 
