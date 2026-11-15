@@ -15,7 +15,7 @@ export function ThemePreview({ style, mode, density, theme, motion, asset, page 
     data-sidebar={theme?.layout?.sidebar} data-width={theme?.layout?.width} data-dashboard={theme?.layout?.dashboard} data-motion={motion} style={theme ? themeProperties(theme, mode) : undefined}>
     {!mini && <SurfaceStyles theme={theme} previewId={id} />}
     {!mini && <BackgroundLayer style={style} theme={theme} motion={motion} asset={asset} preview dashboard={isDashboard} />}
-    <div className={mini ? 'preview-nav' : 'sidebar preview-nav'}><SquaresFourIcon size={16} /><span><CheckIcon size={12} /> {mini ? 'Home' : 'Overview'}</span><span><CubeIcon size={12} /> Apps</span><span><GearIcon size={12} /> {mini ? 'Tools' : 'Settings'}</span></div>
+    <div className={mini ? 'preview-nav' : 'sidebar preview-nav'}><SquaresFourIcon size={16} /><span><CheckIcon size={12} />{!mini && 'Overview'}</span><span><CubeIcon size={12} />{!mini && 'Apps'}</span><span><GearIcon size={12} />{!mini && 'Settings'}</span></div>
     <div className={mini ? 'preview-workspace' : 'workspace preview-workspace'}>
       <div className={mini ? 'preview-heading' : 'topbar preview-heading'}><strong>{({ dashboard: 'Dashboard', application: 'Application', form: 'Configuration', table: 'Deployments', dialog: 'Runtime' })[page]}</strong><span>Production</span></div>
       {isDashboard && <div className="preview-grid">
