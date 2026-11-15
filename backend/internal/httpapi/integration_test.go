@@ -474,7 +474,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 		t.Fatal("validation should preview one Compose service")
 	}
 	owner.post(composePath, map[string]any{"text": "services: {}"}, http.StatusUnprocessableEntity)
-	viewer.post("/organizations/"+orgB+"/compose/validate", manifest, http.StatusForbidden)
+	viewer.post(composePath, manifest, http.StatusNotFound)
 	registry := owner.get("/organizations/"+orgA+"/capabilities", http.StatusOK)["capabilities"].([]any)
 	capabilityStatuses := map[string]map[string]any{}
 	for _, item := range registry {
@@ -978,6 +978,7 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 		t.Fatalf("support workflow was not persisted: %v", details)
 	}
 	viewer.post("/organizations/"+orgA+"/projects", map[string]any{"name": "Forbidden", "slug": "forbidden"}, http.StatusForbidden)
+	viewer.post(composePath, manifest, http.StatusForbidden)
 	viewer.get("/organizations/"+orgA+"/projects", http.StatusOK)
 	viewer.put("/organizations/"+orgA+"/projects/"+projectID+"/environment-variables", map[string]any{"variables": []map[string]string{{"name": "FORBIDDEN", "value": "write"}}}, http.StatusForbidden)
 	viewer.put("/organizations/"+orgA+"/environments/"+environmentID+"/secrets/FORBIDDEN", map[string]any{"value": "write"}, http.StatusForbidden)
