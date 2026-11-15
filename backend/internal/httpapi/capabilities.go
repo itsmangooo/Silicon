@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/itsmangooo/Silicon/backend/internal/authorization"
-	"github.com/jackc/pgx/v5"
+	"github.com/itsmangooo/Silicon/backend/internal/store"
 )
 
 type capability struct {
@@ -70,7 +70,7 @@ func (a *API) listCapabilities(w http.ResponseWriter, r *http.Request) {
 	}
 	gitConnection, err := a.repo.GitHubIntegration(ctx, org)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, store.ErrNotFound):
 	case err != nil:
 		a.serverError(w, r, err)
 		return
@@ -122,7 +122,7 @@ func (a *API) listCapabilities(w http.ResponseWriter, r *http.Request) {
 	}
 	connection, err := a.repo.CloudflareIntegration(ctx, org)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, store.ErrNotFound):
 	case err != nil:
 		a.serverError(w, r, err)
 		return
