@@ -1125,7 +1125,11 @@ func accountStudioRoundTrip(t *testing.T, owner, viewer *testClient) {
 		"surfaces": map[string]any{"sidebar": map[string]any{"material": "glass", "color": "#aabbcc80", "opacity": 0}},
 		"layout":   map[string]any{"sidebar": "floating", "dashboard": "modular"},
 	}
-	studio := map[string]any{"version": 3, "theme": theme, "presets": []map[string]any{{
+	inactive := map[string]any{"clay": map[string]any{
+		"background": "mesh",
+		"colors":     map[string]string{"primary": "#dfa9bb80"},
+	}}
+	studio := map[string]any{"version": 3, "theme": theme, "themes": inactive, "presets": []map[string]any{{
 		"name": "Midnight", "style": "glass", "mode": "dark", "density": "compact", "theme": theme,
 	}}}
 	base["studio"] = studio
@@ -1133,6 +1137,10 @@ func accountStudioRoundTrip(t *testing.T, owner, viewer *testClient) {
 	delete(base, "studio")
 	owner.put(preferences, base, http.StatusOK)
 	saved := mapField(t, mapField(t, owner.get("/account", http.StatusOK), "appearance"), "studio")
+	clay := mapField(t, mapField(t, saved, "themes"), "clay")
+	if clay["background"] != "mesh" || mapField(t, clay, "colors")["primary"] != "#dfa9bb80" {
+		t.Fatal("inactive style overrides did not round trip")
+	}
 	savedTheme := mapField(t, saved, "theme")
 	sidebar := mapField(t, mapField(t, savedTheme, "surfaces"), "sidebar")
 	if sidebar["color"] != "#aabbcc80" || sidebar["opacity"] != float64(0) || mapField(t, savedTheme, "layout")["dashboard"] != "modular" {
@@ -1141,6 +1149,8 @@ func accountStudioRoundTrip(t *testing.T, owner, viewer *testClient) {
 	if saved["version"] != float64(3) || len(arrayField(t, saved, "presets")) != 1 || mapField(t, viewer.get("/account", http.StatusOK), "appearance")["studio"] != nil {
 		t.Fatal("studio preferences were lost or exposed to another account")
 	}
+	base["studio"] = map[string]any{"version": 3, "themes": map[string]any{"glass": map[string]any{}}}
+	owner.put(preferences, base, http.StatusUnprocessableEntity)
 	base["studio"] = map[string]any{"version": 2, "theme": map[string]any{"colors": map[string]string{"text": "#111111"}}}
 	owner.put(preferences, base, http.StatusUnprocessableEntity)
 	webp, err := base64.StdEncoding.DecodeString("UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoCAAIAAUAmJaQAA3AA/vz0AAA=")

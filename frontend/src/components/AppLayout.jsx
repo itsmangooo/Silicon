@@ -89,7 +89,10 @@ export function AppLayout() {
   }
 
   useLayoutEffect(() => {
-    if (open) navigationRef.current?.querySelector('.nav-item.active')?.focus()
+    if (!open || !navigationRef.current) return
+    const navigation = navigationRef.current
+    const firstLink = navigation.querySelector('.nav-item.active') || navigation.querySelector('.nav-item')
+    firstLink?.focus()
   }, [open])
 
   useEffect(() => {
@@ -114,7 +117,7 @@ export function AppLayout() {
     <div className="shell">
       <BackgroundLayer style={appearance.style} theme={appearance.studio?.theme} motion={motion} asset={asset} dashboard={location.pathname === '/'} />
       <a className="skip-link" href="#main">Skip to content</a>
-      <aside className={`sidebar ${open ? 'sidebar-open' : ''}`} aria-label="Primary navigation" onKeyDown={(event) => {
+      <aside className={`sidebar app-sidebar ${open ? 'sidebar-open' : ''}`} aria-label="Primary navigation" onKeyDown={(event) => {
         if (open && event.key === 'Escape') closeNavigation()
       }}>
         <div className="sidebar-header">
@@ -139,7 +142,7 @@ export function AppLayout() {
       </aside>
       {open && <button className="sidebar-scrim" aria-label="Close navigation" onClick={closeNavigation} />}
       <div className="workspace">
-        <header className="topbar">
+        <header className="topbar app-header">
           <button ref={menuButtonRef} className="menu-button" aria-label={open ? 'Close navigation' : 'Open navigation'} aria-controls="primary-navigation" aria-expanded={open} onClick={() => {
             if (open) closeNavigation()
             else setOpen(true)

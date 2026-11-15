@@ -60,7 +60,6 @@ h3 { font-size: .9rem; font-weight: 500; }
 .nav-item:hover .nav-icon, .nav-item.active .nav-icon { color: var(--accent); }
 .workspace { grid-column: 2; min-width: 0; }
 .topbar { position: sticky; top: 0; z-index: 20; height: 64px; display: flex; align-items: center; gap: var(--space-4); padding: 0 var(--space-6); }
-.topbar::before { content: ''; position: absolute; z-index: -1; inset: 0; background: var(--header-bg); backdrop-filter: var(--panel-blur); pointer-events: none; }
 .user-menu { margin-left: auto; display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: .8rem; }
 .user-identity { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .user-identity > span:last-child { max-width: 20ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -150,8 +149,8 @@ h3 { font-size: .9rem; font-weight: 500; }
 .button { min-height: var(--control-height); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--border-strong); padding: 7px var(--space-4); background: var(--surface-muted); color: var(--text); cursor: pointer; font-size: .78rem; font-weight: 500; border-color: var(--border); transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }
 .button svg, .menu-button svg { flex: 0 0 auto; }
 .button:hover { border-color: var(--accent); }
-.button.primary { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); box-shadow: var(--button-shadow); }
-.button.primary:hover { background: color-mix(in srgb, var(--accent) 86%, var(--accent-ink)); }
+.button.primary { border-color: var(--primary); background: var(--primary); color: var(--primary-ink); box-shadow: var(--button-shadow); }
+.button.primary:hover { background: color-mix(in srgb, var(--primary) 86%, var(--primary-ink)); }
 .button.ghost { border-color: transparent; color: var(--text-muted); background: transparent; }
 .button.ghost:hover { color: var(--text); background: var(--hover); }
 .button.danger { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); color: var(--danger); }

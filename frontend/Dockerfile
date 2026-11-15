@@ -4,6 +4,7 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
 COPY docs/ /workspace/docs/
+COPY backend/internal/httpapi/appearance-palettes.json /workspace/backend/internal/httpapi/appearance-palettes.json
 RUN npm run build
 
 FROM nginx:1.29-alpine

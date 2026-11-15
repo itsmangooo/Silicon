@@ -51,15 +51,15 @@
   padding: 0;
 }
 .deployment-chart-bars li { display: grid; grid-template-rows: 94px 19px; gap: var(--space-2); }
-.deployment-chart-track { display: flex; align-items: flex-end; overflow: hidden; border-radius: min(var(--radius), 6px); background: var(--input); }
-.deployment-chart-track span { width: 100%; height: var(--bar-fill); border-radius: inherit; background: var(--accent); }
+.deployment-chart-track { display: flex; align-items: flex-end; overflow: hidden; border-radius: min(var(--radius), 6px); background: var(--chart-grid); }
+.deployment-chart-track span { width: 100%; height: var(--bar-fill); border-radius: inherit; background: var(--chart-series); }
 .deployment-chart-bars li:hover .deployment-chart-track { background: var(--hover); }
 .deployment-chart-date { color: var(--text-muted); font-size: .66rem; white-space: nowrap; }
 .deployment-chart-bars li:last-child .deployment-chart-date { justify-self: end; }
 
 .outcome-healthy { --outcome: var(--success); }
 .outcome-failed { --outcome: var(--danger); }
-.outcome-active { --outcome: var(--info); }
+.outcome-active { --outcome: var(--chart-secondary); }
 .outcome-other { --outcome: var(--text-muted); }
 .deployment-outcome-bar { display: flex; gap: 3px; height: 13px; overflow: hidden; border-radius: 999px; margin-bottom: var(--space-4); }
 .deployment-outcome-bar span { min-width: 2px; background: var(--outcome); }

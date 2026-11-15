@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"bytes"
+	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -20,6 +22,17 @@ import (
 
 var themeHex = regexp.MustCompile(`^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$`)
 
+//go:embed appearance-palettes.json
+var appearancePaletteJSON []byte
+
+var appearancePalettes = func() map[string]map[string]map[string]string {
+	var palettes map[string]map[string]map[string]string
+	if err := json.Unmarshal(appearancePaletteJSON, &palettes); err != nil {
+		panic(err)
+	}
+	return palettes
+}()
+
 func validateAppearance(input store.Appearance) error {
 	if !validAppearanceBase(input.AppearanceBase) {
 		return errors.New("Select a supported style, color mode, and density.")
@@ -30,8 +43,17 @@ func validateAppearance(input store.Appearance) error {
 	if (input.Studio.Version != 2 && input.Studio.Version != 3) || len(input.Studio.Presets) > 12 {
 		return errors.New("Use a supported Theme Studio version with up to 12 saved presets.")
 	}
-	if err := validateTheme(input.Studio.Theme, input.Mode); err != nil {
+	if err := validateTheme(input.Studio.Theme, input.Style, input.Mode); err != nil {
 		return err
+	}
+	for style, theme := range input.Studio.Themes {
+		if input.Studio.Version != 3 || style == input.Style || !validAppearanceBase(store.AppearanceBase{Style: style, Mode: input.Mode, Density: input.Density}) {
+			return errors.New("Saved style overrides must belong to another supported built-in style.")
+		}
+		// Overrides for inactive styles are editable in either mode and are checked when applied.
+		if err := validateTheme(theme, style, ""); err != nil {
+			return fmt.Errorf("Style %q: %w", style, err)
+		}
 	}
 	names := make(map[string]bool, len(input.Studio.Presets))
 	for _, preset := range input.Studio.Presets {
@@ -43,7 +65,7 @@ func validateAppearance(input store.Appearance) error {
 		if !validAppearanceBase(preset.AppearanceBase) {
 			return errors.New("A saved preset uses an unsupported style, mode, or density.")
 		}
-		if err := validateTheme(preset.Theme, preset.Mode); err != nil {
+		if err := validateTheme(preset.Theme, preset.Style, preset.Mode); err != nil {
 			return fmt.Errorf("Preset %q: %w", preset.Name, err)
 		}
 	}
@@ -51,11 +73,11 @@ func validateAppearance(input store.Appearance) error {
 }
 
 func validAppearanceBase(input store.AppearanceBase) bool {
-	return oneOf(input.Style, "glass", "playful", "obsidian", "soft", "neumorphism", "clay", "bento", "flat") &&
+	return appearancePalettes[input.Style] != nil &&
 		oneOf(input.Mode, "dark", "light", "system") && oneOf(input.Density, "comfortable", "compact")
 }
 
-func validateTheme(theme store.Theme, mode string) error {
+func validateTheme(theme store.Theme, style, mode string) error {
 	if !oneOf(theme.Background, "", "default", "solid", "gradient", "radial", "mesh", "animated-gradient", "blobs", "image") ||
 		!oneOf(theme.Placement, "", "application", "main", "sidebar", "dashboard") ||
 		!oneOf(theme.Fit, "", "cover", "contain") || !oneOf(theme.Position, "", "center", "top", "bottom", "left", "right") ||
@@ -63,7 +85,7 @@ func validateTheme(theme store.Theme, mode string) error {
 		return errors.New("Select supported background and motion options.")
 	}
 	for key, value := range theme.Colors {
-		if !oneOf(key, "accent", "background", "secondary", "sidebar", "surface", "text", "muted", "border", "header", "panel", "input", "button", "dialog", "success", "warning", "danger", "info", "blob", "glassTint", "backgroundStart", "backgroundEnd") || !themeHex.MatchString(value) {
+		if !oneOf(key, "accent", "background", "secondary", "sidebar", "surface", "text", "muted", "border", "header", "panel", "input", "primary", "button", "textSecondary", "dialog", "success", "warning", "danger", "info", "blob", "glassTint", "backgroundStart", "backgroundEnd") || !themeHex.MatchString(value) {
 			return errors.New("Choose supported colors in #RRGGBB or #RRGGBBAA format.")
 		}
 	}
@@ -75,19 +97,44 @@ func validateTheme(theme store.Theme, mode string) error {
 	if err := validateThemeSurfaces(theme); err != nil {
 		return err
 	}
-	if mode != "light" && !themeContrast(theme.Colors, false) || mode != "dark" && !themeContrast(theme.Colors, true) {
-		return errors.New("Increase contrast between text, muted text, links, and backgrounds, or select a matching color mode.")
+	if mode != "" {
+		for _, scheme := range []string{"dark", "light"} {
+			if mode != scheme && mode != "system" {
+				continue
+			}
+			if !themeContrast(theme.Colors, appearancePalettes[style][scheme], false) &&
+				!themeContrast(theme.Colors, legacyThemePalette(scheme), true) {
+				return errors.New("Increase contrast between text, muted text, links, and backgrounds, or select a matching color mode.")
+			}
+		}
 	}
 	return nil
 }
 
-func themeContrast(colors map[string]string, light bool) bool {
-	base := map[string]string{"background": "#101114", "secondary": "#202227", "sidebar": "#131417", "surface": "#191B1F", "text": "#E7E8EA", "muted": "#A7AAB1", "accent": "#A1AEC7"}
-	if light {
-		base = map[string]string{"background": "#F0F1F3", "secondary": "#E8E9ED", "sidebar": "#F8F8F9", "surface": "#FFFFFF", "text": "#202228", "muted": "#555B66", "accent": "#475771"}
+// Keep previously valid presets saveable after changing the built-in defaults.
+// Studio previews and new edits use the current scheme.
+func legacyThemePalette(mode string) map[string]string {
+	if mode == "light" {
+		return map[string]string{"background": "#F0F1F3", "secondary": "#E8E9ED", "sidebar": "#F8F8F9", "surface": "#FFFFFF", "text": "#202228", "muted": "#555B66", "accent": "#475771"}
 	}
-	for _, foreground := range []string{"text", "muted", "accent"} {
-		for _, background := range []string{"background", "secondary", "sidebar", "surface"} {
+	return map[string]string{"background": "#101114", "secondary": "#202227", "sidebar": "#131417", "surface": "#191B1F", "text": "#E7E8EA", "muted": "#A7AAB1", "accent": "#A1AEC7"}
+}
+
+func themeContrast(colors, base map[string]string, legacy bool) bool {
+	foregrounds := []string{"text", "muted", "accent"}
+	backgrounds := []string{"background", "secondary", "sidebar", "surface"}
+	if !legacy {
+		foregrounds = append(foregrounds, "textSecondary")
+		backgrounds = append(backgrounds, "header", "panel", "input", "button", "dialog")
+	} else {
+		for _, key := range []string{"textSecondary", "header", "panel", "input", "button", "dialog"} {
+			if colors[key] != "" {
+				return false
+			}
+		}
+	}
+	for _, foreground := range foregrounds {
+		for _, background := range backgrounds {
 			if colors[foreground] == "" && colors[background] == "" {
 				continue
 			}

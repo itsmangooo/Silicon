@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { borders, materials, shadows, surfaceColors, surfaceGroups } from '../lib/surfaces.js'
-import { colorDefaults } from '../lib/theme.js'
 import { Field } from './ui.jsx'
 
 export function SelectOption({ label, value, choices, change }) {
@@ -11,10 +10,10 @@ export function SelectOption({ label, value, choices, change }) {
 
 const fillDefaults = { sidebar: 'sidebar', header: 'header', card: 'surface', panel: 'panel', input: 'input', button: 'button', dialog: 'dialog' }
 
-export function SurfaceEditor({ surfaces = {}, update, mode, renderColor }) {
+export function SurfaceEditor({ surfaces = {}, update, palette, renderColor }) {
   const [group, setGroup] = useState('sidebar')
   const own = surfaces[group] || {}
-  const fallback = colorDefaults[mode][fillDefaults[group] || 'surface']
+  const fallback = palette[fillDefaults[group] || 'surface']
   function patch(key, value) {
     const next = { ...own }
     if (value === '' || value === undefined) delete next[key]
@@ -31,11 +30,11 @@ export function SurfaceEditor({ surfaces = {}, update, mode, renderColor }) {
     </div>
     <p className="muted studio-hint">An explicit opacity replaces the color’s alpha. Leave it blank to use the color’s alpha or the material default.</p>
     <SelectOption label="Border" value={own.border || ''} choices={borders} change={(value) => patch('border', value)} />
-    {renderColor('Border color', own.borderColor, colorDefaults[mode].border, (value) => patch('borderColor', value), { group, key: 'borderColor' })}
+    {renderColor('Border color', own.borderColor, palette.border, (value) => patch('borderColor', value), { group, key: 'borderColor' })}
     <SelectOption label="Shadow" value={own.shadow || ''} choices={shadows} change={(value) => patch('shadow', value)} />
     {group === 'table' && <SelectOption label="Table density" value={own.density || ''} choices={{ '': 'Inherit', compact: 'Compact', comfortable: 'Comfortable' }} change={(value) => patch('density', value)} />}
     {group === 'chart' && <SelectOption label="Tooltip material" value={own.tooltipMaterial || ''} choices={{ '': 'Inherit', solid: 'Solid', glass: 'Frosted glass' }} change={(value) => patch('tooltipMaterial', value)} />}
-    {Object.entries(surfaceColors[group] || {}).map(([key, label]) => renderColor(label, own.colors?.[key], colorDefaults[mode][key === 'text' ? 'text' : 'accent'], (value) => {
+    {Object.entries(surfaceColors[group] || {}).map(([key, label]) => renderColor(label, own.colors?.[key], palette[key === 'text' ? 'text' : 'accent'], (value) => {
       const colors = { ...own.colors }
       if (value) colors[key] = value
       else delete colors[key]

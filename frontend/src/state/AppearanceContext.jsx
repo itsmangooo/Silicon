@@ -28,7 +28,9 @@ function readAppearance() {
       density: saved?.density === 'compact' ? saved.density : defaults.density,
     }
     if ([2, 3].includes(saved?.studio?.version)) {
-      appearance.studio = { version: 3, theme: readStoredTheme(saved.studio.theme), presets: (saved.studio.presets || []).map((preset) => ({
+      appearance.studio = { version: 3, theme: readStoredTheme(saved.studio.theme),
+        ...(saved.studio.themes && { themes: Object.fromEntries(styles.filter(([id]) => Object.hasOwn(saved.studio.themes, id)).map(([id]) => [id, readStoredTheme(saved.studio.themes[id])])) }),
+        presets: (saved.studio.presets || []).map((preset) => ({
         ...preset, style: supportedStyle(preset.style), theme: readStoredTheme(preset.theme),
       })) }
     }
@@ -93,7 +95,7 @@ export function AppearanceProvider({ children, accountId, loadAccount = false })
   useLayoutEffect(() => {
     const root = document.documentElement
     Object.assign(root.dataset, { style, mode: resolvedMode, density, motion, sidebar: theme?.layout?.sidebar || '', width: theme?.layout?.width || '', dashboard: theme?.layout?.dashboard || '' })
-    const properties = themeProperties(theme, resolvedMode)
+    const properties = themeProperties(theme, resolvedMode, style)
     for (const [key, value] of Object.entries(properties)) root.style.setProperty(key, value)
     if (!loadAccount) {
       try {

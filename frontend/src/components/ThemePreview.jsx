@@ -12,12 +12,12 @@ export function ThemePreview({ style, mode, density, theme, motion, asset, page 
   const isDashboard = page === 'dashboard'
   return <div className={`theme-preview${mini ? ' theme-preview-mini' : ' studio-live'}`} aria-hidden={mini || undefined}
     data-preview-id={id} data-style={style} data-mode={mode} data-density={density} data-device={device}
-    data-sidebar={theme?.layout?.sidebar} data-width={theme?.layout?.width} data-dashboard={theme?.layout?.dashboard} data-motion={motion} style={theme ? themeProperties(theme, mode) : undefined}>
+    data-sidebar={theme?.layout?.sidebar} data-width={theme?.layout?.width} data-dashboard={theme?.layout?.dashboard} data-motion={motion} style={themeProperties(theme, mode, style)}>
     {!mini && <SurfaceStyles theme={theme} previewId={id} />}
     {!mini && <BackgroundLayer style={style} theme={theme} motion={motion} asset={asset} preview dashboard={isDashboard} />}
-    <div className={mini ? 'preview-nav' : 'sidebar preview-nav'}><SquaresFourIcon size={16} /><span><CheckIcon size={12} />{!mini && 'Overview'}</span><span><CubeIcon size={12} />{!mini && 'Apps'}</span><span><GearIcon size={12} />{!mini && 'Settings'}</span></div>
+    <div className={mini ? 'app-sidebar preview-nav' : 'app-sidebar sidebar preview-nav'}><SquaresFourIcon size={16} /><span><CheckIcon size={12} />{!mini && 'Overview'}</span><span><CubeIcon size={12} />{!mini && 'Apps'}</span><span><GearIcon size={12} />{!mini && 'Settings'}</span></div>
     <div className={mini ? 'preview-workspace' : 'workspace preview-workspace'}>
-      <div className={mini ? 'preview-heading' : 'topbar preview-heading'}><strong>{({ dashboard: 'Dashboard', application: 'Application', form: 'Configuration', table: 'Deployments', dialog: 'Runtime' })[page]}</strong><span>Production</span></div>
+      <div className={mini ? 'app-header preview-heading' : 'app-header topbar preview-heading'}><strong>{({ dashboard: 'Dashboard', application: 'Application', form: 'Configuration', table: 'Deployments', dialog: 'Runtime' })[page]}</strong><span>Production</span></div>
       {isDashboard && <div className="preview-grid">
         <div className="preview-tile" data-surface="widget-activity"><small>{mini ? 'Deploys' : 'Deployments'}</small><strong>12</strong><div className="preview-bars deployment-chart" aria-hidden="true">
           {[38, 65, 50, 94, 74].map((fill) => <span className="deployment-chart-track" key={fill}><span style={{ '--bar-fill': fill + '%' }} /></span>)}

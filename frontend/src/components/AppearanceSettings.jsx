@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { colorDefaults, colorError, colorFields, defaults, effectDefaults, emptyStudio, styles } from '../lib/theme.js'
+import { themePalette, colorError, colorFields, defaults, effectDefaults, emptyStudio, styles } from '../lib/theme.js'
 import { importTheme } from '../lib/theme-file.js'
 import { surfaceContrastWarning } from '../lib/surfaces.js'
 import { useAppearance } from '../state/AppearanceContext.jsx'
@@ -12,7 +12,7 @@ const tabs = ['Presets', 'Colors', 'Surfaces', 'Backgrounds', 'Effects', 'Layout
 const backgrounds = { default: 'Theme default', solid: 'Solid color', gradient: 'Linear gradient', radial: 'Radial gradient', mesh: 'Mesh gradient', 'animated-gradient': 'Animated gradient', blobs: 'Blurred blobs', image: 'Image' }
 const places = { application: 'Entire application', main: 'Main content', sidebar: 'Sidebar', dashboard: 'Dashboard' }
 const motionOptions = { system: 'Follow System', full: 'Full Motion', reduced: 'Reduced Motion', none: 'No Motion' }
-const colorGroups = { 'Page and structure': ['background','secondary','sidebar','header','surface','panel','input','button','dialog','border'], 'Text and feedback': ['accent','text','muted','success','warning','danger','info'] }
+const colorGroups = { 'Page and structure': ['background','secondary','sidebar','header','surface','panel','input','primary','button','dialog','border'], 'Text and feedback': ['accent','text','textSecondary','muted','success','warning','danger','info'] }
 
 function replaceEntry(object, key, value) {
   const result = { ...object }
@@ -48,15 +48,22 @@ export function AppearanceSettings() {
   const [assetError, setAssetError] = useState('')
   const [clearAsset, setClearAsset] = useState(false)
   const [saving, setSaving] = useState(false)
-  const view = draft || { ...appearance, theme: stored.theme, presets: stored.presets || [] }
+  const view = draft || { ...appearance, theme: stored.theme, themes: stored.themes || {}, presets: stored.presets || [] }
   const update = (key, value) => setDraft({ ...view, [key]: value })
   const updateTheme = (key, value) => update('theme', { ...view.theme, [key]: value })
+  function selectTheme(style, overrides) {
+    setHoverColor(null)
+    const { [style]: saved = {}, ...themes } = view.themes
+    if (style !== view.style && Object.keys(view.theme).length) themes[view.style] = view.theme
+    setDraft({ ...view, ...overrides, style, themes, theme: overrides?.theme ?? saved })
+  }
+
   const { theme } = view
   const colors = theme.colors || {}
   const effects = { ...effectDefaults, ...theme.effects }
   const mode = view.mode === 'system' ? (systemLight ? 'light' : 'dark') : view.mode
   const motion = theme.motion === 'none' ? 'none' : systemReduced || theme.motion === 'reduced' ? 'reduced' : 'full'
-  const invalid = colorError(colors, view.mode)
+  const invalid = colorError(colors, view.mode, view.style)
   let previewTheme = theme
   if (hoverColor?.group) {
     const { group, key, nested, value } = hoverColor
@@ -64,7 +71,8 @@ export function AppearanceSettings() {
     const edit = nested ? { ...surface, colors: { ...surface.colors, [key]: value } } : { ...surface, [key]: value }
     previewTheme = { ...theme, surfaces: { ...theme.surfaces, [group]: edit } }
   } else if (hoverColor) previewTheme = { ...theme, colors: { ...colors, [hoverColor.key]: hoverColor.value } }
-  const surfaceWarning = surfaceContrastWarning(previewTheme, previewMode || mode, colorDefaults[previewMode || mode])
+  const surfaceWarning = surfaceContrastWarning(previewTheme, previewMode || mode, themePalette(view.style, previewMode || mode))
+  const palette = themePalette(view.style, mode)
   const background = theme.background || 'default'
   const activePreset = view.presets.find((item) => item.name === selected)
 
@@ -89,12 +97,12 @@ export function AppearanceSettings() {
 
   async function apply() {
     setSaving(true)
-    const { style, mode, density, theme, presets } = view
+    const { style, mode, density, theme, themes, presets } = view
     try {
       let backgroundImage
       if (file) backgroundImage = await readBackground(file)
       else if (clearAsset) backgroundImage = ''
-      if (await saveAppearance({ style, mode, density, studio: { version: 3, theme, presets } }, backgroundImage)) cancel()
+      if (await saveAppearance({ style, mode, density, studio: { version: 3, theme, ...(Object.keys(themes).length && { themes }), presets } }, backgroundImage)) cancel()
     } catch (failure) {
       setAssetError(failure.message)
     } finally {
@@ -139,7 +147,8 @@ export function AppearanceSettings() {
     setPresetError('')
     try {
       if (imported.size > 65536) throw Error('Choose a theme JSON file up to 64 KiB.')
-      setDraft({ ...view, ...importTheme(await imported.text()) })
+      const importedTheme = importTheme(await imported.text())
+      selectTheme(importedTheme.style, importedTheme)
     } catch (failure) {
       setPresetError(failure instanceof SyntaxError ? 'This file does not contain valid JSON.' : failure.message)
     }
@@ -152,7 +161,7 @@ export function AppearanceSettings() {
   const color = (key, label, fallback) => renderColor(label, colors[key], fallback, (value) => updateTheme('colors', replaceEntry(colors, key, value)), { key })
 
   return <Section title="Appearance" description={`Applied style · ${styles.find(([key]) => key === appearance.style)?.[1]}`}
-    actions={<button className="button secondary" onClick={() => setDraft({ ...defaults, style: view.style, theme: {}, presets: view.presets })}>Reset to Theme Defaults</button>}>
+    actions={<button className="button secondary" onClick={() => update('theme', {})}>Reset Current Theme to Defaults</button>}>
     <ErrorNotice error={error} />
     <nav className="studio-tabs" aria-label="Appearance customization">
       {tabs.map((item) => <button className={`button ${tab === item ? 'secondary selected' : 'ghost'}`} aria-current={tab === item ? 'true' : undefined} key={item} onClick={() => setTab(item)}>{item}</button>)}
@@ -161,28 +170,28 @@ export function AppearanceSettings() {
       <div className="studio-controls">
         {tab === 'Presets' && <fieldset className="appearance-fieldset"><legend>Built-in styles</legend>
           <div className="studio-gallery">{styles.map(([id, label, description]) => <label className="studio-style" key={id}>
-            <input type="radio" name="ui-style" value={id} aria-label={label} checked={view.style === id} onChange={() => update('style', id)} />
+            <input type="radio" name="ui-style" value={id} aria-label={label} checked={view.style === id} onChange={() => selectTheme(id)} />
             <ThemePreview style={id} mode={mode} density={view.density} mini />
             <span><strong>{label}</strong><small>{description}</small></span>
           </label>)}</div>
         </fieldset>}
         {tab === 'Colors' && <>
           {Object.entries(colorGroups).map(([group, keys]) => <fieldset key={group}><legend>{group}</legend><div className="studio-color-grid">
-            {keys.map((key) => color(key, colorFields[key][0], colorDefaults[mode][key]))}
+            {keys.map((key) => color(key, colorFields[key][0], palette[key]))}
           </div></fieldset>)}
           {!!invalid && <button className="button secondary" onClick={() => {
             const safe = { ...colors }
-            for (const key of ['accent','text','muted','background','sidebar','secondary','surface']) delete safe[key]
+            for (const key of ['accent','text','textSecondary','muted','background','sidebar','secondary','surface','header','panel','input','button','dialog']) delete safe[key]
             updateTheme('colors', safe)
           }}>Restore accessible palette defaults</button>}
         </>}
-        {tab === 'Surfaces' && <SurfaceEditor surfaces={theme.surfaces} mode={mode} renderColor={renderColor} update={(key, value) => updateTheme('surfaces', replaceEntry(theme.surfaces, key, Object.keys(value).length ? value : undefined))} />}
+        {tab === 'Surfaces' && <SurfaceEditor surfaces={theme.surfaces} palette={palette} renderColor={renderColor} update={(key, value) => updateTheme('surfaces', replaceEntry(theme.surfaces, key, Object.keys(value).length ? value : undefined))} />}
         {tab === 'Backgrounds' && <fieldset><legend>Background</legend>
           <Options label="Background type" value={background} choices={backgrounds} change={(value) => updateTheme('background', value)} />
           {background !== 'default' && <Options label="Placement" value={theme.placement || 'application'} choices={places} change={(value) => updateTheme('placement', value)} />}
           {['solid','gradient','radial','mesh','animated-gradient','blobs'].includes(background) && <>
-            {color('backgroundStart', 'Background color', '#6584a9')}
-            {background !== 'solid' && color('backgroundEnd', 'Second color', '#6d5e87')}
+            {color('backgroundStart', 'Background color', colors.blob || palette.blob)}
+            {background !== 'solid' && color('backgroundEnd', 'Second color', palette.backgroundEnd)}
             {slider('colorIntensity', 'Color intensity')}
           </>}
           {background === 'image' && <>
@@ -206,9 +215,9 @@ export function AppearanceSettings() {
             {(view.style === 'glass' || background === 'blobs') && slider('blobCount', 'Blob count', 1, 6)}
           </fieldset>
           {view.style === 'glass' && <fieldset><legend>Glass material</legend>
-            {color('glassTint', 'Glass tint', colorDefaults[mode].surface)}{slider('glassOpacity', 'Glass opacity')}{slider('glassBlur', 'Blur strength')}
+            {color('glassTint', 'Glass tint', palette.panel)}{slider('glassOpacity', 'Glass opacity')}{slider('glassBlur', 'Blur strength')}
             {slider('glassSaturation', 'Saturation')}{slider('glassReflection', 'Reflection intensity')}
-            {toggle('glassAnimation', 'Animate glass blobs')}{color('blob', 'Glass blob color', '#6584a9')}
+            {toggle('glassAnimation', 'Animate glass blobs')}{color('blob', 'Glass blob color', palette.blob)}
             {slider('glassSpeed', 'Glass motion speed')}{slider('glassBlobOpacity', 'Glass blob opacity')}{slider('blobSize', 'Blob size')}
           </fieldset>}
         </>}
@@ -223,8 +232,7 @@ export function AppearanceSettings() {
           <Options label="Custom preset" value={selected} choices={Object.fromEntries([['', 'Choose a preset'], ...view.presets.map((item) => [item.name, item.name])])} change={setSelected} />
           <div className="row-actions">
             <button className="button secondary" disabled={!activePreset} onClick={() => {
-              const { style, mode, density, theme } = activePreset
-              setDraft({ ...view, style, mode, density, theme })
+              selectTheme(activePreset.style, { mode: activePreset.mode, density: activePreset.density, theme: activePreset.theme })
             }}>Preview preset</button>
             <button className="button ghost" disabled={!activePreset} onClick={() => {
               update('presets', view.presets.map((item) => item.name === selected ? { ...defaults, style: item.style, name: item.name, theme: {} } : item))

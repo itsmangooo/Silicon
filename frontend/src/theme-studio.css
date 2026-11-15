@@ -12,11 +12,12 @@
 .studio-apply { justify-content: flex-end; margin-top: var(--form-gap); }
 .studio-hint { margin: 0; font-size: .76rem; }
 .studio-live { min-height: 326px; grid-template-columns: minmax(0, 27%) minmax(0, 1fr); }
-.studio-live .sidebar { position: relative; inset: auto; height: auto; width: auto; margin: 0; min-width: 0; padding: 13px 6px; transform: none; z-index: 1; }
-.studio-live .workspace { min-width: 0; padding: 11px; }
-.studio-live .preview-heading { position: relative; inset: auto; height: 36px; padding-inline: 8px; margin: 0 0 12px; align-items: center; font-size: .83rem; }
+.studio-live .sidebar { position: relative; inset: auto; height: auto; width: auto; margin: var(--sidebar-edge) 0 var(--sidebar-edge) var(--sidebar-edge); min-width: 0; padding: 13px 6px; transform: none; visibility: visible; z-index: 1; }
+.studio-live .workspace { min-width: 0; padding: 0 0 10px; }
+.studio-live .preview-heading { position: relative; inset: auto; height: 36px; padding-inline: 8px; margin: var(--header-edge) var(--header-edge) 12px 0; align-items: center; font-size: .83rem; }
 .studio-live .preview-heading span { font-size: .68rem; }
-.studio-live .section { min-width: 0; margin-top: 12px; padding: 10px; }
+.studio-live .section { min-width: 0; margin: 12px 8px 0; padding: 10px; }
+.studio-live .preview-grid { padding-inline: 8px; }
 .studio-live .section-header h2 { font-size: .85rem; }
 .studio-live .section-header { padding-bottom: 4px; }
 .studio-live .section-body { padding-top: 4px; }
@@ -30,22 +31,24 @@
 .studio-live .row-actions { flex-wrap: wrap; }
 .studio-live[data-device='mobile'] { width: min(100%, 328px); margin-inline: auto; grid-template-columns: 1fr; }
 .studio-live[data-device='mobile'] :is(.workspace,.sidebar) { grid-column: 1; }
-.studio-live[data-device='mobile'] .sidebar { display: flex; flex-direction: row; align-items: center; justify-content: space-around; gap: 3px; }
+.studio-live[data-device='mobile'] .sidebar { margin-inline: var(--sidebar-edge); display: flex; flex-direction: row; align-items: center; justify-content: space-around; gap: 3px; }
 .studio-live[data-device='mobile'] .sidebar > span { white-space: nowrap; font-size: .71rem; }
 .studio-live[data-sidebar='collapsed'][data-device='desktop'] { grid-template-columns: 36px minmax(0,1fr); }
 .studio-live[data-sidebar='collapsed'][data-device='desktop'] .sidebar { font-size: 0; align-items: center; }
 .studio-live[data-sidebar='compact'][data-device='desktop'] { grid-template-columns: 20% minmax(0,1fr); }
-.studio-live[data-sidebar='floating'][data-device='desktop'] .sidebar, .studio-live[data-style='glass'][data-device='desktop'] .sidebar { margin: 6px; border-radius: var(--radius); }
+
 .studio-live[data-width='comfortable'] .workspace { padding-inline: clamp(12px, 3vw, 30px); }
 .studio-live[data-width='full'] .workspace { padding-inline: 7px; }
 .studio-live[data-dashboard='modular'] .preview-grid { grid-template-columns: 2fr minmax(0,1fr); }
 .studio-live[data-dashboard='standard'] .preview-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .studio-live[data-density='compact'] .section { padding: 6px; }
 .theme-preview-mini { grid-template-columns: 24px minmax(0,1fr); }
-.theme-preview-mini .preview-nav { align-items: center; padding-inline: 2px; }
+.theme-preview-mini .preview-nav { align-items: center; padding-inline: 2px; margin: var(--sidebar-edge) 0 var(--sidebar-edge) var(--sidebar-edge); }
+.theme-preview-mini .preview-heading { padding: 3px 4px; margin: var(--header-edge) 0 4px; }
+.theme-preview-mini { --shell-edge-limit: 3px; }
+.studio-live { --shell-edge-limit: 6px; column-gap: var(--sidebar-gap); }
 .theme-preview-mini .preview-nav > span { width: 18px; height: 18px; justify-content: center; padding: 0; }
 .theme-preview-mini .preview-nav > span svg { display: block; flex: none; }
-.theme-preview-mini[data-style='glass'] .preview-nav { margin-inline-start: 2px; }
 .theme-preview-mini .preview-tile > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .theme-preview-mini .preview-tile .status { max-width: 100%; overflow: hidden; white-space: nowrap; }
 .theme-preview .preview-bars .deployment-chart-track { flex: 1; height: 100%; }

@@ -3,7 +3,7 @@ import { composite, hexColor, luminance, parseHex } from './color.js'
 export const surfaceGroups = {
   sidebar: ['Sidebar', '.sidebar', 'var(--sidebar-bg)'],
   header: ['Top navigation', '.topbar', 'var(--header-bg)'],
-  panel: ['Panels and sections', '.section', 'var(--section-bg, var(--surface))'],
+  panel: ['Panels and sections', '.section', 'var(--panel-color, var(--surface))'],
   card: ['Cards', '[data-surface="card"]', 'var(--surface)'],
   widget: ['Dashboard widgets', '[data-surface="widget"], [data-surface^="widget-"]', 'var(--widget-bg)'],
   input: ['Inputs', 'input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]), select, textarea', 'var(--input)'],
@@ -68,8 +68,6 @@ export function surfaceRules(surfaces = {}, prefix = 'html', live = false) {
     if (border === 'none') declarations.push('border:0')
     else if (border === 'thin' || parseHex(borderColor)) declarations.push(`border:1px solid ${parseHex(borderColor) ? borderColor : 'var(--border)'}`)
     if (Object.hasOwn(shadowStyles, shadow) || Object.hasOwn(materialShadows, material)) declarations.push('box-shadow:' + (shadowStyles[shadow] || materialShadows[material]))
-    // The sticky header paints through a pseudo-element. Keep that layer clear under an override.
-    if (key === 'header' && declarations.some((item) => item.startsWith('background:'))) rules.push(scoped(selector) + '::before{background:none;backdrop-filter:none}')
     rules.push(rule(selector, declarations))
     const cssColor = (field) => parseHex(colors[field]) ? colors[field] : null
     const paint = (target, property, field) => {

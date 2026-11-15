@@ -1,5 +1,6 @@
+import { styles, themePalette, themeProperties } from './theme.js'
 import { expect, it } from 'vitest'
-import { formatColorEntry, hexColor, parseColorEntry, parseHex } from './color.js'
+import { formatColorEntry, hexColor, luminance, parseColorEntry, parseHex } from './color.js'
 import { importTheme } from './theme-file.js'
 import { surfaceRules } from './surfaces.js'
 
@@ -29,4 +30,27 @@ it('validates imports and applies opacity to surface fills only', () => {
   expect(rules).not.toContain(';opacity:')
   file.theme.surfaces.sidebar.color = 'url(example.test)'
   expect(() => importTheme(JSON.stringify(file))).toThrow('invalid surface control')
+})
+
+it('provides distinct readable defaults in both schemes and applies only local overrides', () => {
+  for (const mode of ['dark','light']) {
+    const defaults = styles.map(([id]) => themePalette(id, mode))
+    expect(new Set(defaults.map((item) => item.background)).size).toBe(8)
+    for (const [style] of styles) {
+      const palette = themePalette(style, mode)
+      const ratio = (first, second) => {
+        const values = [first, second].map((hex) => luminance(parseHex(hex))).sort((a,b) => a-b)
+        return (values[1] + .05) / (values[0] + .05)
+      }
+      for (const role of ['background','secondary','sidebar','header','surface','panel','input','button','dialog','selection','hover']) {
+        for (const ink of ['text','textSecondary','muted','accent']) {
+          expect(ratio(palette[role], palette[ink]), style + ' ' + mode + ' ' + role + '/' + ink).toBeGreaterThanOrEqual(4.5)
+        }
+      }
+      const rendered = themeProperties({}, mode, style)
+      expect(ratio(rendered['--primary'], rendered['--primary-ink'])).toBeGreaterThanOrEqual(4.5)
+      expect(themeProperties({colors:{primary:'#8896B380'}}, mode, style)['--primary']).toBe('#8896B380')
+      expect(rendered['--primary']).toBe(palette.primary)
+    }
+  }
 })

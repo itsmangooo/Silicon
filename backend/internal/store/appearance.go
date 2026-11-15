@@ -12,9 +12,10 @@ type AppearanceBase struct {
 }
 
 type ThemeStudio struct {
-	Version int           `json:"version"`
-	Theme   Theme         `json:"theme"`
-	Presets []ThemePreset `json:"presets"`
+	Version int              `json:"version"`
+	Theme   Theme            `json:"theme"`
+	Themes  map[string]Theme `json:"themes,omitempty"`
+	Presets []ThemePreset    `json:"presets"`
 }
 
 type ThemePreset struct {

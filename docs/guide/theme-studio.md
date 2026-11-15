@@ -5,7 +5,7 @@ Open the menu beside your name and select **Theme Studio**. You can also open **
 ## Choose and preview a style
 
 1. Open **Presets** and choose a style. Try Glassmorphism for floating frosted surfaces, Flat UI for a compact solid layout, or Bento Grids for an asymmetric dashboard. Soft UI, Playful, Obsidian, Neumorphism, and Claymorphism are also available.
-2. Use **Preview page** to switch between a dashboard, application, form, table, and dialog. Try **Preview device** and **Preview mode** to see the same draft on mobile or in the other color scheme. The preview contains example data.
+2. Use **Preview page** to switch between a dashboard, application, form, table, and dialog. Try **Preview device** and **Preview mode** to see the same draft on mobile or in the other color scheme. The preview contains example data and uses the selected style’s light or dark palette and navigation materials. Switching styles loads that style’s saved overrides.
 3. Under **Layout**, choose light, dark, or system mode, then set density, sidebar treatment, content width, or dashboard layout. **Apply appearance** saves the draft. **Cancel preview** discards it.
 
 ![Eight styles and the live preview in the Silicon Theme Studio](../previews/settings-appearance.png)
@@ -38,4 +38,4 @@ Open the menu beside your name and select **Theme Studio**. You can also open **
 1. Open **My Themes**, enter a name, and choose **Save custom preset**. Select **Apply appearance** to save it. You can store up to 12 presets.
 2. To reuse a preset, select it and choose **Preview preset**, then **Apply appearance**. This tab also lets you rename, duplicate, reset, and delete a preset. Those changes are saved when you apply.
 3. Use **Export theme** to download a versioned JSON file for the selected preset or current draft. To reuse it, choose **Import theme** and review the preview before applying. Your private account image is stored separately from the JSON.
-4. **Reset to Theme Defaults** clears the current customizations in the draft and keeps saved presets. Apply to make the reset permanent.
+4. **Reset Current Theme to Defaults** clears overrides for the selected built-in style. It keeps your other styles, saved presets, color mode, and density. Apply to make the reset permanent.

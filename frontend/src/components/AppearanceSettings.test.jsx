@@ -108,3 +108,34 @@ it('previews alpha within the Studio and applies an RGBA color only on confirmat
   apply()
   await waitFor(() => expect(JSON.parse(localStorage.getItem('silicon.appearance')).studio.theme.colors.panel).toBe('#141E2880'))
 })
+
+it('keeps inactive style overrides and resets only the selected theme', async () => {
+  const preset = { name: 'Frost', style: 'glass', mode: 'light', density: 'compact', theme: {background: 'mesh'} }
+  localStorage.setItem('silicon.appearance', JSON.stringify({
+    style: 'clay', mode: 'light', density: 'compact',
+    studio: { version: 3, theme: { colors: { primary: '#8b496a80' } }, presets: [preset] },
+  }))
+  const { container, unmount } = renderSettings()
+  const primary = (root) => root.querySelector('.studio-live').style.getPropertyValue('--primary')
+  choose('Obsidian')
+  expect(primary(container)).toBe('#2A2A2D')
+  expect(document.documentElement.style.getPropertyValue('--primary')).toBe('#8b496a80')
+  apply()
+  await waitFor(() => expect(document.documentElement.dataset.style).toBe('obsidian'))
+  unmount()
+  const restarted = renderSettings()
+  choose('Claymorphism')
+  expect(primary(restarted.container)).toBe('#8b496a80')
+  fireEvent.click(screen.getByRole('button', {name: 'Reset Current Theme to Defaults'}))
+  expect(primary(restarted.container)).toBe('#813F60')
+  fireEvent.click(screen.getByRole('button', {name: 'Cancel preview'}))
+  choose('Claymorphism')
+  expect(primary(restarted.container)).toBe('#8b496a80')
+  fireEvent.click(screen.getByRole('button', {name: 'Reset Current Theme to Defaults'}))
+  apply()
+  await waitFor(() => {
+    const saved = JSON.parse(localStorage.getItem('silicon.appearance'))
+    expect(saved).toMatchObject({style: 'clay', mode: 'light', density: 'compact', studio: {theme: {}, presets: [preset]}})
+    expect(saved.studio.themes?.clay).toBeUndefined()
+  })
+})
