@@ -21,9 +21,9 @@ Open the menu beside your name and select **Theme Studio**. You can also open **
 
 ## Customize a surface
 
-1. Open **Surfaces** and select a component such as **Sidebar**, **Cards**, or **Panels and sections**. Each can have its own fill, material, opacity, blur, border, radius, and shadow. Inputs, buttons, tables, and charts have additional controls.
+1. Open **Surfaces** and select a component such as **Sidebar**, **Cards**, or **Panels and sections**. Each can have its own fill, material, opacity, blur, border, radius, and shadow. Inputs, buttons, tables, and charts have additional controls. Selecting a component opens a preview that contains it. Picking a border color turns the border on.
 2. For a frosted sidebar, choose **Frosted glass**, set **Opacity** to 40%, and set **Backdrop blur** to 20 px. To make application cards lighter, select **Cards**, use the same material, and try 20% opacity and 12 px blur. Set **Inputs** to **Solid** if you want an opaque field.
-3. A surface opacity overrides the alpha in its fill. Leave opacity empty to use the fill’s alpha or the material default. Text and icons stay opaque. A named widget override takes precedence over the shared dashboard widget setting. Use **Reset this surface** to clear the selected override.
+3. A surface opacity overrides the alpha in its fill. Leave opacity empty to use the fill’s alpha or the material default. Text and icons stay opaque. Use a translucent fill to see backdrop blur. A named widget override takes precedence over the shared dashboard widget setting. Use **Reset this surface** to clear the selected override.
 
 ![Independent sidebar material and opacity settings](../previews/theme-studio-surfaces.png)
 

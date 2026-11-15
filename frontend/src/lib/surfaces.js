@@ -7,8 +7,8 @@ export const surfaceGroups = {
   card: ['Cards', '[data-surface="card"]', 'var(--surface)'],
   widget: ['Dashboard widgets', '[data-surface="widget"], [data-surface^="widget-"]', 'var(--widget-bg)'],
   input: ['Inputs', 'input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]), select, textarea', 'var(--input)'],
-  button: ['Buttons', '.button:not(.ghost)', 'var(--input)'],
-  dialog: ['Dialogs and dropdowns', '.dialog, .account-menu nav, .command-palette, .preview-dropdown', 'var(--surface)'],
+  button: ['Buttons', '.button:not(.ghost)', 'var(--button-fill, var(--input))'],
+  dialog: ['Dialogs and dropdowns', '.dialog, .account-menu nav, .command-palette, .preview-dropdown', 'var(--dialog-fill, var(--surface))'],
   table: ['Tables', 'table', 'var(--surface)'],
   chart: ['Charts', '.deployment-chart', 'var(--surface)'],
   'widget-activity': ['Deployment activity widget', '[data-surface="widget-activity"]', 'var(--widget-bg)'],
@@ -38,6 +38,23 @@ export const shadows = { '': 'Inherit from material', none: 'None', low: 'Low', 
 export const borders = { '': 'Inherit', none: 'None', thin: 'Uniform border' }
 const shadowStyles = { none: 'none', low: 'var(--soft-shadow)', medium: '0 6px 15px rgb(0 0 0 / .18)', high: '0 12px 28px rgb(0 0 0 / .24)' }
 const materialShadows = { transparent: 'none', glass: 'var(--soft-shadow)', elevated: 'var(--soft-shadow)', raised: 'var(--raised-shadow)', inset: 'var(--inset-shadow)', clay: 'var(--clay-shadow)', flat: 'none', solid: 'none' }
+
+export function changeSurfaceColor(surface, key, color, nested = false) {
+  const next = { ...surface }
+  if (nested) {
+    const colors = { ...next.colors }
+    if (color) colors[key] = color
+    else delete colors[key]
+    if (Object.keys(colors).length) next.colors = colors
+    else delete next.colors
+  } else if (color) {
+    next[key] = color
+    if (key === 'borderColor' && next.border === 'none') next.border = 'thin'
+  } else {
+    delete next[key]
+  }
+  return next
+}
 
 function background(color, fallback, opacity, material) {
   const rgba = parseHex(color)

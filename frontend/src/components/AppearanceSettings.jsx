@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { themePalette, colorError, colorFields, defaults, effectDefaults, emptyStudio, styles } from '../lib/theme.js'
 import { importTheme } from '../lib/theme-file.js'
-import { surfaceContrastWarning } from '../lib/surfaces.js'
+import { changeSurfaceColor, surfaceContrastWarning } from '../lib/surfaces.js'
 import { useAppearance } from '../state/AppearanceContext.jsx'
 import { ColorPicker } from './ColorPicker.jsx'
 import { SelectOption as Options, SurfaceEditor } from './SurfaceEditor.jsx'
@@ -12,6 +12,7 @@ const tabs = ['Presets', 'Colors', 'Surfaces', 'Backgrounds', 'Effects', 'Layout
 const backgrounds = { default: 'Theme default', solid: 'Solid color', gradient: 'Linear gradient', radial: 'Radial gradient', mesh: 'Mesh gradient', 'animated-gradient': 'Animated gradient', blobs: 'Blurred blobs', image: 'Image' }
 const places = { application: 'Entire application', main: 'Main content', sidebar: 'Sidebar', dashboard: 'Dashboard' }
 const motionOptions = { system: 'Follow System', full: 'Full Motion', reduced: 'Reduced Motion', none: 'No Motion' }
+const surfacePages = { card: 'application', panel: 'form', input: 'form', button: 'form', dialog: 'dialog', table: 'table' }
 const colorGroups = { 'Page and structure': ['background','secondary','sidebar','header','surface','panel','input','primary','button','dialog','border'], 'Text and feedback': ['accent','text','textSecondary','muted','success','warning','danger','info'] }
 
 function replaceEntry(object, key, value) {
@@ -35,6 +36,7 @@ export function AppearanceSettings() {
   const stored = appearance.studio || emptyStudio
   const [tab, setTab] = useState('Presets')
   const [draft, setDraft] = useState(null)
+  const [surfaceGroup, setSurfaceGroup] = useState('sidebar')
   const [previewPage, setPreviewPage] = useState('dashboard')
   const [previewDevice, setPreviewDevice] = useState('desktop')
   const [previewMode, setPreviewMode] = useState('')
@@ -68,7 +70,7 @@ export function AppearanceSettings() {
   if (hoverColor?.group) {
     const { group, key, nested, value } = hoverColor
     const surface = theme.surfaces?.[group] || {}
-    const edit = nested ? { ...surface, colors: { ...surface.colors, [key]: value } } : { ...surface, [key]: value }
+    const edit = changeSurfaceColor(surface, key, value, nested)
     previewTheme = { ...theme, surfaces: { ...theme.surfaces, [group]: edit } }
   } else if (hoverColor) previewTheme = { ...theme, colors: { ...colors, [hoverColor.key]: hoverColor.value } }
   const surfaceWarning = surfaceContrastWarning(previewTheme, previewMode || mode, themePalette(view.style, previewMode || mode))
@@ -156,6 +158,12 @@ export function AppearanceSettings() {
 
   const slider = (key, label, min = 0, max = 100) => <Field label={`${label} · ${effects[key]}`}><input aria-label={label} type="range" min={min} max={max} value={effects[key]} onChange={(event) => updateTheme('effects', { ...theme.effects, [key]: Number(event.target.value) })} /></Field>
   const toggle = (key, label) => <label className="checkbox-field"><input type="checkbox" checked={Boolean(effects[key])} onChange={(event) => updateTheme('effects', { ...theme.effects, [key]: Number(event.target.checked) })} />{label}</label>
+  function selectSurface(group) {
+    setHoverColor(null)
+    setSurfaceGroup(group)
+    setPreviewPage(surfacePages[group] || 'dashboard')
+  }
+
   const renderColor = (label, value, fallback, change, field) => <ColorPicker key={label} label={label} value={value} fallback={fallback} change={change}
     preview={(value) => setHoverColor(value ? { ...field, value } : null)} recent={recent} remember={(next) => setRecent((prior) => [next, ...prior.filter((item) => item !== next)].slice(0, 8))} />
   const color = (key, label, fallback) => renderColor(label, colors[key], fallback, (value) => updateTheme('colors', replaceEntry(colors, key, value)), { key })
@@ -185,7 +193,7 @@ export function AppearanceSettings() {
             updateTheme('colors', safe)
           }}>Restore accessible palette defaults</button>}
         </>}
-        {tab === 'Surfaces' && <SurfaceEditor surfaces={theme.surfaces} palette={palette} renderColor={renderColor} update={(key, value) => updateTheme('surfaces', replaceEntry(theme.surfaces, key, Object.keys(value).length ? value : undefined))} />}
+        {tab === 'Surfaces' && <SurfaceEditor surfaces={theme.surfaces} group={surfaceGroup} setGroup={selectSurface} palette={palette} colors={colors} renderColor={renderColor} update={(key, value) => updateTheme('surfaces', replaceEntry(theme.surfaces, key, Object.keys(value).length ? value : undefined))} />}
         {tab === 'Backgrounds' && <fieldset><legend>Background</legend>
           <Options label="Background type" value={background} choices={backgrounds} change={(value) => updateTheme('background', value)} />
           {background !== 'default' && <Options label="Placement" value={theme.placement || 'application'} choices={places} change={(value) => updateTheme('placement', value)} />}
@@ -256,7 +264,7 @@ export function AppearanceSettings() {
           <Options label="Preview device" value={previewDevice} choices={{ desktop: 'Desktop', mobile: 'Mobile' }} change={setPreviewDevice} />
           <Options label="Preview mode" value={previewMode} choices={{ '': 'Selected mode', dark: 'Dark', light: 'Light' }} change={setPreviewMode} />
         </div>
-        <ThemePreview style={view.style} mode={previewMode || mode} density={view.density} theme={previewTheme} motion={motion} asset={file && assetPreview ? { available: true, preview: assetPreview } : clearAsset ? null : asset} page={previewPage} device={previewDevice} />
+        <ThemePreview key={tab === 'Surfaces' ? surfaceGroup : 'studio'} style={view.style} mode={previewMode || mode} density={view.density} theme={previewTheme} motion={motion} asset={file && assetPreview ? { available: true, preview: assetPreview } : clearAsset ? null : asset} page={previewPage} device={previewDevice} surface={tab === 'Surfaces' ? surfaceGroup : undefined} />
         <ErrorNotice error={invalid || assetError} />
         {surfaceWarning && <p className="muted studio-hint" role="status">{surfaceWarning} Lighten or darken the fill, or reset the affected surface.</p>}
         <div className="row-actions studio-apply">
