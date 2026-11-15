@@ -12,11 +12,10 @@ Private networking follows the same rule. Organization-owned networks, members, 
 
 The root [ARCHITECTURE.md](../../ARCHITECTURE.md) contains the module matrix, dependency rule, request flow, and data ownership model.
 
-## Appearance implementation
+## Appearance tokens
 
-- `frontend/src/lib/theme.js` defines the semantic token mapping, default effects, and palette checks. `backend/internal/httpapi/appearance-palettes.json` holds the eight light/dark palettes and is shared by the frontend and backend validator. `app-shell.css` defines the shared shell geometry and materials. `theme.css`, `presets.css`, `theme-system.css`, and `appearance-systems.css` contain component and layout rules. Dashboard layout variants share the same data and actions.
-- `AppearanceContext.jsx` reads authenticated preferences from `GET /api/v1/account` and sets style, color mode, density, and layout on the document. The backend owns the saved account state.
-- `AppearanceSettings.jsx` holds a local draft and keeps inactive built-in overrides in `studio.themes`. Existing `studio.theme` stays associated with the active style. `ThemePreview.jsx` renders shared panel primitives using that draft. `SurfaceStyles.jsx` applies the allowlisted rules from `lib/surfaces.js` to either the live panel or the preview. Widget overrides extend the widget category. `BackgroundLayer.jsx` handles decoration behind the shell and pauses animations on hidden tabs or reduced motion.
-- `ColorPicker.jsx` edits color in a portal. `lib/color.js` owns HEX, RGB, HSV, and alpha conversions. Color and surface alpha apply to fills, while text and icons retain their own opacity.
-- `lib/theme-file.js` validates version 3 JSON. It accepts typed tokens and settings. `backend/internal/httpapi/appearance.go` validates saved preferences, and `backend/internal/store/account.go` stores them with the optional normalized background in the user row. Backgrounds remain private to the account.
-- Migration `000018_appearance_systems` maps Industrial to Flat UI and Terminal to Obsidian in both the active style and named presets. The earlier Liquid Metal migration maps that style to Soft UI.
+All four schemes use the same components and layout. `frontend/src/theme.css` defines shared geometry and semantic aliases. `frontend/src/color-schemes.css` maps each scheme to background, surface, text, action, status and chart colors. Components consume those semantic variables. Keep spacing, typography, borders and interaction rules in shared CSS.
+
+To introduce or replace a palette, define values for the existing semantic roles, register its ID and name in `frontend/src/lib/color-schemes.js`, and update the API enum and PostgreSQL constraint together. Check text, status and focus colors against every background they use. Test identical layout geometry across palettes.
+
+The panel reads `GET /api/v1/account` and writes `PUT /api/v1/account/color-scheme`. The authenticated user owns the saved scheme and density. Migration `000019_account_color_scheme` defaults existing users to Catppuccin Mocha and retains their old preferences and backgrounds for rollback.

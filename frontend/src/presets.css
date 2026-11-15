@@ -70,34 +70,11 @@ th { background: var(--table-heading); }
 .overview-icon { width: 31px; }
 .deployment-chart-bars li { grid-template-rows: 76px 15px; }
 
-[data-style='glass'] .command-palette { background: var(--section-bg); border-color: var(--section-edge); }
-[data-style='glass'] .button:not(.primary, .ghost) { background: var(--hover); border-color: var(--section-edge); }
-[data-style='glass'] .deployment-chart-track { border: 1px solid var(--section-edge); }
-@supports (backdrop-filter: blur(1px)) {
-  [data-style='glass'] { --section-bg: color-mix(in srgb, var(--surface) 77%, transparent); }
-  [data-style='glass'] :is(.dialog, .command-palette) { backdrop-filter: var(--panel-blur); }
-}
-
-[data-style='playful'] .nav-item { margin-block: 2px; padding-block: calc(var(--nav-padding) + 2px); }
-[data-style='playful'] .overview-metric { grid-template-columns: minmax(0, 1fr); gap: 5px; }
-[data-style='playful'] .overview-metric-top { grid-row: auto; }
-[data-style='playful'] .overview-metric-top > svg { display: block; }
-[data-style='playful'] .overview-metric small { grid-column: 1; }
-[data-style='playful'] .deployment-chart-track { border-radius: 999px; }
-[data-style='obsidian'] .nav-item.active { font-weight: 600; }
-[data-style='obsidian'] .deployment-chart-track { background: var(--row-tint); }
-[data-style='flat'] .nav-item { padding-block: max(2px, calc(var(--nav-padding) - 2px)); }
-[data-style='flat'] :is(td, th) { padding-block: max(4px, calc(var(--row-padding) - 2px)); }
-[data-style='bento'] .overview-metrics { grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)); }
-[data-style='bento'] .overview-columns { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
-
 @media (max-width: 1100px) {
   .related-panels { grid-template-columns: 1fr; }
 }
 @media (max-width: 900px) {
   .overview-columns { grid-template-columns: 1fr; }
-  [data-style='bento'] .overview-columns { grid-template-columns: 1fr; }
-  [data-style='bento'] .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 680px) {
   .account-menu-name { display: none; }

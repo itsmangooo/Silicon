@@ -110,6 +110,7 @@ func (a *API) Handler() http.Handler {
 	mux.Handle("GET /api/v1/account", a.auth(http.HandlerFunc(a.accountProfile)))
 	mux.Handle("PUT /api/v1/account", a.auth(http.HandlerFunc(a.updateAccountProfile)))
 	mux.Handle("PUT /api/v1/account/appearance", a.auth(http.HandlerFunc(a.updateAccountAppearance)))
+	mux.Handle("PUT /api/v1/account/color-scheme", a.auth(http.HandlerFunc(a.updateAccountColorScheme)))
 	mux.Handle("GET /api/v1/account/appearance/background", a.auth(http.HandlerFunc(a.accountBackground)))
 	mux.Handle("PUT /api/v1/account/appearance/background", a.auth(http.HandlerFunc(a.updateAccountBackground)))
 	mux.Handle("DELETE /api/v1/account/appearance/background", a.auth(http.HandlerFunc(a.updateAccountBackground)))

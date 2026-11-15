@@ -1,7 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { BackgroundLayer } from './BackgroundLayer.jsx'
-import { useAppearance } from '../state/AppearanceContext.jsx'
 import {
   BuildingsIcon,
   BookOpenTextIcon,
@@ -46,7 +44,6 @@ function NavigationItem({ to, icon, children, end = false, onClick }) {
 }
 
 export function AppLayout() {
-  const { appearance, motion, asset } = useAppearance()
   const { user, logout } = useAuth()
   const { organizations, organizationId, selectOrganization, loading } = useWorkspace()
   const location = useLocation()
@@ -115,7 +112,6 @@ export function AppLayout() {
 
   return (
     <div className="shell">
-      <BackgroundLayer style={appearance.style} theme={appearance.studio?.theme} motion={motion} asset={asset} dashboard={location.pathname === '/'} />
       <a className="skip-link" href="#main">Skip to content</a>
       <aside className={`sidebar app-sidebar ${open ? 'sidebar-open' : ''}`} aria-label="Primary navigation" onKeyDown={(event) => {
         if (open && event.key === 'Escape') closeNavigation()
@@ -164,7 +160,7 @@ export function AppLayout() {
               <small>{organizations.find((item) => item.id === organizationId)?.role || 'Personal account'}</small>
               <Link to="/account/profile">My profile</Link>
               <Link to="/account/settings">Account settings</Link>
-              <Link to="/account/appearance">Theme Studio</Link>
+              <Link to="/account/appearance">Appearance</Link>
               <Link to="/account/messages">Messages</Link>
               <Link to="/account/support">Support tickets</Link>
               {notifications?.notifications?.filter((item) => !item.readAt).slice(0, 4).map((item) => <button className="button ghost compact" key={item.id} onClick={async () => {

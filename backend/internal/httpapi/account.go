@@ -48,6 +48,25 @@ func (a *API) updateAccountProfile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (a *API) updateAccountColorScheme(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Scheme  string `json:"scheme"`
+		Density string `json:"density"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	if !oneOf(input.Scheme, "catppuccin", "nord", "tokyo-night", "gruvbox") || !oneOf(input.Density, "comfortable", "compact") {
+		validation(w, "Select a supported color scheme and density.")
+		return
+	}
+	if err := a.repo.SetAccountColorScheme(r.Context(), currentUser(r.Context()).ID, input.Scheme, input.Density); err != nil {
+		a.persistenceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, input)
+}
+
 func (a *API) updateAccountAppearance(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		store.Appearance

@@ -4,7 +4,7 @@ const shortDate = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'num
 const fullDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
 const outcomeGroups = [['healthy', 'Healthy'], ['failed', 'Failed'], ['active', 'In progress'], ['other', 'Other']]
 
-export function DeploymentTrend({ days, labelIndices = [0, 4, 8, 13] }) {
+export function DeploymentTrend({ days }) {
   const total = days.reduce((sum, day) => sum + day.count, 0)
   if (!total) return <EmptyState title="No deployments in this period">The chart fills in as deployments are created.</EmptyState>
   const scale = Math.max(...days.map((day) => day.count))
@@ -15,7 +15,7 @@ export function DeploymentTrend({ days, labelIndices = [0, 4, 8, 13] }) {
         <span className="sr-only">{fullDate.format(date)}: {count}</span>
         <div className="deployment-chart-track" aria-hidden="true"><span style={{ '--bar-fill': `${100 * count / scale}%` }} /></div>
         <span className="chart-tooltip" aria-hidden="true">{count}</span>
-        <span className="deployment-chart-date" aria-hidden="true">{labelIndices.includes(index) ? shortDate.format(date) : ''}</span>
+        <span className="deployment-chart-date" aria-hidden="true">{[0, 4, 8, 13].includes(index) ? shortDate.format(date) : ''}</span>
       </li>)}
     </ol>
   </figure>

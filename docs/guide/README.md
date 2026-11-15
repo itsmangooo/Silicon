@@ -10,7 +10,7 @@ The in-panel guide is installation-focused: it explains how to operate the Silic
 - [Getting started](getting-started.md)
 - [Core concepts](core-concepts.md)
 - [Find a feature](feature-reference.md)
-- [Theme Studio](theme-studio.md)
+- [Appearance](theme-studio.md)
 
 ## Workloads
 

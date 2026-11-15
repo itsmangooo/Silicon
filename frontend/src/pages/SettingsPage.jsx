@@ -326,7 +326,7 @@ function UpdatePanel() {
 
 export function SettingsPage() {
   return <Page title="Settings" description="Platform capabilities and installation-level operations.">
-    <div id="appearance"><Section title="Appearance" description="Customize your account's style, surfaces, and backgrounds." actions={<Link className="button secondary" to="/account/appearance">Open Theme Studio</Link>} /></div>
+    <div id="appearance"><Section title="Appearance" description="Choose your account’s color scheme and density." actions={<Link className="button secondary" to="/account/appearance">Open Appearance</Link>} /></div>
     <div className="related-panels">
       <div id="public-access"><PublicAccessPanel /></div>
       <div id="email"><EmailPanel /></div>

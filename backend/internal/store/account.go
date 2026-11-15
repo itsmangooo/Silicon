@@ -11,13 +11,18 @@ import (
 func (r Repository) AccountAppearance(ctx context.Context, userID uuid.UUID) (Appearance, bool, bool, error) {
 	var value Appearance
 	var avatar, background bool
-	err := r.Pool.QueryRow(ctx, `SELECT appearance_style,appearance_mode,appearance_density,appearance_studio,avatar IS NOT NULL,appearance_background IS NOT NULL FROM users WHERE id=$1`, userID).
-		Scan(&value.Style, &value.Mode, &value.Density, &value.Studio, &avatar, &background)
+	err := r.Pool.QueryRow(ctx, `SELECT appearance_style,appearance_mode,appearance_density,appearance_studio,appearance_scheme,avatar IS NOT NULL,appearance_background IS NOT NULL FROM users WHERE id=$1`, userID).
+		Scan(&value.Style, &value.Mode, &value.Density, &value.Studio, &value.Scheme, &avatar, &background)
 	return value, avatar, background, notFound(err)
 }
 
 func (r Repository) SetAccountAppearance(ctx context.Context, userID uuid.UUID, value Appearance, replaceBackground bool, background []byte) error {
 	_, err := r.Pool.Exec(ctx, `UPDATE users SET appearance_style=$2,appearance_mode=$3,appearance_density=$4,appearance_studio=COALESCE($5,appearance_studio), appearance_background=CASE WHEN $6 THEN $7 ELSE appearance_background END WHERE id=$1`, userID, value.Style, value.Mode, value.Density, value.Studio, replaceBackground, background)
+	return err
+}
+
+func (r Repository) SetAccountColorScheme(ctx context.Context, userID uuid.UUID, scheme, density string) error {
+	_, err := r.Pool.Exec(ctx, `UPDATE users SET appearance_scheme=$2,appearance_density=$3 WHERE id=$1`, userID, scheme, density)
 	return err
 }
 

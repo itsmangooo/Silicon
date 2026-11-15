@@ -2,6 +2,7 @@ package store
 
 type Appearance struct {
 	AppearanceBase
+	Scheme string       `json:"scheme,omitempty"`
 	Studio *ThemeStudio `json:"studio,omitempty"`
 }
 

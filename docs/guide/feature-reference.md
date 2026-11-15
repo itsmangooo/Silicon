@@ -14,7 +14,7 @@ Start with the [first-site walkthrough](install-walkthrough.md). Use this page w
 | **Account menu → Account settings** | Change your display name, password or email. Email changes require configured system email. Password changes end existing sessions. |
 | **Account menu → Messages** | Choose a member of the active organization, send a message, and use Inbox and Sent to find or reply to messages. |
 | **Account menu → Support tickets** | Create and follow a ticket for your installation. Support administrators within the organization can reply, assign and update it. The menu shows unread notifications. |
-| **Account menu → Theme Studio** | Preview a style, customize it and apply it to your account. [Theme Studio guide](theme-studio.md) |
+| **Account menu → Appearance** | Pick a color scheme and density for your account. [Appearance guide](theme-studio.md) |
 
 ## Run applications
 

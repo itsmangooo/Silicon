@@ -16,7 +16,7 @@ Docker applications can configure persistent named volumes, a memory limit, cont
 
 ## Interface previews
 
-Use **Account → Theme Studio** to preview and apply seven styles, pick colors and backgrounds, tune motion, and save custom presets. Your settings follow your account. The organization dashboard summarizes deployments, recorded runtime status, server connection checks, domains, and audit activity.
+Use **Account → Appearance** to choose Catppuccin Mocha, Nord, Tokyo Night, or Gruvbox Dark. Color scheme and density follow your account. The organization dashboard summarizes deployments, recorded runtime status, server connection checks, domains, and audit activity.
 
 New to Silicon? [Install it and deploy a test site](docs/guide/install-walkthrough.md), [find a feature](docs/guide/feature-reference.md), or [connect an existing Caddy, Nginx, or Traefik proxy](docs/guide/external-proxy.md).
 
@@ -34,9 +34,9 @@ These previews were captured from the running application at a consistent deskto
 
 | Glassmorphism | Playful | Appearance settings |
 | --- | --- | --- |
-| [![Glassmorphism dashboard](docs/previews/dashboard-glass.png)](docs/previews/dashboard-glass.png) | [![Playful dashboard](docs/previews/dashboard-playful.png)](docs/previews/dashboard-playful.png) | [![Appearance settings](docs/previews/settings-appearance.png)](docs/previews/settings-appearance.png) |
+| [![Nord dashboard](docs/previews/dashboard-nord.png)](docs/previews/dashboard-nord.png) | [![Tokyo Night dashboard](docs/previews/dashboard-tokyo-night.png)](docs/previews/dashboard-tokyo-night.png) | [![Appearance settings](docs/previews/settings-appearance.png)](docs/previews/settings-appearance.png) |
 
-More dashboard previews: [Soft UI](docs/previews/dashboard.png), [Obsidian](docs/previews/dashboard-obsidian.png), [Neumorphism](docs/previews/dashboard-neumorphism.png), [Claymorphism](docs/previews/dashboard-clay.png), [Bento Grids](docs/previews/dashboard-bento.png), and [Flat UI](docs/previews/dashboard-flat.png). [Customize your account with Theme Studio](docs/guide/theme-studio.md).
+See the [Gruvbox Dark dashboard](docs/previews/dashboard-gruvbox.png) and the [Appearance guide](docs/guide/theme-studio.md).
 
 Account previews: [Profile](docs/previews/account-profile.png), [Account security](docs/previews/account-settings.png), [Messages](docs/previews/account-messages.png), and [Support](docs/previews/account-support.png).
 

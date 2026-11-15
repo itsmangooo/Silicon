@@ -3,183 +3,38 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { AppearanceProvider } from '../state/AppearanceContext.jsx'
 import { AppearanceSettings } from './AppearanceSettings.jsx'
 
-const renderSettings = () => render(<AppearanceProvider><AppearanceSettings /></AppearanceProvider>)
-const choose = (style) => fireEvent.click(screen.getByRole('radio', { name: new RegExp('^' + style) }))
-const tab = (name) => fireEvent.click(screen.getByRole('button', { name, exact: true }))
-const apply = () => fireEvent.click(screen.getByRole('button', { name: 'Apply appearance' }))
-
 afterEach(() => {
   cleanup()
-  window.localStorage.clear()
+  localStorage.clear()
+  vi.restoreAllMocks()
 })
 
-it('previews without changing the document until Apply and restores on remount', async () => {
-  const { unmount } = renderSettings()
-  choose('Glassmorphism')
-  tab('Layout')
-  fireEvent.change(screen.getByLabelText('Density'), { target: { value: 'compact' } })
-  expect(document.documentElement.dataset.style).toBe('soft')
-  fireEvent.click(screen.getByRole('button', { name: 'Cancel preview' }))
-  tab('Presets')
-  expect(screen.getByRole('radio', { name: /^Soft UI/ })).toBeChecked()
-  choose('Glassmorphism')
-  tab('Layout')
-  fireEvent.change(screen.getByLabelText('Color mode'), { target: { value: 'light' } })
-  fireEvent.change(screen.getByLabelText('Density'), { target: { value: 'compact' } })
-  apply()
-  await waitFor(() => expect(document.documentElement.dataset).toMatchObject({ style: 'glass', mode: 'light', density: 'compact' }))
-  unmount()
-  renderSettings()
-  expect(screen.getByRole('radio', { name: /^Glassmorphism/ })).toBeChecked()
-  tab('Layout')
-  expect(screen.getByLabelText('Density')).toHaveValue('compact')
+it('maps a legacy style to Mocha and offers exactly four schemes', () => {
+  localStorage.setItem('silicon.appearance', JSON.stringify({ style: 'glass', density: 'compact' }))
+  render(<AppearanceProvider><AppearanceSettings /></AppearanceProvider>)
+  expect(screen.getAllByRole('radio')).toHaveLength(4)
+  expect(screen.getByRole('radio', { name: 'Catppuccin Mocha' })).toBeChecked()
+  expect(screen.getByLabelText('UI density')).toHaveValue('compact')
+  fireEvent.click(screen.getByRole('radio', { name: 'Nord' }))
+  expect(document.documentElement.dataset.colorScheme).toBe('nord')
+  expect(document.documentElement.dataset.density).toBe('compact')
 })
 
-it('rejects unreadable colors and stages a named preset', async () => {
-  renderSettings()
-  tab('Colors')
-  fireEvent.click(screen.getByRole('button', { name: /^Text / }))
-  fireEvent.change(screen.getByLabelText('HEX value'), { target: { value: '#101114' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Apply color' }))
-  expect(screen.getByRole('alert')).toHaveTextContent('contrast')
-  expect(screen.getByRole('button', { name: 'Apply appearance' })).toBeDisabled()
-  tab('Colors')
-  fireEvent.click(screen.getByRole('button', { name: /^Text / }))
-  fireEvent.change(screen.getByLabelText('HEX value'), { target: { value: '#ffffff' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Apply color' }))
-  tab('Presets')
-  choose('Obsidian')
-  tab('My Themes')
-  fireEvent.change(screen.getByLabelText('Preset name'), { target: { value: 'Midnight' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Save custom preset' }))
-  apply()
-  await waitFor(() => expect(JSON.parse(localStorage.getItem('silicon.appearance')).studio.presets[0]).toMatchObject({ name: 'Midnight', style: 'obsidian' }))
-})
-
-it('reopens legacy Liquid Metal preferences as Soft UI and keeps custom settings', () => {
-  const theme = { placement: 'dashboard', quality: 'high', effects: { overlay: 28, reflection: 60 } }
-  localStorage.setItem('silicon.appearance', JSON.stringify({
-    style: 'metal', mode: 'light', density: 'compact',
-    studio: { version: 2, theme, presets: [{ name: 'Custom', style: 'metal', mode: 'light', density: 'compact', theme }] },
-  }))
-  renderSettings()
-  expect(screen.getByRole('radio', { name: 'Soft UI' })).toBeChecked()
-  expect(screen.queryByRole('radio', { name: 'Liquid Metal' })).toBeNull()
-  const saved = JSON.parse(localStorage.getItem('silicon.appearance'))
-  const migrated = { placement: 'dashboard', effects: { overlay: 28 } }
-  expect(saved.studio.theme).toEqual(migrated)
-  expect(saved.studio.presets[0]).toEqual({ name: 'Custom', style: 'soft', mode: 'light', density: 'compact', theme: migrated })
-})
-
-it('loads account settings and saves versioned preferences to the account only', async () => {
-  const fetch = vi.spyOn(window, 'fetch').mockImplementation(async (_path, request) => {
-    const data = request.method === 'PUT' ? JSON.parse(request.body) : { appearance: { style: 'obsidian', mode: 'dark', density: 'compact' } }
-    return { ok: true, status: 200, json: async () => data }
+it('saves to the signed-in account and rolls back a rejected change', async () => {
+  const fetch = vi.spyOn(window, 'fetch').mockImplementation(async (_url, options) => {
+    if (options.method === 'GET') return { ok: true, json: async () => ({ appearance: { scheme: 'nord', density: 'comfortable' } }) }
+    const saved = JSON.parse(options.body)
+    if (saved.scheme === 'catppuccin') return { ok: false, json: async () => ({error:{message: 'Save failed'}}) }
+    return { ok: true, json: async () => saved }
   })
-  try {
-    window.localStorage.setItem('silicon.appearance', '{"style":"glass","mode":"dark","density":"comfortable"}')
-    render(<AppearanceProvider accountId="test" loadAccount><AppearanceSettings /></AppearanceProvider>)
-    expect(await screen.findByRole('radio', { name: /^Obsidian/ })).toBeChecked()
-    choose('Bento')
-    apply()
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/v1/account/appearance', expect.objectContaining({
-      method: 'PUT', body: '{"style":"bento","mode":"dark","density":"compact","studio":{"version":3,"theme":{},"presets":[]}}',
-    })))
-    expect(window.localStorage.getItem('silicon.appearance')).toContain('glass')
-  } finally {
-    fetch.mockRestore()
-  }
-})
-
-it('previews alpha within the Studio and applies an RGBA color only on confirmation', async () => {
-  renderSettings()
-  tab('Colors')
-  const accent = screen.getByRole('button', { name: /^Panel / })
-  fireEvent.click(accent)
-  fireEvent.change(screen.getByLabelText('Color format'), { target: { value: 'RGBA' } })
-  fireEvent.change(screen.getByLabelText('RGBA value'), { target: { value: '20, 30, 40, 0.5' } })
-  fireEvent.keyDown(screen.getByLabelText('RGBA value'), { key: 'Escape' })
-  expect(screen.queryByRole('dialog')).toBeNull()
-  expect(screen.getByRole('button', { name: 'Apply appearance' })).toBeDisabled()
-  fireEvent.click(accent)
-  fireEvent.change(screen.getByLabelText('HEX value'), { target: { value: '#141e2880' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Apply color' }))
-  expect(document.documentElement.style.getPropertyValue('--panel-override')).toBe('')
-  apply()
-  await waitFor(() => expect(JSON.parse(localStorage.getItem('silicon.appearance')).studio.theme.colors.panel).toBe('#141E2880'))
-})
-
-it('keeps inactive style overrides and resets only the selected theme', async () => {
-  const preset = { name: 'Frost', style: 'glass', mode: 'light', density: 'compact', theme: {background: 'mesh'} }
-  localStorage.setItem('silicon.appearance', JSON.stringify({
-    style: 'clay', mode: 'light', density: 'compact',
-    studio: { version: 3, theme: { colors: { primary: '#8b496a80' } }, presets: [preset] },
-  }))
-  const { container, unmount } = renderSettings()
-  const primary = (root) => root.querySelector('.studio-live').style.getPropertyValue('--primary')
-  choose('Obsidian')
-  expect(primary(container)).toBe('#2A2A2D')
-  expect(document.documentElement.style.getPropertyValue('--primary')).toBe('#8b496a80')
-  apply()
-  await waitFor(() => expect(document.documentElement.dataset.style).toBe('obsidian'))
-  unmount()
-  const restarted = renderSettings()
-  choose('Claymorphism')
-  expect(primary(restarted.container)).toBe('#8b496a80')
-  fireEvent.click(screen.getByRole('button', {name: 'Reset Current Theme to Defaults'}))
-  expect(primary(restarted.container)).toBe('#813F60')
-  fireEvent.click(screen.getByRole('button', {name: 'Cancel preview'}))
-  choose('Claymorphism')
-  expect(primary(restarted.container)).toBe('#8b496a80')
-  fireEvent.click(screen.getByRole('button', {name: 'Reset Current Theme to Defaults'}))
-  apply()
-  await waitFor(() => {
-    const saved = JSON.parse(localStorage.getItem('silicon.appearance'))
-    expect(saved).toMatchObject({style: 'clay', mode: 'light', density: 'compact', studio: {theme: {}, presets: [preset]}})
-    expect(saved.studio.themes?.clay).toBeUndefined()
-  })
-})
-
-it('shows and saves a sidebar border color picked while the border is off', async () => {
-  const { container, unmount } = renderSettings()
-  tab('Surfaces')
-  expect(screen.getByLabelText('Component')).toHaveValue('sidebar')
-  fireEvent.change(screen.getByLabelText('Border'), {target: {value: 'none'}})
-  fireEvent.click(screen.getByRole('button', {name: /^Border color /}))
-  fireEvent.change(screen.getByLabelText('HEX value'), {target: {value: '#476AD6'}})
-  const previewCSS = () => container.querySelector('.studio-live style').textContent
-  expect(previewCSS()).toContain('border:1px solid #476AD6')
-  fireEvent.click(screen.getByRole('button', {name: 'Cancel', exact: true}))
-  expect(previewCSS()).toContain('border:0')
-  fireEvent.click(screen.getByRole('button', {name: /^Border color /}))
-  fireEvent.change(screen.getByLabelText('HEX value'), {target: {value: '#476AD6'}})
-  fireEvent.click(screen.getByRole('button', {name: 'Apply color'}))
-  expect(screen.getByLabelText('Border')).toHaveValue('thin')
-  fireEvent.change(screen.getByLabelText('Corner radius (px)'), {target: {value: '12'}})
-  expect(previewCSS()).toContain('border-radius:12px')
-  apply()
-  await waitFor(() => expect(JSON.parse(localStorage.getItem('silicon.appearance')).studio.theme.surfaces.sidebar).toEqual({
-    border: 'thin', borderColor: '#476AD6', radius: 12,
-  }))
-  unmount()
-  renderSettings()
-  tab('Surfaces')
-  expect(screen.getByLabelText('Border')).toHaveValue('thin')
-  expect(screen.getByRole('button', {name: /^Border color #476AD6/})).toBeInTheDocument()
-})
-
-it('shows editable surfaces in the preview when switching components', () => {
-  const { container } = renderSettings()
-  tab('Surfaces')
-  const pick = (value) => fireEvent.change(screen.getByLabelText('Component'), {target: {value}})
-  pick('table')
-  expect(screen.getByLabelText('Preview page')).toHaveValue('table')
-  expect(container.querySelector('.studio-live table')).toBeInTheDocument()
-  pick('dialog')
-  expect(screen.getByRole('dialog', {name: 'Preview runtime'})).toBeInTheDocument()
-  pick('widget-servers')
-  expect(container.querySelector('.studio-live [data-surface="widget-servers"]')).toBeInTheDocument()
-  pick('chart')
-  expect(container.querySelector('.studio-live .deployment-outcome-bar .outcome-active')).toBeInTheDocument()
-  expect(container.querySelector('.studio-live .chart-tooltip')).toBeInTheDocument()
+  render(<AppearanceProvider accountId="test-user" loadAccount><AppearanceSettings /></AppearanceProvider>)
+  expect(await screen.findByRole('radio', { name: 'Nord' })).toBeChecked()
+  fireEvent.click(screen.getByRole('radio', { name: 'Gruvbox Dark' }))
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/v1/account/color-scheme', expect.objectContaining({
+    method: 'PUT', body: '{"scheme":"gruvbox","density":"comfortable"}',
+  })))
+  fireEvent.click(screen.getByRole('radio', { name: 'Catppuccin Mocha' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Save failed')
+  expect(screen.getByRole('radio', {name: 'Gruvbox Dark'})).toBeChecked()
+  expect(document.documentElement.dataset.colorScheme).toBe('gruvbox')
 })

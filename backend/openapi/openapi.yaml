@@ -114,6 +114,15 @@ paths:
       parameters: [{$ref: '#/components/parameters/CSRFToken'}]
       requestBody: {required: true, content: {application/json: {schema: {type: object, required: [displayName], properties: {displayName: {type: string, maxLength: 120}}}}}}
       responses: {'204': {description: Profile updated}}
+  /account/color-scheme:
+    put:
+      tags: [Authentication]
+      summary: Save the signed-in account color scheme and density
+      parameters: [{$ref: '#/components/parameters/CSRFToken'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AppearancePreferences'}}}}
+      responses:
+        '200': {description: Saved preferences, content: {application/json: {schema: {$ref: '#/components/schemas/AppearancePreferences'}}}}
+        '422': {description: Unsupported scheme or density}
   /account/appearance:
     put:
       tags: [Authentication]
@@ -1356,11 +1365,18 @@ components:
       type: object
       required: [user, csrfToken]
       properties: {user: {$ref: '#/components/schemas/User'}, csrfToken: {type: string}}
+    AppearancePreferences:
+      type: object
+      required: [scheme, density]
+      properties:
+        scheme: {type: string, enum: [catppuccin, nord, tokyo-night, gruvbox]}
+        density: {type: string, enum: [comfortable, compact]}
     Appearance:
       type: object
       required: [style, mode, density]
       properties:
         style: {type: string, enum: [soft, glass, playful, obsidian, neumorphism, clay, bento, flat]}
+        scheme: {type: string, enum: [catppuccin, nord, tokyo-night, gruvbox]}
         mode: {type: string, enum: [dark, light, system]}
         density: {type: string, enum: [comfortable, compact]}
         studio:

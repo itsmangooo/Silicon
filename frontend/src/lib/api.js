@@ -16,13 +16,13 @@ function cookie(name) {
 
 export async function api(path, options = {}) {
   if (previewMode) {
-    if (path === '/account/appearance' && options.method === 'PUT') {
-      const { backgroundImage: _backgroundImage, ...appearance } = options.body
+    if (path === '/account/color-scheme' && options.method === 'PUT') {
+      const appearance = options.body
       localStorage.setItem('silicon.preview.appearance', JSON.stringify(appearance))
       return appearance
     }
     if (path === '/account' && !options.method) {
-      return { user: previewResponse('/auth/session').user, hasAvatar: false, appearance: JSON.parse(localStorage.getItem('silicon.preview.appearance')) || { style: 'soft', mode: 'dark', density: 'comfortable' } }
+      return { user: previewResponse('/auth/session').user, hasAvatar: false, appearance: JSON.parse(localStorage.getItem('silicon.preview.appearance')) || { scheme: 'catppuccin', density: 'comfortable' } }
     }
     const fixture = previewResponse(path, options)
     if (fixture !== undefined) return Promise.resolve(fixture)

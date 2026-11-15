@@ -922,6 +922,14 @@ func TestMilestoneOneFlowAndOrganizationIsolation(t *testing.T) {
 		t.Fatal("appearance was not isolated per account")
 	}
 	accountStudioRoundTrip(t, owner, viewer)
+	owner.put("/account/color-scheme", map[string]any{"scheme": "rainbow", "density": "compact"}, http.StatusUnprocessableEntity)
+	owner.put("/account/color-scheme", map[string]any{"scheme": "gruvbox", "density": "compact"}, http.StatusOK)
+	savedAppearance := mapField(t, owner.get("/account", http.StatusOK), "appearance")
+	if savedAppearance["scheme"] != "gruvbox" || savedAppearance["density"] != "compact" || savedAppearance["studio"] == nil ||
+		mapField(t, viewer.get("/account", http.StatusOK), "appearance")["scheme"] != "catppuccin" {
+		t.Fatal("simplified appearance preferences did not stay isolated or erased the legacy preset")
+	}
+
 	viewerID := stringField(t, mapField(t, viewer.get("/auth/session", http.StatusOK), "user"), "id")
 	msg := owner.post("/organizations/"+orgA+"/messages", map[string]any{"recipientId": viewerID, "subject": "Deploy check", "body": "Please review."}, http.StatusCreated)
 	msgID := stringField(t, msg, "id")

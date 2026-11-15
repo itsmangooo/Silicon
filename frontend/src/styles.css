@@ -22,7 +22,7 @@ body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--bg); }
 button, input, textarea, select { font: inherit; border-radius: var(--radius); }
 :where(button, a, input, textarea, select, summary, [role="button"], [tabindex]:not([tabindex="-1"])) { outline: none; }
 :where(button, a, input, textarea, select, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-a { color: var(--accent); text-decoration: none; }
+a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
 p { line-height: 1.65; }
 h1, h2, h3, p { margin-top: 0; }
@@ -153,7 +153,7 @@ h3 { font-size: .9rem; font-weight: 500; }
 .button.primary:hover { background: color-mix(in srgb, var(--primary) 86%, var(--primary-ink)); }
 .button.ghost { border-color: transparent; color: var(--text-muted); background: transparent; }
 .button.ghost:hover { color: var(--text); background: var(--hover); }
-.button.danger { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); color: var(--danger); }
+.button.danger { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); color: var(--danger-text); }
 .button.compact { min-height: 30px; padding: var(--space-1) var(--space-2); }
 .button.wide { width: 100%; }
 .button:disabled { cursor: not-allowed; opacity: .5; }
@@ -210,11 +210,11 @@ tbody tr:nth-child(even) { background: var(--row-tint); }
 .status { display: inline-flex; align-items: baseline; gap: 6px; color: var(--text-muted); font-size: .75rem; text-transform: capitalize; max-width: 100%; border-radius: 999px; padding: 3px 9px; background: color-mix(in srgb, currentColor 11%, transparent); overflow-wrap: anywhere; }
 .status i { width: 6px; height: 6px; border: 0; background: currentColor; flex: 0 0 auto; border-radius: 50%; }
 .status-healthy, .status-running, .status-enabled, .status-connected { color: var(--success); }
-.status-failed, .status-unhealthy, .status-disabled { color: var(--danger); }
+.status-failed, .status-unhealthy, .status-disabled { color: var(--danger-text); }
 .status-queued, .status-preparing, .status-building, .status-pending, .status-degraded { color: var(--warning); }
-.status-deploying, .status-starting { color: var(--info); }
+.status-deploying, .status-starting { color: var(--info-text); }
 .status-active { color: var(--success); }
-.status-error, .status-conflict { color: var(--danger); }
+.status-error, .status-conflict { color: var(--danger-text); }
 .status-external, .status-inactive { color: var(--text-muted); }
 .role-label { text-transform: capitalize; }
 
@@ -222,7 +222,7 @@ tbody tr:nth-child(even) { background: var(--row-tint); }
 .empty-state strong { color: var(--text); font-size: .9rem; font-weight: 500; }
 .empty-state p { max-width: 620px; margin: var(--space-2) 0 var(--space-4); font-size: .8rem; }
 .notice { border: 1px solid var(--border); margin-bottom: var(--space-5); padding: var(--space-3) var(--space-4); background: color-mix(in srgb, var(--info) 10%, transparent); color: var(--text); font-size: .78rem; line-height: 1.6; border-radius: var(--radius); }
-.notice.danger { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.notice.danger { color: var(--danger-text); background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .notice.success { background: color-mix(in srgb, var(--success) 10%, transparent); }
 .definition-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-6); margin: 0; }
 .definition-grid > div { min-width: 0; display: grid; grid-template-columns: 130px minmax(0,1fr); gap: var(--space-4); padding: var(--space-3) 0; }
@@ -240,7 +240,7 @@ tbody tr:nth-child(even) { background: var(--row-tint); }
 .update-progress small { grid-column: 2; color: var(--text-muted); }
 .update-actions { display: flex; align-items: center; gap: var(--space-4); }
 .update-actions p { max-width: 680px; margin: 0; color: var(--text-muted); font-size: .72rem; line-height: 1.6; }
-.status-checking, .status-updating, .status-migrating, .status-restarting, .status-waiting-for-health, .status-reconnecting { color: var(--info); }
+.status-checking, .status-updating, .status-migrating, .status-restarting, .status-waiting-for-health, .status-reconnecting { color: var(--info-text); }
 .status-completed { color: var(--success); }
 .metric-line { margin: 0; color: var(--text-muted); }
 .metric-line strong { margin-right: var(--space-2); color: var(--text); font-family: var(--font-mono); font-size: 1.4rem; font-weight: 400; }

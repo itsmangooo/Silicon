@@ -28,7 +28,7 @@ Use the organization selector below the Silicon logo to change the active tenant
 
 Open **Dashboard** to see registered workloads, the last recorded server connection checks, and recent deployment results. The charts use up to 200 of the most recent deployment records. Application rows show the latest deployment in that set. Open an application’s runtime view to inspect its current container state.
 
-Open the account menu and choose [Theme Studio](theme-studio.md). Preview a style, customize colors and motion, then apply it to your account.
+Open the account menu and choose [Appearance](theme-studio.md). Pick a color scheme and density. Your changes apply immediately.
 
 Use **My profile** to manage your avatar and review organization memberships. **Account settings** lets you change your display name, password, and email. Email changes require configured system mail and a verification code. Password changes end all sessions.
 
