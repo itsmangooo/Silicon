@@ -18,6 +18,7 @@ it('round-trips transparent, translucent and opaque colors across entry formats'
 it('validates imports and applies opacity to surface fills only', () => {
   const file = {version: 3, style: 'glass', mode: 'dark', density: 'compact', theme: {surfaces: {
     sidebar: {color: '#8896b380', material: 'glass', opacity: 40, blur: 20},
+    header: {color: '#8896b380', material: 'glass', blur: 12},
     card: {color: '#30354033', material: 'glass', blur: 12},
     input: {material: 'solid'},
   }}}
@@ -26,6 +27,7 @@ it('validates imports and applies opacity to surface fills only', () => {
   const rules = surfaceRules(surfaces)
   expect(rules).toContain('background:#8896B366;backdrop-filter:blur(20px)')
   expect(rules).toContain('background:#30354033;backdrop-filter:blur(12px)')
+  expect(rules).toContain('--header-paint:#8896B380;--header-blur:blur(12px)')
   expect(rules).toContain('background:var(--input);backdrop-filter:none')
   expect(rules).not.toContain(';opacity:')
   file.theme.surfaces.sidebar.color = 'url(example.test)'

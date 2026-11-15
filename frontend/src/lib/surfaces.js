@@ -59,10 +59,12 @@ export function surfaceRules(surfaces = {}, prefix = 'html', live = false) {
     const colors = value.colors || {}
     const opacity = Number.isInteger(value.opacity) ? Math.max(0, Math.min(100, value.opacity)) : undefined
     const declarations = []
-    if (material || value.color || opacity !== undefined) declarations.push('background:' + background(value.color, base, opacity, material))
+    const paintProperty = key === 'header' ? '--header-paint' : 'background'
+    if (material || value.color || opacity !== undefined) declarations.push(paintProperty + ':' + background(value.color, base, opacity, material))
     if (material || blur !== undefined) {
       const amount = blur ?? (material === 'glass' ? 16 : 0)
-      declarations.push(`backdrop-filter:${amount ? `blur(${Math.max(0, Math.min(32, Number(amount) || 0))}px) saturate(1.15)` : 'none'}`)
+      const blurProperty = key === 'header' ? '--header-blur' : 'backdrop-filter'
+      declarations.push(`${blurProperty}:${amount ? `blur(${Math.max(0, Math.min(32, Number(amount) || 0))}px) saturate(1.15)` : 'none'}`)
     }
     if (radius !== undefined) declarations.push(`border-radius:${Math.max(0, Math.min(32, Number(radius) || 0))}px`)
     if (border === 'none') declarations.push('border:0')

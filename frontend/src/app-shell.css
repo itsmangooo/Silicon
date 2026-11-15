@@ -108,17 +108,25 @@
 .app-sidebar, .app-header {
   border: 1px solid var(--shell-border);
   box-shadow: var(--shell-shadow);
-  backdrop-filter: var(--shell-blur);
 }
 .app-sidebar {
   color: var(--text);
+  backdrop-filter: var(--shell-blur);
   border-radius: var(--sidebar-radius);
   background: var(--shell-sheen), color-mix(in srgb, var(--shell-sidebar-tint) var(--sidebar-fill-opacity, var(--shell-opacity)), transparent);
 }
-.app-header {
-  border-radius: var(--header-radius);
-  background: var(--shell-sheen), color-mix(in srgb, var(--shell-header-tint) var(--header-fill-opacity, var(--shell-opacity)), transparent);
+.app-header { border-radius: var(--header-radius); isolation: isolate; }
+.app-header::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--header-paint, var(--shell-sheen), color-mix(in srgb, var(--shell-header-tint) var(--header-fill-opacity, var(--shell-opacity)), transparent));
+  backdrop-filter: var(--header-blur, var(--shell-blur));
+  pointer-events: none;
 }
+.preview-heading.app-header { position: relative; }
 .shell > .app-sidebar {
   inset: var(--sidebar-edge) auto var(--sidebar-edge) var(--sidebar-edge);
   width: calc(var(--sidebar-width) - var(--sidebar-edge) - var(--sidebar-gap));
