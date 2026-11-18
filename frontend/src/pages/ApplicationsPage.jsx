@@ -3,7 +3,7 @@ import { ArrowClockwiseIcon, GearIcon, KeyIcon, PlayIcon, StopIcon, TerminalWind
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, apiUrl, organizationPath } from '../lib/api.js'
 import { useWorkspace } from '../state/WorkspaceContext.jsx'
-import { CreateButton, Dialog, EmptyState, ErrorNotice, Field, LoadingRows, Mono, Page, Section, Status, SubmitRow, formatDate, useResource } from '../components/ui.jsx'
+import { SecretInput, CreateButton, Dialog, EmptyState, ErrorNotice, Field, LoadingRows, Mono, Page, Section, Status, SubmitRow, formatDate, useResource } from '../components/ui.jsx'
 import { ConfigurationEditor, ConfirmDeleteDialog, WorkspaceNav } from '../components/Workspace.jsx'
 import { ApplicationSourceFields, PortBindingFields, RuntimeTargetField } from '../components/ApplicationFields.jsx'
 import { applicationFormValues, LOCAL_RUNTIME_TARGET, validateRuntimeTarget } from '../lib/application-form.js'
@@ -159,7 +159,7 @@ function ConfigurationDialog({ application, servers, localRuntimeAvailable, onCl
       <form className="form-stack" onSubmit={saveTarget}><RuntimeTargetField servers={servers} localRuntimeAvailable={localRuntimeAvailable} initialServerId={application?.serverId} preserveCurrent /><div className="form-actions"><button className="button secondary" disabled={busy}>Save target</button></div></form>
       <form className="form-stack" onSubmit={saveVariables}><Field label="Environment variables" hint="One NAME=value entry per line. These are ordinary configuration and are visible here."><textarea name="variables" className="mono" rows="8" defaultValue={variableText} key={variableText} /></Field><div className="form-actions"><button className="button primary" disabled={busy}>Save variables</button></div></form>
       <div className="subsection"><h3>Encrypted secrets</h3><p className="muted">Values are write-only and injected only during deployment.</p><table><thead><tr><th>Name</th><th>Provider</th><th>Updated</th><th>Action</th></tr></thead><tbody>{resource.data.secrets.length ? resource.data.secrets.map((item) => <tr key={item.id}><td><Mono>{item.name}</Mono></td><td>{item.provider}</td><td>{formatDate(item.updatedAt)}</td><td><button className="button danger compact" disabled={busy} onClick={() => removeSecret(item.id)}><TrashIcon size={16} aria-hidden="true" /><span>Delete</span></button></td></tr>) : <tr><td colSpan="4" className="table-message">No secrets configured.</td></tr>}</tbody></table>
-        <form className="form-grid" autoComplete="off" onSubmit={saveSecret}><Field label="Secret name"><input name="name" className="mono" placeholder="DATABASE_PASSWORD" autoComplete="off" required /></Field><Field label="Secret value"><input name="value" type="password" autoComplete="new-password" required /></Field><div className="form-actions"><button className="button secondary" disabled={busy}><KeyIcon size={16} aria-hidden="true" /><span>Store secret</span></button></div></form>
+        <form className="form-grid" autoComplete="off" onSubmit={saveSecret}><Field label="Secret name"><input name="name" className="mono" placeholder="DATABASE_PASSWORD" autoComplete="off" required /></Field><Field label="Secret value"><SecretInput name="value" required /></Field><div className="form-actions"><button className="button secondary" disabled={busy}><KeyIcon size={16} aria-hidden="true" /><span>Store secret</span></button></div></form>
       </div>
     </>}
   </Dialog>

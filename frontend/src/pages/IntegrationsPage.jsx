@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ArrowClockwiseIcon, CloudIcon, LinkIcon, PlusIcon, PlugsConnectedIcon, PlugsIcon } from '@phosphor-icons/react'
 import { api, organizationPath } from '../lib/api.js'
 import { useWorkspace } from '../state/WorkspaceContext.jsx'
-import { EmptyState, ErrorNotice, Field, LoadingRows, Mono, Notice, Page, Section, Status, formatDate, useResource } from '../components/ui.jsx'
+import { SecretInput, EmptyState, ErrorNotice, Field, LoadingRows, Mono, Notice, Page, Section, Status, formatDate, useResource } from '../components/ui.jsx'
 import { DocsLink } from '../components/DocsLink.jsx'
 
 async function optional(path) {
@@ -69,7 +69,7 @@ export function IntegrationsPage() {
     <Section title="Cloudflare" description="DNS and Tunnel are separate; Tunnel remains optional." actions={<DocsLink article="cloudflare">Cloudflare setup</DocsLink>}>
       {resource.loading ? <LoadingRows columns={1} /> : <>
         {resource.data.cloudflare ? <div className="key-value"><span>Account ID</span><Mono>{resource.data.cloudflare.accountId}</Mono><span>Status</span><Status value={resource.data.cloudflare.status} /><span>Last checked</span><span>{formatDate(resource.data.cloudflare.lastCheckedAt)}</span></div> : <EmptyState title="Cloudflare is not connected">Use a scoped API token. Silicon encrypts it before storage and never returns it.</EmptyState>}
-        <form className="form-grid" onSubmit={connectCloudflare}><Field label="Account ID"><input name="accountId" className="mono" required /></Field><Field label="Scoped API token"><input name="apiToken" type="password" autoComplete="off" required /></Field><div className="form-actions"><button className="button secondary" disabled={busy}><CloudIcon size={16} /><span>{resource.data.cloudflare ? 'Reconnect' : 'Connect Cloudflare'}</span></button></div></form>
+        <form className="form-grid" onSubmit={connectCloudflare}><Field label="Account ID"><input name="accountId" className="mono" required /></Field><Field label="Scoped API token"><SecretInput name="apiToken" required /></Field><div className="form-actions"><button className="button secondary" disabled={busy}><CloudIcon size={16} /><span>{resource.data.cloudflare ? 'Reconnect' : 'Connect Cloudflare'}</span></button></div></form>
         {resource.data.cloudflare && <>
           <div className="toolbar"><button className="button ghost" onClick={() => run(() => api(organizationPath(organizationId, '/integrations/cloudflare/zones')))} disabled={busy}><ArrowClockwiseIcon size={16} /><span>Refresh zones</span></button></div>
           <table><thead><tr><th>Zone</th><th>Provider ID</th><th>Status</th><th>Matching</th></tr></thead><tbody>{resource.data.zones.length ? resource.data.zones.map((zone) => <tr key={zone.id}><td data-label="Zone">{zone.name}</td><td data-label="Provider ID"><Mono>{zone.providerZoneId}</Mono></td><td data-label="Status"><Status value={zone.status} /></td><td data-label="Matching"><button className="button ghost compact" disabled={busy} onClick={() => toggleZone(zone)}>{zone.selected ? 'Enabled' : 'Disabled'}</button></td></tr>) : <tr><td colSpan="4"><EmptyState title="No accessible zones">Check the token scope and account.</EmptyState></td></tr>}</tbody></table>

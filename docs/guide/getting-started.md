@@ -34,6 +34,8 @@ Use **My profile** to manage your avatar and review organization memberships. **
 
 To change your email address, open **Account settings → Change email**. Type the new address and your current Silicon login password, then select **Send verification code**. Open the email at the new address, enter its code in Silicon, and select **Verify email**. An installation administrator must configure system mail first.
 
+If your browser suggests an application secret when you sign in, remove that saved entry for your Silicon site in the browser’s password manager. Sign in with your Silicon account email and password.
+
 Use **Messages** to contact another member of the active organization. **Support tickets** are visible to their requester and installation administrators who belong to that organization. The account menu shows unread notifications.
 
 ## Model a workload

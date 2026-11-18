@@ -16,6 +16,23 @@ describe('password recovery pages', () => {
     expect(screen.getByRole('link', { name: 'Forgot password?' })).toHaveAttribute('href', '/forgot-password')
   })
 
+  it.each([
+    ['APP_TEST_SECRET', '', ''],
+    ['operator@example.com', 'operator@example.com', 'test password'],
+  ])('handles a browser autofill entry for %s', (entry, expectedEmail, expectedPassword) => {
+    render(<MemoryRouter><LoginPage /></MemoryRouter>)
+    const email = screen.getByLabelText('Email')
+    const password = screen.getByLabelText('Password')
+    email.value = entry
+    password.value = 'test password'
+    vi.spyOn(email, 'matches').mockReturnValue(true)
+    const animation = new Event('animationstart', { bubbles: true })
+    Object.defineProperty(animation, 'animationName', { value: 'sign-in-autofilled' })
+    fireEvent(email, animation)
+    expect(email).toHaveValue(expectedEmail)
+    expect(password).toHaveValue(expectedPassword)
+  })
+
   it('shows the same generic reset request result returned by the server', async () => {
     api.mockResolvedValue({ message: 'If an active account exists for that email, a password reset message will be sent.' })
     render(<MemoryRouter><ForgotPasswordPage /></MemoryRouter>)

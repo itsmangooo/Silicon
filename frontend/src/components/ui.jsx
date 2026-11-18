@@ -30,6 +30,14 @@ export function Dialog({ title, open, onClose, children, wide = false }) {
 
 export function Field({ label, hint, children }) { return <label className="field"><span>{label}</span>{children}{hint && <small>{hint}</small>}</label> }
 
+export function SecretInput({ className = '', ...props }) {
+  const canMask = globalThis.CSS?.supports?.('-webkit-text-security', 'disc')
+  return <input {...props} type={canMask ? 'text' : 'password'}
+    className={`secret-input ${className}`.trim()}
+    autoComplete={canMask ? 'off' : 'new-password'} spellCheck={false} autoCapitalize="off"
+    data-1p-ignore data-bwignore />
+}
+
 export function SubmitRow({ submitting, onCancel, label = 'Save' }) { return <div className="form-actions">{onCancel && <button type="button" className="button ghost" onClick={onCancel}><XIcon size={16} aria-hidden="true" /><span>Cancel</span></button>}<button className="button primary" disabled={submitting}><CheckIcon size={16} aria-hidden="true" /><span>{submitting ? 'Saving…' : label}</span></button></div> }
 
 export function useResource(load, dependencies = []) {

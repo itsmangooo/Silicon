@@ -197,6 +197,13 @@ input:disabled, textarea:disabled, select:disabled, input[readonly] { background
 .key-value > span:nth-child(odd) { color: var(--text-muted); }
 
 input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 1; }
+.secret-input { -webkit-text-security: disc; }
+.secret-input::placeholder { -webkit-text-security: none; }
+.sign-in-form input:-webkit-autofill { animation: sign-in-autofilled 1ms; }
+@keyframes sign-in-autofilled {
+  from { --sign-in-autofilled: 0; }
+  to { --sign-in-autofilled: 1; }
+}
 :where(input, textarea, select):focus-visible { outline-offset: 1px; border-color: var(--accent); }
 
 table { width: 100%; border-collapse: collapse; font-size: .8rem; }

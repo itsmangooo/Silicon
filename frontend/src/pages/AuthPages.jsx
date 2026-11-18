@@ -13,7 +13,15 @@ function AuthFrame({ title, description, children, footer }) {
 export function LoginPage() {
   const { login } = useAuth(); const navigate = useNavigate(); const [error,setError]=useState(''); const [submitting,setSubmitting]=useState(false)
   const submit=async(event)=>{event.preventDefault();setSubmitting(true);setError('');const values=Object.fromEntries(new FormData(event.currentTarget));try{await login(values);navigate('/')}catch(requestError){setError(requestError.message)}finally{setSubmitting(false)}}
-  return <AuthFrame title="Sign in" description="Access Silicon." footer={<>New to Silicon? <Link to="/register">Create an account</Link></>}><form className="form-stack" onSubmit={submit}><Field label="Email"><input name="email" type="email" autoComplete="email" required /></Field><Field label="Password"><input name="password" type="password" autoComplete="current-password" required /></Field><Link className="auth-inline-link" to="/forgot-password">Forgot password?</Link>{error&&<Notice tone="danger">{error}</Notice>}<button className="button primary wide" disabled={submitting}><ArrowRightIcon size={17} aria-hidden="true" /><span>{submitting?'Signing in…':'Sign in'}</span></button></form></AuthFrame>
+  function discardInvalidAutofill(event) {
+    if (event.animationName !== 'sign-in-autofilled') return
+    const { email, password } = event.currentTarget.elements
+    if (email.matches(':-webkit-autofill') && email.validity.typeMismatch) {
+      email.value = ''
+      password.value = ''
+    }
+  }
+  return <AuthFrame title="Sign in" description="Access Silicon." footer={<>New to Silicon? <Link to="/register">Create an account</Link></>}><form className="form-stack sign-in-form" onSubmit={submit} onAnimationStart={discardInvalidAutofill}><Field label="Email"><input name="email" type="email" autoComplete="username" placeholder="you@example.com" required /></Field><Field label="Password"><input name="password" type="password" autoComplete="current-password" required /></Field><Link className="auth-inline-link" to="/forgot-password">Forgot password?</Link>{error&&<Notice tone="danger">{error}</Notice>}<button className="button primary wide" disabled={submitting}><ArrowRightIcon size={17} aria-hidden="true" /><span>{submitting?'Signing in…':'Sign in'}</span></button></form></AuthFrame>
 }
 
 export function RegisterPage() {
